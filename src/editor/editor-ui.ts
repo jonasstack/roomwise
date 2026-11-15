@@ -21,6 +21,8 @@ import type {
 import type { FloorplanCard } from '../floorplan-card';
 import type { FloorplanLayer } from '../layer/floorplan-layer';
 import { serverWanted, syncServer, vacuumInfo, vacuumLearned, vacuumMap, type VacuumInfo } from '../entry-server';
+// first steps "from the vacuum's map" (the card loads this bundle for it)
+import '../components/vacuum-start';
 import { autoFit, autoFitMap, fitPairs, mapperOf, roomMatch, sameRoom, toPlan, toRobot, type LearnedFloor, type VacuumMap } from '../vacuum-live';
 import type { FpPlan } from '../components/fp-plan';
 import { boundsOf, closestPointOnSegment, floorBounds, pointInPolygon, pointsToPath, polylabel, round, snapPoint, type SnapResult } from '../geometry';

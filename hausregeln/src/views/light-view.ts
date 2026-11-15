@@ -705,9 +705,9 @@ export class HrLightPlans extends StoreElement {
   }
 
   // ------------------------------------------------------------------ data
+  /** every room – a room without lamps shows a hint to assign them (Raum einstellen) */
   private get _rooms(): Room[] {
-    const s = this.store;
-    return s.rooms.filter((r) => s.devices.some((d) => d.kind === 'light' && d.room === r.id) || r.presence.length + r.motion.length + r.zones.length > 0);
+    return this.store.rooms;
   }
 
   private _plan(rid: string): LightPlan | undefined {
@@ -1278,7 +1278,7 @@ export class HrLightPlans extends StoreElement {
         <span class="grow"><h2>${r.name}</h2><div class="state">${p.on ? this._lightState(r) : t('light.rules_off')}</div></span>
         <button class="switch" role="switch" aria-label=${t('light.rules_on_x', { room: r.name })} aria-checked=${p.on ? 'true' : 'false'} @click=${() => this._save(r.id, { on: !p.on })}></button>
       </div>
-      <div class="rl-chips">${this._presence(r)}${whiles.map((x) => html`<span class="rl-chip acc">${t('light.x_applies', { name: x.name })}</span>`)}</div>
+      <div class="rl-chips">${s.devices.some((d) => d.kind === 'light' && d.room === r.id) ? nothing : html`<button class="rl-chip warm" @click=${() => fire(this, 'hr-room-settings', { id: r.id })}>${t('light.no_lamp')}</button>`}${this._presence(r)}${whiles.map((x) => html`<span class="rl-chip acc">${t('light.x_applies', { name: x.name })}</span>`)}</div>
       <div class="foot">
         <span>${p.rules.length === 1 ? t('light.one_rule') : t('light.n_rules', { n: p.rules.length })} · ${!p.on ? t('light.paused') : active ? (active === 1 ? t('light.one_active') : t('light.n_active', { n: active })) : t('light.none_active')}</span>
         <span>${t('light.smart_x', { mode: smartLabel(p.smart?.mode) })}</span>
@@ -1640,9 +1640,9 @@ export class HrLightPlans extends StoreElement {
 }
 customElements.define('hr-light-plans', HrLightPlans);
 
-/** rooms the light page shows: with a light or presence sensors */
+/** rooms the light page shows: all of them */
 function lightRooms(s: Store): Room[] {
-  return s.rooms.filter((r) => s.devices.some((d) => d.kind === 'light' && d.room === r.id) || r.presence.length + r.motion.length + r.zones.length > 0);
+  return s.rooms;
 }
 
 registerPage('light', {

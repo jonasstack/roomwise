@@ -13,6 +13,7 @@ import { formatClock, formatNumber, onLanguageLoaded, setLanguage, t } from './i
 import { CardFullscreen, canElementFullscreen } from './fullscreen';
 import { areasConfig, normalizeConfig, stubConfig } from './config';
 import { examplePlan } from './example-plan';
+import type { VacuumPlanResult } from './vacuum-plan';
 import { buildingBounds, floorBounds, pointInPolygon } from './geometry';
 import { FpPlan } from './components/fp-plan';
 import { FloorplanLayer } from './layer/floorplan-layer';
@@ -72,7 +73,10 @@ export class FloorplanCard extends LitElement {
     _texts: { state: true },
     _shared: { state: true },
     _planState: { state: true },
+    _vacStart: { state: true },
   };
+  /** First steps "from the vacuum's map" open (its chooser, loaded on demand); 'card': a new card, 'floor': this floor */
+  declare _vacStart?: 'card' | 'floor';
   /** Shared floor plan (companion integration) as last pushed; undefined: none, or not loaded yet */
   declare _shared?: SharedPlan;
   /** A shared plan that cannot be shown (yet): loading, deleted, or no companion that keeps shared plans */
@@ -1174,6 +1178,45 @@ export class FloorplanCard extends LitElement {
     this.ensureLayer().openEditor(undefined, { config: kind === 'areas' ? areasConfig(this._hass!) : examplePlan(), hint: t(kind === 'areas' ? 'editor.start_areas' : 'editor.start_example') });
   }
 
+  /** First steps "from the vacuum's map": load the chooser, then show it in place of the welcome panel */
+  private async startVacuum(kind: 'card' | 'floor') {
+    try {
+      // the chooser is part of the editor's bundle (the editor opens right after it)
+      await import('./editor/editor-ui');
+    } catch {
+      this.ensureLayer().toast(t('card.reload_needed'));
+      return;
+    }
+    this._vacStart = kind;
+  }
+
+  /** "Apply" in the chooser: the editor opens with the plan from the map (unsaved until "Save") */
+  private applyVacuum(res: VacuumPlanResult) {
+    const kind = this._vacStart;
+    this._vacStart = undefined;
+    const hint = t('vacplan.start_hint');
+    if (kind === 'floor' && this._config) {
+      const cfg = structuredClone(this._config);
+      const f = cfg.floors.find((x) => x.id === this._floorId) ?? cfg.floors[0];
+      f.rooms = res.floor.rooms;
+      f.openings = [...(f.openings ?? []), ...(res.floor.openings ?? [])];
+      f.furniture = [...(f.furniture ?? []), ...(res.floor.furniture ?? [])];
+      this.ensureLayer().openEditor(f.id, { config: cfg, hint });
+      return;
+    }
+    this.ensureLayer().openEditor(undefined, { config: { type: 'custom:floorplan-card', floors: [res.floor] }, hint });
+  }
+
+  private renderVacuumStart() {
+    return html`<div class="onboard">
+      <div class="onboard-panel wide">
+        <div class="onboard-icon"><ha-icon icon="mdi:robot-vacuum"></ha-icon></div>
+        <div class="onboard-title">${t('vacplan.title')}</div>
+        <fp-vacuum-start .hass=${this._hass} .onApply=${(r: VacuumPlanResult) => this.applyVacuum(r)} .onBack=${() => (this._vacStart = undefined)}></fp-vacuum-start>
+      </div>
+    </div>`;
+  }
+
   /** The floor's trace image, when it is chosen to show on the card too (same object while nothing changed) */
   private traceCache?: { src: unknown; href: string; out: { t: NonNullable<FloorConfig['trace']>; href: string } };
   private cardTrace(floor?: FloorConfig) {
@@ -1204,7 +1247,10 @@ export class FloorplanCard extends LitElement {
 
   /** First run (or an empty floor): what the card is and the ways into the editor */
   private renderOnboarding(cfg: FloorplanCardConfig, canEdit: boolean) {
+    if (this._vacStart && canEdit) return this.renderVacuumStart();
     const otherFloors = cfg.floors.some((f) => f.id !== this._floorId && f.rooms.length);
+    // a robot vacuum in Home Assistant: its map can become the plan
+    const vacuums = Object.keys(this._hass?.states ?? {}).filter((id) => id.startsWith('vacuum.')).length;
     // a brand-new card: three calm paths (draw, from Home Assistant's areas, an example) and Hausregeln's assistant
     if (canEdit && !otherFloors) {
       const areas = Object.values(this._hass?.areas ?? {});
@@ -1230,6 +1276,7 @@ export class FloorplanCard extends LitElement {
               () => this.startWith('areas'),
               !areas.length,
             )}
+            ${vacuums ? path('onboard-vacuum', 'mdi:robot-vacuum', t('card.first_vacuum'), t('card.first_vacuum_sub'), () => void this.startVacuum('card')) : nothing}
             ${path('onboard-example', 'mdi:sofa-outline', t('card.first_example'), t('card.first_example_sub'), () => this.startWith('example'))}
             ${sharesPlans()
               ? path('onboard-shared', 'mdi:monitor-multiple', t('share.first'), t('share.first_sub'), () => this.ensureLayer().openEditor(undefined, { share: true }))
@@ -1253,6 +1300,11 @@ export class FloorplanCard extends LitElement {
           ? html`<button class="btn accent pressable onboard-start" @click=${this.openEditor}>
                 <ha-icon icon="mdi:pencil-outline"></ha-icon>${t('card.onboard_start')}
               </button>
+              ${vacuums
+                ? html`<button class="btn pressable onboard-vacuum-floor" @click=${() => void this.startVacuum('floor')}>
+                    <ha-icon icon="mdi:robot-vacuum"></ha-icon>${t('card.first_vacuum')}
+                  </button>`
+                : nothing}
               <div class="onboard-tip">${t('card.onboard_tip')}</div>`
           : html`<div class="onboard-tip">${t(cfg.editable === false && this._hass?.user?.is_admin ? 'card.onboard_locked' : 'card.onboard_admin')}</div>`}
       </div>

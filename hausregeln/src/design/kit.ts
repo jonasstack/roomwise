@@ -156,6 +156,14 @@ export const kit = css`
     background: color-mix(in srgb, var(--hr-orange) var(--hr-tint), transparent);
     color: var(--hr-orange);
   }
+  /* a chip that does something (e.g. "Keine Lampe – zuordnen") sits above the tile's open button */
+  button.rl-chip {
+    border: 0;
+    font-family: inherit;
+    cursor: pointer;
+    position: relative;
+    z-index: 2;
+  }
   .rl-chip.bad {
     background: color-mix(in srgb, var(--hr-red) var(--hr-tint), transparent);
     color: var(--hr-red);

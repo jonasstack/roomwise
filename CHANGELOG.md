@@ -6,6 +6,19 @@ All notable changes to roomwise are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0-beta.6] - 2026-11-15
+
+### Added
+
+- Card first steps: **from the robot vacuum's map** – rooms with their names, straight walls, doors, the vacuum and
+  its dock, the vacuum already aligned for the live view; preview first, then an unsaved draft in the editor.
+  Without a map yet it offers a mapping run (after a second tap) and picks the map up once it is there.
+
+### Changed
+
+- House rules → Licht shows every room, not only rooms with a lamp or presence sensor; a room without a lamp
+  says so with a chip that opens "Raum einstellen".
+
 ## [0.1.0-beta.5] - 2026-11-15
 
 ### Fixed
@@ -272,7 +285,8 @@ The first public alpha. roomwise has been in daily use in one home before this r
 - Pause for motion sensors while a robot vacuum cleans.
 - Setup assistant and per-feature switches; after installation only the automatic house mode runs.
 
-[Unreleased]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.5...HEAD
+[Unreleased]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.6...HEAD
+[0.1.0-beta.6]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.5...v0.1.0-beta.6
 [0.1.0-beta.5]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.4...v0.1.0-beta.5
 [0.1.0-beta.4]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.3...v0.1.0-beta.4
 [0.1.0-beta.3]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.2...v0.1.0-beta.3
