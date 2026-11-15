@@ -24,7 +24,7 @@ export const RULES = [
   { id: 'lan-ip', re: /\b(?:192\.168|10\.(?:\d{1,3})|172\.(?:1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}\b/g, why: 'private LAN address' },
   { id: 'cgnat-ip', re: /\b100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3}\b/g, why: 'CGNAT / Tailscale address' },
   { id: 'home-path', re: /(?:\/home\/[a-z_][a-z0-9_-]*\/|\/Users\/[A-Za-z][\w.-]*\/|[A-Z]:\\Users\\[^\\\s]+)/g, why: 'absolute home folder' },
-  { id: 'email', re: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}\b/g, why: 'e-mail address', allow: /^(?:noreply@anthropic\.com|[^@]+@example\.(?:com|org|net)|[^@]+@beispiel\.(?:de|com)|[^@]+@users\.noreply\.github\.com|git@github\.com)$/i },
+  { id: 'email', re: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}\b/g, why: 'e-mail address', allow: /^(?:noreply@anthropic\.com|[^@]+@example\.(?:com|org|net)|[^@]+@beispiel\.(?:de|com)|[^@]+@users\.noreply\.github\.com|git@github\.com|[^@]+@\d+x\.(?:png|jpe?g|webp|svg))$/i },
   { id: 'jwt', re: /\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g, why: 'token (JWT, e.g. a Home Assistant long-lived token)' },
   { id: 'github-token', re: /\bgh[pousr]_[A-Za-z0-9]{30,}\b|\bgithub_pat_[A-Za-z0-9_]{30,}/g, why: 'GitHub token' },
   { id: 'api-key', re: /\bsk-(?:ant-|proj-)?[A-Za-z0-9_-]{20,}|\bAIza[0-9A-Za-z_-]{35}\b|\bxox[abprs]-[A-Za-z0-9-]{10,}/g, why: 'API key' },

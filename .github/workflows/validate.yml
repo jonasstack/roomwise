@@ -139,3 +139,5 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
+          # a custom integration has no entry in home-assistant/brands; its icons ship in custom_components/*/brand
+          ignore: brands
