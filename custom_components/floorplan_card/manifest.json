@@ -1,0 +1,22 @@
+{
+  "domain": "floorplan_card",
+  "name": "Grundriss-Karte (Floorplan card)",
+  "after_dependencies": [
+    "mobile_app",
+    "recorder"
+  ],
+  "codeowners": ["@jonasstack"],
+  "config_flow": true,
+  "dependencies": [
+    "frontend",
+    "http",
+    "websocket_api"
+  ],
+  "documentation": "https://github.com/jonasstack/roomwise",
+  "integration_type": "service",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/jonasstack/roomwise/issues",
+  "requirements": [],
+  "single_config_entry": true,
+  "version": "0.1.0-alpha.1"
+}

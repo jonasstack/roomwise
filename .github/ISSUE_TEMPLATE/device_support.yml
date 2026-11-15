@@ -1,0 +1,44 @@
+name: Device support
+description: A device is missing, shows the wrong state, or can't be controlled
+labels: [device support]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        roomwise works with the entities Home Assistant provides, so what matters is the integration and the entities it creates, not only the device model.
+  - type: input
+    id: device
+    attributes:
+      label: Device (brand and model)
+      placeholder: Roborock S8 Pro Ultra
+    validations:
+      required: true
+  - type: input
+    id: integration
+    attributes:
+      label: Home Assistant integration
+      description: The integration that provides the device, with its version if it's a custom one (HACS).
+      placeholder: Roborock (core), Tado X via Matter, Xiaomi Miot (HACS) 1.0.12 …
+    validations:
+      required: true
+  - type: textarea
+    id: entities
+    attributes:
+      label: Entities and their attributes
+      description: |
+        Developer tools → States → filter by the device → copy entity id, state and attributes of the relevant entities.
+        Remove anything private (names of people, locations, serial numbers).
+      render: yaml
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What should roomwise show or do with it?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: roomwise and Home Assistant version
+      placeholder: roomwise 0.1.0-alpha.1, Home Assistant 2026.10.1

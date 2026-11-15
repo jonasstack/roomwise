@@ -1,0 +1,30 @@
+{
+ "de": {
+  "warning.text_general": "Achtung, es sind noch Fenster offen.",
+  "warning.text_all": "Noch offen: {windows}.",
+  "warning.text_single": "{windows} ist noch offen.",
+  "warning.title": "Fenster-Warnung",
+  "warning.h_started": "{door} ging auf, noch offen: {windows}.",
+  "warning.h_acknowledged": "Fenster-Warnung bestätigt",
+  "warning.h_by": "{by}.",
+  "warning.h_announce": "Fenster-Warnung: Durchsage",
+  "warning.h_announce_why": "„{message}“ auf {players}.",
+  "warning.by_hand": "Von Hand",
+  "warning.by_switch": "Schalter",
+  "warning.n_title": "Fenster offen"
+ },
+ "en": {
+  "warning.text_general": "Attention, windows are still open.",
+  "warning.text_all": "Still open: {windows}.",
+  "warning.text_single": "{windows} is still open.",
+  "warning.title": "Window warning",
+  "warning.h_started": "{door} opened, still open: {windows}.",
+  "warning.h_acknowledged": "Window warning acknowledged",
+  "warning.h_by": "{by}.",
+  "warning.h_announce": "Window warning: announcement",
+  "warning.h_announce_why": "“{message}” on {players}.",
+  "warning.by_hand": "By hand",
+  "warning.by_switch": "Switch",
+  "warning.n_title": "Window open"
+ }
+}

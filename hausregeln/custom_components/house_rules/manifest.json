@@ -1,0 +1,15 @@
+{
+  "domain": "house_rules",
+  "name": "Hausregeln (House rules)",
+  "after_dependencies": ["mobile_app", "notify", "tts", "person", "sun", "automation", "recorder", "energy", "lovelace"],
+  "codeowners": ["@jonasstack"],
+  "config_flow": true,
+  "dependencies": ["frontend", "http", "websocket_api", "panel_custom", "repairs"],
+  "documentation": "https://github.com/jonasstack/roomwise",
+  "integration_type": "service",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/jonasstack/roomwise/issues",
+  "requirements": [],
+  "single_config_entry": true,
+  "version": "0.1.0-alpha.1"
+}

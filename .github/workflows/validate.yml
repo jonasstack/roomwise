@@ -1,0 +1,141 @@
+# Checks on every push and pull request (and weekly, because HACS and Home Assistant keep moving).
+#
+# Today roomwise ships two integrations: the companion `floorplan_card` (custom_components/, installed by HACS)
+# and Hausregeln `house_rules` (hausregeln/custom_components/, installed by hand from the release zip).
+# When both become the single integration `roomwise` in custom_components/roomwise:
+#   - hassfest: drop the matrix, validate custom_components/ as it is
+#   - python: lint/compile custom_components/ only, point HA_CONFIG_DIR tests at custom_components/roomwise
+#   - frontend: the panel build moves into the root build (no separate hausregeln/ npm project)
+name: Validate
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  privacy:
+    name: Privacy scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # generic rules (LAN addresses, home folders, e-mail addresses, tokens, real device ids, work notes) always run;
+      # the maintainer's private words come from the optional secret ROOMWISE_DENYLIST and never live in the repository
+      - run: node tools/release/privacy-scan.mjs
+        env:
+          ROOMWISE_DENYLIST: ${{ secrets.ROOMWISE_DENYLIST }}
+
+  frontend:
+    name: Build, typecheck, translations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            hausregeln/package-lock.json
+      - run: npm ci
+      - name: Card – typecheck
+        run: npm run typecheck
+      - name: Card – translations complete (German / English)
+        run: node tools/tests/i18n.mjs --strict
+      - name: Card – build
+        run: npm run build
+      - name: Hausregeln panel – install, typecheck, build
+        working-directory: hausregeln
+        run: |
+          npm ci
+          npm run typecheck
+          npm run build
+      - name: Hausregeln – German/English texts complete, English sentence parser
+        working-directory: hausregeln
+        run: |
+          node tools/i18n-check.mjs --strict
+          python3 -I tools/texteval/harness.py tools/texteval/house-en.json tools/texteval/cases-en.json --strict
+      - name: All parts carry the same version
+        run: node tools/release/version.mjs
+      - name: Compatibility check (runs once the script exists)
+        run: |
+          for s in tools/compat-check.mjs tools/compat/check.mjs tools/tests/compat-check.mjs; do
+            if [ -f "$s" ]; then node "$s"; exit $?; fi
+          done
+          echo "no compatibility script yet"
+
+  python:
+    name: Python lint and tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install ruff==0.17.3 cryptography
+      - name: Lint (ruff)
+        run: ruff check custom_components hausregeln/custom_components hausregeln/tools
+      - name: Byte-compile
+        run: python -m compileall -q custom_components hausregeln/custom_components
+      - name: Manifests, services, translations, websocket registration (both integrations)
+        run: python tools/check-integrations.py
+      - name: Passkey check (no Home Assistant needed)
+        run: python hausregeln/tools/testha/test_webauthn.py
+
+  python-ha:
+    name: Tests that need Home Assistant installed
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: .github/workflows/validate.yml
+      - run: pip install homeassistant
+      - name: Alarm PIN hashing, vacation simulation, going to sleep, heating maths
+        env:
+          HA_CONFIG_DIR: ${{ runner.temp }}/ha-config
+        run: |
+          mkdir -p "$HA_CONFIG_DIR/custom_components"
+          ln -s "$GITHUB_WORKSPACE/hausregeln/custom_components/house_rules" "$HA_CONFIG_DIR/custom_components/house_rules"
+          python hausregeln/tools/testha/test_pin.py
+          python hausregeln/tools/testha/test_sim.py
+          python hausregeln/tools/testha/test_sleep_start.py
+          python hausregeln/tools/testha/test_heat_model.py
+
+  hassfest:
+    name: hassfest (${{ matrix.integration }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        integration: [floorplan_card, house_rules]
+    steps:
+      - uses: actions/checkout@v4
+      # hassfest validates custom_components/*: put exactly the integration under test there
+      - name: Arrange custom_components/
+        run: |
+          if [ "${{ matrix.integration }}" = house_rules ]; then
+            rm -rf custom_components
+            mkdir -p custom_components
+            cp -r hausregeln/custom_components/house_rules custom_components/
+          fi
+      - uses: home-assistant/actions/hassfest@master
+
+  hacs:
+    name: HACS validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hacs/action@main
+        with:
+          category: integration

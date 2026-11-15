@@ -1,0 +1,38 @@
+- id: '1001'
+  alias: Tablet an wenn jemand im Flur
+  triggers:
+    - trigger: state
+      entity_id: binary_sensor.praesenz_flur
+      to: 'on'
+  actions:
+    - action: switch.turn_on
+      target:
+        entity_id: switch.tablet_bildschirm
+- id: '1002'
+  alias: Tablet aus wenn keiner im Flur
+  triggers:
+    - trigger: state
+      entity_id: binary_sensor.praesenz_flur
+      to: 'off'
+  actions:
+    - action: switch.turn_off
+      target:
+        entity_id: switch.tablet_bildschirm
+- id: '1003'
+  alias: Test Küchenlicht aus per Ereignis
+  triggers:
+    - trigger: event
+      event_type: hr_test_kitchen_off
+  actions:
+    - action: light.turn_off
+      target:
+        entity_id: light.kuechenlicht
+- id: '1004'
+  alias: Test Flurlicht an per Ereignis
+  triggers:
+    - trigger: event
+      event_type: hr_test_flur_on
+  actions:
+    - action: light.turn_on
+      target:
+        entity_id: light.flurlicht

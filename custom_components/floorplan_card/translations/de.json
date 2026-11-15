@@ -1,0 +1,46 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Begleiter der Grundriss-Karte",
+        "description": "Liefert die Grundriss-Karte an jedes Dashboard aus und erledigt, was ohne Tablet laufen muss: die Haustür-Warnung, Gassi-Erinnerungen und abgehakte Runden für alle Geräte sowie die Live-Position des Saugroboters. Eingestellt wird alles in der Karte."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Ist bereits eingerichtet."
+    }
+  },
+  "issues": {
+    "frontend_missing": {
+      "title": "Grundriss-Karte: Kartendatei fehlt",
+      "description": "Die Begleit-Integration ist eingerichtet, aber die Datei der Karte (`frontend/floorplan-card.js`) fehlt in ihrem Ordner. Die Dashboards können die Grundriss-Karte deshalb nicht anzeigen.\n\nInstalliere die Grundriss-Karte über HACS neu (HACS → Grundriss-Karte → Neu herunterladen) und starte Home Assistant danach neu."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Lied-Erkennung",
+        "description": "Optional: Bei Mediengeräten, die nicht melden, was sie spielen (Infrarot), kann das Mikrofon eines Wandtablets das Lied erkennen. Das Tablet schickt nur einen Fingerabdruck des Tons, der bei AcoustID nachgeschlagen wird. Einen kostenlosen API-Schlüssel für deine eigene Anwendung bekommst du unter {signup_url} – trage ihn hier ein. Ohne Schlüssel bleibt die Lied-Erkennung aus.",
+        "data": {
+          "acoustid_key": "AcoustID-API-Schlüssel",
+          "acoustid_url": "Eigener AcoustID-Server (optional)"
+        },
+        "data_description": {
+          "acoustid_key": "Der Schlüssel deiner Anwendung bei acoustid.org (nicht der Benutzer-Schlüssel).",
+          "acoustid_url": "Nur für einen selbst betriebenen AcoustID-Server: seine Lookup-Adresse. Leer = {lookup_url}"
+        }
+      }
+    },
+    "error": {
+      "invalid_key": "Das sieht nicht nach einem AcoustID-API-Schlüssel aus.",
+      "invalid_url": "Die Adresse muss mit https:// oder http:// beginnen."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "song": {
+        "name": "{name} läuft gerade"
+      }
+    }
+  }
+}

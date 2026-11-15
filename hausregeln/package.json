@@ -1,0 +1,20 @@
+{
+  "name": "house-rules",
+  "version": "0.1.0-alpha.1",
+  "description": "Hausregeln: simple, intelligent automations for Home Assistant",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "lit": "^3.3.3"
+  },
+  "devDependencies": {
+    "@mdi/js": "^7.4.47",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2"
+  }
+}

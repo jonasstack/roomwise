@@ -1,0 +1,129 @@
+{
+  "type": "custom:floorplan-card",
+  "card_id": "fp_demo",
+  "height": "calc(100vh - var(--header-height, 56px))",
+  "north": 0,
+  "floors": [
+    {
+      "id": "floor_demo",
+      "name": "Wohnung",
+      "rooms": [
+        {
+          "id": "room_living", "name": "Wohnzimmer", "area": "wohnzimmer",
+          "points": [[0, 0], [560, 0], [560, 430], [0, 430]],
+          "lights": ["light.sofalicht"],
+          "temperature": "sensor.temp_wohnzimmer",
+          "climate": "climate.heizung_wohnzimmer",
+          "floor": { "type": "herringbone", "color": "#c99a62" }
+        },
+        {
+          "id": "room_kitchen", "name": "Küche", "area": "kuche",
+          "points": [[560, 0], [1000, 0], [1000, 300], [560, 300]],
+          "lights": ["light.kuechenlicht"],
+          "climate": "climate.heizung_kueche",
+          "floor": { "type": "tiles", "color": "#d9d4cc", "size": 40 }
+        },
+        {
+          "id": "room_hall", "name": "Flur", "area": "flur",
+          "points": [[560, 300], [760, 300], [760, 700], [560, 700]],
+          "lights": ["light.flurlicht"],
+          "floor": { "type": "tiles", "color": "#bdb6aa", "size": 30 }
+        },
+        {
+          "id": "room_bath", "name": "Bad", "area": "bad",
+          "points": [[760, 300], [1000, 300], [1000, 520], [760, 520]],
+          "lights": ["light.badlicht"],
+          "temperature": "sensor.temp_bad",
+          "humidity": "sensor.feuchte_bad",
+          "climate": "climate.heizung_bad",
+          "floor": { "type": "hex", "color": "#e4e6e8", "size": 20 }
+        },
+        {
+          "id": "room_bedroom", "name": "Schlafzimmer", "area": "schlafzimmer",
+          "points": [[0, 430], [560, 430], [560, 700], [0, 700]],
+          "lights": ["light.kleines_licht"],
+          "floor": { "type": "planks", "color": "#b98d5f" }
+        },
+        {
+          "id": "room_office", "name": "Arbeitszimmer",
+          "points": [[760, 520], [1000, 520], [1000, 700], [760, 700]],
+          "floor": { "type": "planks", "color": "#a77b52" }
+        },
+        {
+          "id": "room_terrace", "name": "Terrasse", "outdoor": true,
+          "points": [[-330, 0], [0, 0], [0, 430], [-330, 430]],
+          "floor": { "type": "decking", "color": "#9a7452" }
+        },
+        {
+          "id": "room_garden", "name": "Garten", "outdoor": true,
+          "points": [[-330, 430], [0, 430], [0, 700], [-330, 700]],
+          "floor": { "type": "grass" }
+        },
+        {
+          "id": "room_driveway", "name": "Einfahrt", "outdoor": true,
+          "points": [[1000, 300], [1290, 300], [1290, 700], [1000, 700]],
+          "floor": { "type": "paving", "color": "#a9a59d" }
+        }
+      ],
+      "openings": [
+        { "id": "door_front", "type": "door", "a": [620, 700], "b": [710, 700], "entity": "binary_sensor.haustuer", "name": "Haustür" },
+        { "id": "door_living", "type": "door", "a": [560, 340], "b": [560, 420] },
+        { "id": "door_kitchen", "type": "door", "a": [600, 300], "b": [680, 300] },
+        { "id": "door_bath", "type": "door", "a": [760, 340], "b": [760, 420], "entity": "binary_sensor.badtuer", "hinge_b": true },
+        { "id": "door_bedroom", "type": "door", "a": [560, 570], "b": [560, 650] },
+        { "id": "door_office", "type": "door", "a": [760, 590], "b": [760, 670], "hinge_b": true },
+        { "id": "door_terrace", "type": "door", "a": [0, 150], "b": [0, 260] },
+        { "id": "win_living", "type": "window", "a": [120, 0], "b": [420, 0], "entity": "binary_sensor.fenster_wohnzimmer" },
+        { "id": "win_kitchen", "type": "window", "a": [690, 0], "b": [870, 0], "entity": "binary_sensor.fenster_kueche" },
+        { "id": "win_bath", "type": "window", "a": [1000, 360], "b": [1000, 460], "entity": "binary_sensor.fenster_bad" },
+        { "id": "win_bedroom", "type": "window", "a": [150, 700], "b": [400, 700] },
+        { "id": "win_office", "type": "window", "a": [1000, 560], "b": [1000, 660] }
+      ],
+      "devices": [],
+      "furniture": [
+        { "id": "f_sofa", "kind": "sofa", "x": 280, "y": 150, "w": 230, "h": 95 },
+        { "id": "f_rug", "kind": "rug", "x": 280, "y": 265, "w": 220, "h": 140 },
+        { "id": "f_coffee", "kind": "coffee_table", "x": 280, "y": 265, "w": 110, "h": 60 },
+        { "id": "f_armchair", "kind": "armchair", "x": 470, "y": 250, "w": 85, "h": 85, "rotation": 270 },
+        { "id": "f_tvstand", "kind": "tv_stand", "x": 280, "y": 408, "w": 180, "h": 40, "rotation": 180 },
+        { "id": "f_tv", "kind": "tv", "x": 280, "y": 420, "w": 145, "h": 8, "rotation": 180 },
+        { "id": "f_speaker", "kind": "speaker", "x": 410, "y": 410, "w": 14, "h": 14, "entity": "media_player.homepod" },
+        { "id": "f_lamp_sofa", "kind": "floor_lamp", "x": 130, "y": 110, "w": 40, "h": 40, "entity": "light.sofalicht" },
+        { "id": "f_radiator_living", "kind": "radiator", "x": 270, "y": 12, "w": 100, "h": 10, "entity": "climate.heizung_wohnzimmer" },
+        { "id": "f_plant_living", "kind": "plant", "x": 520, "y": 40, "w": 50, "h": 50 },
+        { "id": "f_shelf", "kind": "shelf", "x": 40, "y": 330, "w": 120, "h": 35, "rotation": 90 },
+        { "id": "f_counter", "kind": "counter", "x": 800, "y": 32, "w": 380, "h": 62 },
+        { "id": "f_sink", "kind": "sink", "x": 780, "y": 32, "w": 80, "h": 50 },
+        { "id": "f_cooktop", "kind": "cooktop", "x": 920, "y": 32, "w": 60, "h": 50 },
+        { "id": "f_fridge", "kind": "fridge", "x": 965, "y": 130, "w": 60, "h": 65, "rotation": 90 },
+        { "id": "f_kettle", "kind": "kettle", "x": 650, "y": 30, "w": 20, "h": 20, "entity": "switch.wasserkocher" },
+        { "id": "f_table", "kind": "dining_table", "x": 760, "y": 200, "w": 160, "h": 90, "count": 4 },
+        { "id": "f_lamp_kitchen", "kind": "ceiling_lamp", "x": 760, "y": 200, "w": 50, "h": 50, "entity": "light.kuechenlicht" },
+        { "id": "f_radiator_kitchen", "kind": "radiator", "x": 575, "y": 150, "w": 100, "h": 10, "rotation": 90, "entity": "climate.heizung_kueche" },
+        { "id": "f_lamp_hall", "kind": "ceiling_lamp", "x": 660, "y": 480, "w": 40, "h": 40, "entity": "light.flurlicht" },
+        { "id": "f_coats", "kind": "coat_rack", "x": 578, "y": 470, "w": 100, "h": 35, "rotation": 90 },
+        { "id": "f_dock", "kind": "robot_dock", "x": 735, "y": 330, "w": 40, "h": 40, "rotation": 180 },
+        { "id": "f_vacuum", "kind": "robot_vacuum", "x": 700, "y": 400, "w": 35, "h": 35, "entity": "vacuum.robo" },
+        { "id": "f_dog", "kind": "dog", "variant": "retriever", "x": 640, "y": 600, "w": 92, "h": 30, "rotation": 90, "name": "Bruno", "pet": { "walks": ["07:30", "12:30", "18:30"] } },
+        { "id": "f_tub", "kind": "bathtub", "x": 880, "y": 345, "w": 170, "h": 75 },
+        { "id": "f_toilet", "kind": "toilet", "x": 975, "y": 480, "w": 38, "h": 60, "rotation": 270 },
+        { "id": "f_basin", "kind": "washbasin", "x": 830, "y": 500, "w": 80, "h": 45, "rotation": 180 },
+        { "id": "f_lamp_bath", "kind": "ceiling_lamp", "x": 870, "y": 420, "w": 40, "h": 40, "entity": "light.badlicht" },
+        { "id": "f_towel", "kind": "towel_radiator", "x": 772, "y": 450, "w": 60, "h": 10, "rotation": 90, "entity": "climate.heizung_bad" },
+        { "id": "f_bed", "kind": "bed", "x": 280, "y": 545, "w": 180, "h": 200 },
+        { "id": "f_night_l", "kind": "nightstand", "x": 160, "y": 465, "w": 45, "h": 40 },
+        { "id": "f_night_r", "kind": "nightstand", "x": 400, "y": 465, "w": 45, "h": 40 },
+        { "id": "f_lamp_bed", "kind": "table_lamp", "x": 400, "y": 465, "w": 25, "h": 25, "entity": "light.kleines_licht" },
+        { "id": "f_wardrobe", "kind": "wardrobe", "x": 32, "y": 565, "w": 200, "h": 60, "rotation": 90 },
+        { "id": "f_desk", "kind": "desk", "x": 880, "y": 660, "w": 140, "h": 70, "rotation": 180 },
+        { "id": "f_chair", "kind": "office_chair", "x": 880, "y": 605, "w": 55, "h": 55 },
+        { "id": "f_patio", "kind": "patio_set", "x": -165, "y": 200, "w": 160, "h": 160 },
+        { "id": "f_planter", "kind": "planter", "x": -300, "y": 60, "w": 40, "h": 120 },
+        { "id": "f_tree", "kind": "tree", "x": -170, "y": 570, "w": 240, "h": 240 },
+        { "id": "f_beds", "kind": "flower_bed", "x": -300, "y": 600, "w": 50, "h": 180 },
+        { "id": "f_car", "kind": "car", "variant": "vw_id3", "x": 1145, "y": 500, "w": 426, "h": 181, "rotation": 90 },
+        { "id": "f_wallbox", "kind": "wallbox", "x": 1012, "y": 330, "w": 25, "h": 18, "rotation": 90 }
+      ]
+    }
+  ]
+}

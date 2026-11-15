@@ -1,0 +1,27 @@
+{
+  "name": "floorplan-card",
+  "version": "0.1.0-alpha.1",
+  "description": "Interactive floor plan Lovelace card for Home Assistant wall tablets",
+  "main": "dist/floorplan-card.js",
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "watch": "node tools/build.mjs --watch",
+    "typecheck": "tsc -p .",
+    "i18n": "node tools/tests/i18n.mjs",
+    "deploy": "node tools/deploy.mjs",
+    "shot": "node tools/shot.mjs"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "playwright": "^1.63.0",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "@types/three": "^0.170.0",
+    "lit": "^3.3.3",
+    "three": "^0.170.0"
+  },
+  "type": "module",
+  "private": true
+}

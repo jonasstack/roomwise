@@ -1,0 +1,6 @@
+{
+  "name": "Grundriss-Karte (Floorplan card)",
+  "homeassistant": "2025.1.0",
+  "zip_release": true,
+  "filename": "floorplan_card.zip"
+}

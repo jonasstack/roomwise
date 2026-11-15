@@ -1,0 +1,26 @@
+{
+ "de": {
+  "common.and": "und",
+  "common.or": "oder",
+  "common.clock": "{time} Uhr",
+  "mode.home": "Zuhause",
+  "mode.away": "Weg",
+  "mode.sleep": "Schlafen",
+  "mode.vacation": "Urlaub",
+  "mode.guests": "Gäste",
+  "app.name": "Hausregeln",
+  "notify.channel_calm": "Hausregeln Hinweise"
+ },
+ "en": {
+  "common.and": "and",
+  "common.or": "or",
+  "common.clock": "{time}",
+  "mode.home": "Home",
+  "mode.away": "Away",
+  "mode.sleep": "Sleep",
+  "mode.vacation": "Vacation",
+  "mode.guests": "Guests",
+  "app.name": "House Rules",
+  "notify.channel_calm": "House rules notes"
+ }
+}

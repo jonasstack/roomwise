@@ -1,0 +1,26 @@
+run:
+  fields:
+    rule_id:
+      required: true
+      selector:
+        text:
+pause:
+  fields:
+    rule_id:
+      required: true
+      selector:
+        text:
+    minutes:
+      required: false
+      default: 60
+      selector:
+        number:
+          min: 0
+          max: 10080
+reset_alarm_pin:
+  fields:
+    remove_pin:
+      required: false
+      default: false
+      selector:
+        boolean:

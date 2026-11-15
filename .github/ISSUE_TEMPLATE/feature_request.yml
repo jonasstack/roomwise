@@ -1,0 +1,30 @@
+name: Feature request
+description: An idea for something roomwise could do
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: Describe the situation at home rather than the solution. "In the evening I want to see at a glance which windows are still open" tells more than "add a window list".
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How do you imagine it?
+      description: Sketches and screenshots of how other tools do it are welcome.
+  - type: dropdown
+    id: part
+    attributes:
+      label: Which part would it belong to?
+      options:
+        - Floor plan card
+        - Card editor
+        - Hausregeln (rules, plans, alarm)
+        - Not sure
+  - type: textarea
+    id: devices
+    attributes:
+      label: Devices involved
+      description: If the idea depends on specific devices, name them and the integration that provides them.

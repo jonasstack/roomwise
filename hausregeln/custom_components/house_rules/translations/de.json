@@ -1,0 +1,107 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Hausregeln",
+        "description": "Einfache, verständliche Automationen als Sätze. Nach dem Einrichten erscheint „Hausregeln“ in der Seitenleiste."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Hausregeln ist schon eingerichtet."
+    }
+  },
+  "services": {
+    "run": {
+      "name": "Regel ausführen",
+      "description": "Führt eine Regel sofort aus.",
+      "fields": {
+        "rule_id": {
+          "name": "Regel-ID",
+          "description": "ID der Regel."
+        }
+      }
+    },
+    "pause": {
+      "name": "Regel pausieren",
+      "description": "Pausiert eine Regel für eine Zeit.",
+      "fields": {
+        "rule_id": {
+          "name": "Regel-ID",
+          "description": "ID der Regel."
+        },
+        "minutes": {
+          "name": "Minuten",
+          "description": "Wie lange (0 = bis sie wieder eingeschaltet wird)."
+        }
+      }
+    },
+    "reset_alarm_pin": {
+      "name": "Alarm-PIN zurücksetzen",
+      "description": "Hebt die Sperre nach zu vielen falschen PINs auf. Nur für Admins.",
+      "fields": {
+        "remove_pin": {
+          "name": "PIN auch entfernen",
+          "description": "Löscht zusätzlich die PIN (zum Beispiel wenn sie vergessen wurde). Bis eine neue gesetzt ist, braucht Ausschalten keine Bestätigung."
+        }
+      }
+    }
+  },
+  "issues": {
+    "entity_missing": {
+      "title": "Hausregeln: Gerät {entity_id} gibt es nicht mehr",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Gerät ersetzen",
+            "description": "Hausregeln nutzt **{entity_id}**, aber dieses Gerät gibt es in Home Assistant nicht mehr. Verwendet in: {used_in}.\n\nWähle ein anderes Gerät: Hausregeln setzt es überall dort ein, wo bisher {entity_id} stand.",
+            "data": {
+              "replacement": "Ersetzen durch"
+            }
+          }
+        },
+        "error": {
+          "invalid_entity": "Bitte ein anderes, vorhandenes Gerät wählen."
+        },
+        "abort": {
+          "not_loaded": "Hausregeln ist gerade nicht geladen."
+        }
+      }
+    },
+    "entity_unavailable": {
+      "title": "Hausregeln: {entity_id} ist seit {hours} Stunden nicht erreichbar",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Gerät ersetzen",
+            "description": "**{entity_id}** ist seit {hours} Stunden nicht erreichbar (Batterie leer, Gerät abgemeldet oder umbenannt?). Verwendet in: {used_in}.\n\nWenn das Gerät ersetzt wurde, wähle das neue: Hausregeln setzt es überall dort ein, wo bisher {entity_id} stand. Kommt das alte Gerät wieder, verschwindet dieser Hinweis von selbst.",
+            "data": {
+              "replacement": "Ersetzen durch"
+            }
+          }
+        },
+        "error": {
+          "invalid_entity": "Bitte ein anderes, vorhandenes Gerät wählen."
+        },
+        "abort": {
+          "not_loaded": "Hausregeln ist gerade nicht geladen."
+        }
+      }
+    },
+    "alarm_notify_missing": {
+      "title": "Hausregeln: Benachrichtigungsdienst der Alarmanlage fehlt",
+      "description": "Die Alarmanlage soll über {services} benachrichtigen, aber diesen Dienst gibt es nicht mehr. Im Alarmfall kommt darüber keine Nachricht an.\n\nPrüfe die Integration dahinter oder wähle unter [Hausregeln → Alarmanlage]({panel}/alarm) einen anderen Weg."
+    },
+    "alarm_no_target": {
+      "title": "Hausregeln: Die Alarmanlage benachrichtigt niemanden",
+      "description": "Die Alarmanlage ist eingeschaltet, aber im Alarmfall bekäme niemand eine Nachricht: Keine der gewählten Personen hat die Home-Assistant-App mit Benachrichtigungen, und kein weiterer Weg (E-Mail, Telegram, Signal, Benachrichtigungsdienst) ist eingerichtet.\n\nRichte unter [Hausregeln → Alarmanlage]({panel}/alarm) mindestens einen Empfänger ein."
+    },
+    "heating_no_thermostat": {
+      "title": "Hausregeln: Heizplan für {room} ohne Thermostat",
+      "description": "Der Heizplan für **{room}** ist eingeschaltet, aber dem Raum ist kein Thermostat zugeordnet. Der Plan kann dort nichts regeln.\n\nOrdne in Home Assistant ein Thermostat dem Bereich {room} zu oder wähle es unter [Hausregeln → Heizung]({panel}/heat) im Raum aus. Wird der Raum nicht beheizt, schalte seinen Heizplan aus."
+    },
+    "card_not_loaded": {
+      "title": "Grundriss-Karte wird nicht geladen",
+      "description": "Ein Dashboard zeigt die Grundriss-Karte (custom:floorplan-card), aber nichts lädt sie: Die Begleit-Integration „Grundriss-Karte“ ist nicht eingerichtet und es gibt keine Dashboard-Ressource dafür. Das Dashboard zeigt deshalb einen Fehler statt des Grundrisses.\n\nRichte unter Einstellungen → Geräte & Dienste → Integration hinzufügen die Integration „Grundriss-Karte“ ein. Sie liefert die Karte an alle Dashboards aus."
+    }
+  }
+}

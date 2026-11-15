@@ -1,0 +1,21 @@
+# roomwise diagnostics server – see README.md. Placeholders only: fill in your own values after `wrangler d1 create`.
+name = "roomwise-telemetry"
+main = "src/index.ts"
+compatibility_date = "2024-10-22"
+workers_dev = true
+
+# Cloudflare's own request logs / Workers Logs stay off: the worker logs nothing itself (PRIVACY.md)
+[observability]
+enabled = false
+
+[[d1_databases]]
+binding = "DB"
+database_name = "roomwise-telemetry"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+# daily clean-up of old rows (retention in PRIVACY.md)
+[triggers]
+crons = ["17 3 * * *"]
+
+# READ_TOKEN (bearer token for the read API) is a secret: `npx wrangler secret put READ_TOKEN`, never in this file

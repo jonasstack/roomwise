@@ -1,0 +1,107 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "House Rules",
+        "description": "Simple automations written as sentences. After setup, “House Rules” appears in the sidebar."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "House Rules is already set up."
+    }
+  },
+  "services": {
+    "run": {
+      "name": "Run rule",
+      "description": "Runs a rule right away.",
+      "fields": {
+        "rule_id": {
+          "name": "Rule ID",
+          "description": "ID of the rule."
+        }
+      }
+    },
+    "pause": {
+      "name": "Pause rule",
+      "description": "Pauses a rule for a while.",
+      "fields": {
+        "rule_id": {
+          "name": "Rule ID",
+          "description": "ID of the rule."
+        },
+        "minutes": {
+          "name": "Minutes",
+          "description": "How long (0 = until switched on again)."
+        }
+      }
+    },
+    "reset_alarm_pin": {
+      "name": "Reset alarm PIN",
+      "description": "Lifts the lockout after too many wrong PINs. Admins only.",
+      "fields": {
+        "remove_pin": {
+          "name": "Also remove the PIN",
+          "description": "Also deletes the PIN (for example when it was forgotten). Until a new one is set, disarming needs no confirmation."
+        }
+      }
+    }
+  },
+  "issues": {
+    "entity_missing": {
+      "title": "House Rules: device {entity_id} no longer exists",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Replace device",
+            "description": "House Rules uses **{entity_id}**, but this device no longer exists in Home Assistant. Used in: {used_in}.\n\nChoose another device: House Rules puts it everywhere {entity_id} was used.",
+            "data": {
+              "replacement": "Replace with"
+            }
+          }
+        },
+        "error": {
+          "invalid_entity": "Please choose another device that exists."
+        },
+        "abort": {
+          "not_loaded": "House Rules is not loaded right now."
+        }
+      }
+    },
+    "entity_unavailable": {
+      "title": "House Rules: {entity_id} has been unavailable for {hours} hours",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Replace device",
+            "description": "**{entity_id}** has been unavailable for {hours} hours (empty battery, device removed or renamed?). Used in: {used_in}.\n\nIf the device was replaced, choose the new one: House Rules puts it everywhere {entity_id} was used. If the old device comes back, this hint disappears by itself.",
+            "data": {
+              "replacement": "Replace with"
+            }
+          }
+        },
+        "error": {
+          "invalid_entity": "Please choose another device that exists."
+        },
+        "abort": {
+          "not_loaded": "House Rules is not loaded right now."
+        }
+      }
+    },
+    "alarm_notify_missing": {
+      "title": "House Rules: the alarm's notification service is missing",
+      "description": "The alarm is set to notify through {services}, but this service no longer exists. No message would arrive that way during an alarm.\n\nCheck the integration behind it or choose another way under [House Rules → Alarm]({panel}/alarm)."
+    },
+    "alarm_no_target": {
+      "title": "House Rules: the alarm notifies nobody",
+      "description": "The alarm is switched on, but nobody would get a message during an alarm: none of the chosen people has the Home Assistant app with notifications, and no other way (e-mail, Telegram, Signal, notification service) is set up.\n\nSet up at least one recipient under [House Rules → Alarm]({panel}/alarm)."
+    },
+    "heating_no_thermostat": {
+      "title": "House Rules: heating plan for {room} without a thermostat",
+      "description": "The heating plan for **{room}** is on, but the room has no thermostat. The plan cannot control anything there.\n\nAssign a thermostat to the area {room} in Home Assistant or choose it in the room under [House Rules → Heating]({panel}/heat). If the room is not heated, switch its heating plan off."
+    },
+    "card_not_loaded": {
+      "title": "The floor plan card is not loaded",
+      "description": "A dashboard shows the floor plan card (custom:floorplan-card), but nothing loads it: the companion integration “Floor plan card” is not set up and there is no dashboard resource for it. The dashboard therefore shows an error instead of the floor plan.\n\nAdd the integration “Floor plan card” under Settings → Devices & services → Add integration. It serves the card to every dashboard."
+    }
+  }
+}

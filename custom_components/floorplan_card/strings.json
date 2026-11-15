@@ -1,0 +1,46 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Floorplan card companion",
+        "description": "Serves the floor plan card to every dashboard and runs what must work without a tablet: the front door warning, walk reminders and check-offs for all devices, and the live position of the robot vacuum. Everything is set up from the card."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Already set up."
+    }
+  },
+  "issues": {
+    "frontend_missing": {
+      "title": "Floor plan card: card file missing",
+      "description": "The companion integration is set up, but the card's file (`frontend/floorplan-card.js`) is missing from its folder. Dashboards therefore cannot show the floor plan card.\n\nReinstall the floor plan card through HACS (HACS → Floor plan card → Redownload) and restart Home Assistant afterwards."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Song recognition",
+        "description": "Optional: media devices that cannot report what they play (infrared) can have their song recognized through the microphone of a wall tablet. The tablet only sends an audio fingerprint, which is looked up at AcoustID. Get a free API key for your own application at {signup_url} and enter it here. Without a key, song recognition stays off.",
+        "data": {
+          "acoustid_key": "AcoustID API key",
+          "acoustid_url": "Own AcoustID server (optional)"
+        },
+        "data_description": {
+          "acoustid_key": "The key of your application at acoustid.org (not the user API key).",
+          "acoustid_url": "Only for a self-hosted AcoustID server: its lookup URL. Empty = {lookup_url}"
+        }
+      }
+    },
+    "error": {
+      "invalid_key": "This does not look like an AcoustID API key.",
+      "invalid_url": "The URL must start with https:// or http://."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "song": {
+        "name": "{name} now playing"
+      }
+    }
+  }
+}

@@ -1,0 +1,26 @@
+// The dog editor's panel scrolled down (gear) and the inspector of the dog. Read-only: cancelled at the end.
+import { openHA } from '../pw.mjs';
+import { cardFn } from '../design/fake.mjs';
+const out = process.argv[2] ?? '/tmp';
+const { browser, page, errors } = await openHA({ size: process.env.SIZE ?? '1366x900', kiosk: true, block: ['light', 'climate', 'vacuum', 'cover', 'media_player', 'fan', 'switch', 'tts', 'notify', 'select', 'house_rules'] });
+const card = cardFn(page);
+await page.waitForTimeout(3000);
+await card(`(card.openEditor(), true)`);
+await page.waitForTimeout(3000);
+const E = (e) => page.evaluate(`(() => { const ed = document.querySelector('floorplan-card-layer').shadowRoot.querySelector('floorplan-card-editor-ui'); return ${e}; })()`);
+const id = await E(`ed.floor.furniture.find((x) => x.kind === 'dog')?.id`);
+await E(`(ed.select({ kind: 'furniture', id: ${JSON.stringify(id)} }), true)`);
+await page.waitForTimeout(3500);
+await E(`(ed.shadowRoot.querySelector('.inspector-body, .sheet-body, .panel-body')?.scrollTo(0, 400), true)`);
+await page.screenshot({ path: `${out}/dp-inspector.png` });
+await page.locator('floorplan-card-layer floorplan-card-editor-ui [data-dog-design]').click();
+await page.waitForTimeout(4000);
+const D = (e) => page.evaluate(`(() => { const d = document.querySelector('floorplan-card-layer').shadowRoot.querySelector('fp-dog-editor'); return ${e}; })()`);
+await D(`(d.shadowRoot.querySelector('.panel').scrollTo(0, 99999), true)`);
+await page.waitForTimeout(500);
+await page.screenshot({ path: `${out}/dp-gear.png` });
+await page.locator('floorplan-card-layer fp-dog-editor .bar .btn.plain').click();
+await page.waitForTimeout(400);
+await E(`(ed.shadowRoot.querySelector('.tb-left .btn').click(), true)`);
+console.log(errors.length ? errors.join('\n') : 'page: no errors');
+await browser.close();

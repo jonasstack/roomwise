@@ -1,0 +1,67 @@
+homeassistant:
+  name: Hausregeln Test
+  latitude: 52.52
+  longitude: 13.40
+  elevation: 30
+  unit_system: metric
+  time_zone: Europe/Berlin
+  country: DE
+  language: de
+  currency: EUR
+frontend:
+config:
+diagnostics:
+http:
+person:
+sun:
+history:
+logbook:
+energy:
+zone:
+device_tracker:
+mobile_app:
+automation: !include automations.yaml
+hr_fake:
+logger:
+  default: warning
+  logs:
+    custom_components.house_rules: debug
+input_boolean:
+  besuch:
+    name: Besuch da
+  licht_a:
+    name: Lichttest A
+  licht_b:
+    name: Lichttest B
+input_select:
+  waschprogramm:
+    name: Waschprogramm
+    options: [Eco, Schnell, Baumwolle]
+input_number:
+  lichtwert:
+    name: Lichtwert
+    min: 0
+    max: 1000
+    step: 1
+  zieltemp:
+    name: Zieltemperatur
+    min: 10
+    max: 30
+    step: 0.5
+input_button:
+  klingel:
+    name: Klingel
+input_text:
+  notiz:
+    name: Notiz
+  probe:
+    name: Probe
+script:
+  test_ablauf:
+    alias: Test-Ablauf
+    sequence:
+      - delay: 1
+scene:
+  - name: Test-Szene
+    entities:
+      input_boolean.besuch: "on"

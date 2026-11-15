@@ -1,0 +1,63 @@
+name: Bug report
+description: Something doesn't work as it should
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please check the open issues first, maybe someone ran into the same thing.
+        Don't post anything private (addresses, tokens, camera links). Look through logs before you paste them.
+  - type: dropdown
+    id: part
+    attributes:
+      label: Which part?
+      options:
+        - Floor plan card (display, popups, 3D)
+        - Card editor (drawing, objects, saving)
+        - Companion integration (front door alert, walk reminders, live vacuum)
+        - Hausregeln (rules, rooms, light / heating plans, alarm)
+        - Installation or update
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+      description: Steps to reproduce help a lot. Screenshots too, if they don't show anything private.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: roomwise version
+      description: HACS shows it, or Settings → Devices & services → the integration.
+      placeholder: 0.1.0-alpha.1
+    validations:
+      required: true
+  - type: input
+    id: ha
+    attributes:
+      label: Home Assistant version and installation type
+      placeholder: 2026.10.1, Home Assistant OS
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser / app and device
+      placeholder: Fully Kiosk Browser on a Samsung Galaxy Tab A8, or Safari on an iPad (iPadOS 18)
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics and logs
+      description: |
+        - Diagnostics: Settings → Devices & services → *Grundriss-Karte* or *Hausregeln* → ⋮ → **Download diagnostics** (where offered). Drag the file into this field.
+        - Logs: Settings → System → Logs → **Show full logs**, copy the lines with `floorplan_card` or `house_rules`.
+        - Card problems: the red lines from the browser console (F12, then reload the page).
+      render: text
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else?
+      description: Device brands involved, which integration provides them, whether it worked in an earlier version.

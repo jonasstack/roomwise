@@ -1,0 +1,15 @@
+node_modules/
+node_modules
+dist/
+.env
+.env.*
+tools/.cache/
+screenshots/tmp/
+*.log
+__pycache__/
+.ruff_cache/
+.cache/
+# built by tools/build.mjs (CI builds them for releases; never commit stale bundles)
+custom_components/floorplan_card/frontend/floorplan-card.js
+custom_components/floorplan_card/frontend/chunks/
+hausregeln/custom_components/house_rules/frontend/house-rules-panel.js

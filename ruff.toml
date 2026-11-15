@@ -1,0 +1,22 @@
+# Python lint for both integrations and the test helpers (CI pins the ruff version, see .github/workflows/validate.yml).
+target-version = "py313"
+line-length = 160
+extend-exclude = ["node_modules", "dist"]
+
+[lint]
+# pyflakes, pycodestyle errors/warnings and bugbear: real mistakes, not style preferences
+select = ["E", "F", "W", "B"]
+ignore = [
+  "E501", # long lines are fine (sentences in German UI texts)
+  "E701", # one-line `if x: y` is used on purpose in compact helpers
+  "E702",
+  "E731", # small lambdas assigned to names
+  "E741", # short loop names like `l` in compact comprehensions
+  "E401", # several stdlib imports on one line in test scripts
+  "B007", # unused loop variables kept for readability of tuple unpacking
+  "B905", # zip() without strict= (the inputs have equal length by construction)
+]
+
+[lint.per-file-ignores]
+# the test scripts insert the config path before importing the integration
+"hausregeln/tools/testha/*.py" = ["E402"]
