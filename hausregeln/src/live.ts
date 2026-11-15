@@ -358,6 +358,12 @@ export class LiveStore extends Store {
   override async alarmPreviewTone(tone: string, player: string) {
     await this.ws({ type: 'house_rules/alarm/preview_tone', tone, player });
   }
+  override async alarmSirenTest(seconds: number, volume: number) {
+    return this.ws<{ ok: boolean; until?: number; error?: string }>({ type: 'house_rules/alarm/siren_test', seconds, volume });
+  }
+  override async alarmSirenTestStop() {
+    await this.ws({ type: 'house_rules/alarm/siren_test_stop' });
+  }
   override async aiImprove(text: string, rule: Rule) {
     return this.ws<{ changed: boolean; rule?: Rule; sentence?: string; note?: string; model?: string }>({ type: 'house_rules/ai/improve', text, rule });
   }

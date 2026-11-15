@@ -230,6 +230,8 @@ const P = {
   'sim/set': { config: {} },
   'alarm/register_device': { payload: {}, name: 'x', rp_id: 'localhost' },
   'alarm/preview_tone': { tone: 'gong', player: 'media_player.none' },
+  'alarm/siren_test': { seconds: 1, volume: 10 },
+  'alarm/siren_test_stop': {},
   'alarm/channel_test': { channel: 'email' },
   'cleaning/set': { config: {} },
   'plan/set': { kind: 'light', room: 'none', plan: {} },

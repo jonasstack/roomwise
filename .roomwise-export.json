@@ -1,6 +1,6 @@
 {
   "note": "written by tools/release/export.mjs",
-  "version": "0.1.0-beta.9",
+  "version": "0.1.0-beta.10",
   "files": [
     ".github/ISSUE_TEMPLATE/bug_report.yml",
     ".github/ISSUE_TEMPLATE/config.yml",
@@ -302,6 +302,7 @@
     "hausregeln/tools/test-light-add.mjs",
     "hausregeln/tools/test-lightlive.mjs",
     "hausregeln/tools/test-sensor-search.mjs",
+    "hausregeln/tools/test-siren-test.mjs",
     "hausregeln/tools/test-zero-times.mjs",
     "hausregeln/tools/testha/config/automations.yaml",
     "hausregeln/tools/testha/config/configuration.yaml",
@@ -361,6 +362,7 @@
     "hausregeln/tools/testha/test_presence_sensors.py",
     "hausregeln/tools/testha/test_short_stay.py",
     "hausregeln/tools/testha/test_sim.py",
+    "hausregeln/tools/testha/test_siren_test.py",
     "hausregeln/tools/testha/test_sleep_start.py",
     "hausregeln/tools/testha/test_switch_lights.py",
     "hausregeln/tools/testha/test_wakeup.py",

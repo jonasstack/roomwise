@@ -108,6 +108,8 @@ COMMANDS: dict[str, str] = {
     "suggestion/restore": "admin",
     "alarm/test": "admin",
     "alarm/preview_tone": "admin",
+    "alarm/siren_test": "admin",
+    "alarm/siren_test_stop": "admin",
     "alarm/channel_test": "admin",
     "mode_auto/set": "admin",
     "wakeup/set": "admin",

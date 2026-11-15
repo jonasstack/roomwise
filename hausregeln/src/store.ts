@@ -351,6 +351,23 @@ export abstract class Store extends EventTarget {
   }
   async alarmRegisterDevice(_payload: Record<string, string>, _name: string, _rpId: string, _code?: string): Promise<void> {}
   async alarmPreviewTone(_tone: string, _player: string): Promise<void> {}
+  /** live test of the alarm sound at a volume (at most 10 s); called again while it runs: only the volume */
+  async alarmSirenTest(seconds: number, volume: number): Promise<{ ok: boolean; until?: number; error?: string }> {
+    // the example data: pretends to play (nothing to hear), ends by itself
+    if (!this.alarm) return { ok: false, error: 'nothing' };
+    const running = this.alarm.siren_test;
+    const until = running ? running.until : Date.now() / 1000 + Math.min(10, Math.max(1, seconds));
+    this.alarm = { ...this.alarm, siren_test: { until, volume } };
+    if (!running) setTimeout(() => void this.alarmSirenTestStop(), (until - Date.now() / 1000) * 1000);
+    this.changed();
+    return { ok: true, until };
+  }
+  async alarmSirenTestStop(): Promise<void> {
+    if (this.alarm?.siren_test) {
+      this.alarm = { ...this.alarm, siren_test: null };
+      this.changed();
+    }
+  }
   async alarmChannelTest(_channel: string): Promise<{ ok: boolean; errors: string[] }> {
     return { ok: true, errors: [t('panel.demo_nothing_sent')] };
   }

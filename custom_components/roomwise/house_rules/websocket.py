@@ -113,6 +113,8 @@ def async_register(hass: HomeAssistant) -> None:
         ws_alarm_challenge,
         ws_alarm_register_device,
         ws_alarm_preview_tone,
+        ws_alarm_siren_test,
+        ws_alarm_siren_test_stop,
         ws_alarm_channel_test,
         ws_cleaning_set,
         ws_plan_set,
@@ -558,6 +560,27 @@ async def ws_alarm_preview_tone(hass: HomeAssistant, connection: websocket_api.A
     if (core := _core(hass, connection, msg)) is None:
         return
     await core.alarm.preview_tone(msg["tone"], msg["player"])
+    connection.send_result(msg["id"], {"ok": True})
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): "house_rules/alarm/siren_test", vol.Optional("seconds", default=5): vol.Coerce(float), vol.Required("volume"): vol.Coerce(int)}
+)
+@websocket_api.async_response
+async def ws_alarm_siren_test(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Live test of the alarm sound (speakers and sirens) at a volume, at most 10 s; while it runs: only the volume."""
+    if (core := _core(hass, connection, msg)) is None:
+        return
+    connection.send_result(msg["id"], await core.alarm.siren_test(msg["seconds"], msg["volume"]))
+
+
+@websocket_api.websocket_command({vol.Required("type"): "house_rules/alarm/siren_test_stop"})
+@websocket_api.async_response
+async def ws_alarm_siren_test_stop(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Ends the live sound test at once."""
+    if (core := _core(hass, connection, msg)) is None:
+        return
+    await core.alarm.siren_test_stop()
     connection.send_result(msg["id"], {"ok": True})
 
 

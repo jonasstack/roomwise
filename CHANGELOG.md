@@ -6,6 +6,15 @@ All notable changes to roomwise are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0-beta.10] - 2026-11-15
+
+### Added
+
+- House rules alarm: **"Live testen"** under "Ton und Sirene" – the alarm sound at the set volume on the chosen
+  speakers and sirens for 3, 5 or 10 seconds, to set the volume by ear; asks before the first test, a big "Stopp",
+  the volume follows a running test, the backend stops it after at most 10 s and gives the speakers their volume back.
+  Never an alarm: no message, no announcement, no extra devices.
+
 ## [0.1.0-beta.9] - 2026-11-15
 
 ### Changed
@@ -414,7 +423,8 @@ The first public alpha. roomwise has been in daily use in one home before this r
 - Pause for motion sensors while a robot vacuum cleans.
 - Setup assistant and per-feature switches; after installation only the automatic house mode runs.
 
-[Unreleased]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.9...HEAD
+[Unreleased]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.10...HEAD
+[0.1.0-beta.10]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.9...v0.1.0-beta.10
 [0.1.0-beta.9]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.8...v0.1.0-beta.9
 [0.1.0-beta.8]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.7...v0.1.0-beta.8
 [0.1.0-beta.7]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.6...v0.1.0-beta.7

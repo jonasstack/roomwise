@@ -89,6 +89,8 @@ const MATRIX = {
   'house_rules/alarm/challenge': ['any', {}],
   'house_rules/alarm/register_device': ['pin', { payload: {}, name: 'x', rp_id: 'localhost' }],
   'house_rules/alarm/preview_tone': ['admin', { tone: 'gong', player: 'media_player.none' }],
+  'house_rules/alarm/siren_test': ['admin', { seconds: 1, volume: 10 }],
+  'house_rules/alarm/siren_test_stop': ['admin', {}],
   'house_rules/alarm/channel_test': ['admin', { channel: 'email' }],
   'house_rules/cleaning/set': ['admin', { config: {} }],
   'house_rules/plan/set': ['any', { kind: 'light', room: 'none', plan: {} }],

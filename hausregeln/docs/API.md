@@ -379,6 +379,8 @@ Die vollständige Rechte-Tabelle prüft `tools/testha/test-permissions.mjs`. Ein
 | `house_rules/alarm/challenge` | – | `{ challenge, credentials, user }` für Face ID / Touch ID; gültig 3 Min., höchstens 20 gleichzeitig (die neuesten) |
 | `house_rules/alarm/register_device` **(bewohner)** | `payload`, `name`, `rp_id`, `code?` | ohne `code` nur ein Admin von Home Assistant, alle anderen (auch die Rolle Admin) mit der Alarm-PIN; dieses Gerät für Face ID / Touch ID einrichten (siehe `src/passkey.ts`). Nur Admins, oder wer die PIN der Alarmanlage mitschickt (sonst `unauthorized`): ein eingerichtetes Gerät kann die Anlage ausschalten |
 | `house_rules/alarm/preview_tone` **(admin)** | `tone`, `player` | Ton leise auf einem Lautsprecher probehören |
+| `house_rules/alarm/siren_test` **(admin)** | `seconds` (1–10, Standard 5), `volume` (0–100) | Live-Test des Alarmtons auf den gewählten Lautsprechern und Sirenen mit dieser Lautstärke; höchstens 10 s, dann stoppt das Backend selbst. Läuft schon ein Test, wird nur die Lautstärke nachgezogen. Kein Alarm, keine Nachricht, keine Zusatzgeräte. Antwort `{ok, until}` bzw. `{ok: false, error: "alarm" \| "nothing"}` |
+| `house_rules/alarm/siren_test_stop` **(admin)** | – | Live-Test sofort beenden: Lautsprecher stoppen und bekommen ihre vorige Lautstärke zurück, Sirenen aus |
 | `house_rules/alarm/silence` **(bewohner)** | – | Sirene/Ton aus, Anlage bleibt im Alarm |
 | `house_rules/alarm/test` **(admin)** | – | Probealarm: nur Nachricht + Durchsage |
 | `house_rules/alarm/channel_test` **(admin)** | `channel` (`email`/`telegram`/`signal`/`services`) | `{ ok, errors }` – Testnachricht über einen weiteren Weg |

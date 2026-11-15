@@ -85,7 +85,15 @@ export class HrAlarmView extends StoreElement {
     _playing: { state: true },
     _q: { state: true },
     _pops: { state: true },
+    _sirenAsk: { state: true },
+    _sirenSec: { state: true },
+    _sirenErr: { state: true },
   };
+  /** live sound test: the question before the first test is showing / was answered this visit */
+  declare _sirenAsk: boolean;
+  private _sirenOk = false;
+  declare _sirenSec: number;
+  declare _sirenErr: string;
   declare _mode: AlarmMode;
   declare _open: { mode: AlarmMode; list: { entity_id: string; name: string }[] } | null;
   declare _now: number;
@@ -133,7 +141,7 @@ export class HrAlarmView extends StoreElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this._tick = window.setInterval(() => {
-      if (this.store?.alarm?.until) this._now = Date.now() / 1000;
+      if (this.store?.alarm?.until || this.store?.alarm?.siren_test) this._now = Date.now() / 1000;
     }, 500);
   }
   override updated(changed: PropertyValues): void {
@@ -150,6 +158,19 @@ export class HrAlarmView extends StoreElement {
     shared,
     kit,
     css`
+      .siren-test {
+        display: grid;
+        gap: var(--hr-space-2, 8px);
+        margin: var(--hr-space-3, 12px) 0;
+      }
+      .siren-test.ask {
+        padding: var(--hr-space-3, 12px);
+        border-radius: var(--hr-radius-m, 12px);
+        background: color-mix(in srgb, var(--hr-orange) var(--hr-tint, 14%), transparent);
+      }
+      .siren-test .btn.block {
+        min-height: 48px;
+      }
       /* pop-up bodies are flex columns: their parts keep their height and scroll instead of shrinking */
       hr-pop > * {
         flex-shrink: 0;
@@ -1105,6 +1126,44 @@ export class HrAlarmView extends StoreElement {
     );
   }
 
+  /** "Live testen": the alarm sound at the set volume on the chosen speakers and sirens, a few seconds – to set the
+   * volume by ear. Asks once before the first test; never an alarm (alarm.siren_test in the backend). */
+  private _sirenTest(cfg: AlarmConfig) {
+    const st = this.store.alarm?.siren_test;
+    const sec = this._sirenSec ?? 5;
+    if (!cfg.sound.players.length && !cfg.sirens.length) return html`<p class="muted">${t('alarm.test_need')}</p>`;
+    const go = async () => {
+      this._sirenAsk = false;
+      this._sirenOk = true;
+      this._sirenErr = '';
+      const r = await this.store.alarmSirenTest(sec, cfg.sound.volume);
+      if (!r.ok) this._sirenErr = t(r.error === 'alarm' ? 'alarm.test_err_alarm' : 'alarm.test_err_nothing');
+    };
+    if (st) {
+      const left = Math.max(0, Math.ceil(st.until - (this._now || Date.now() / 1000)));
+      return html`<div class="siren-test">
+        <button class="btn danger block" data-siren-stop @click=${() => void this.store.alarmSirenTestStop()}>${icon(mdiStop, 22)}${t('alarm.test_stop', { s: left })}</button>
+        <p class="muted">${t('alarm.test_running', { v: st.volume })}</p>
+      </div>`;
+    }
+    if (this._sirenAsk)
+      return html`<div class="siren-test ask" role="alertdialog">
+        <p><b>${t('alarm.test_warn')}</b></p>
+        <div class="row gap">
+          <button class="btn primary" data-siren-go @click=${go}>${icon(mdiPlay, 18)}${t('alarm.test_go')}</button>
+          <button class="btn" @click=${() => (this._sirenAsk = false)}>${t('common.cancel')}</button>
+        </div>
+      </div>`;
+    return html`<div class="siren-test">
+      <div class="row wrap">
+        <span class="grow"><div class="title">${t('alarm.test_title')}</div><div class="sub">${t('alarm.test_sub', { v: cfg.sound.volume })}</div></span>
+        <div class="seg">${[3, 5, 10].map((n) => html`<button aria-pressed=${sec === n ? 'true' : 'false'} @click=${() => (this._sirenSec = n)}>${n} s</button>`)}</div>
+      </div>
+      <button class="btn primary block" data-siren-test @click=${() => (this._sirenOk ? void go() : (this._sirenAsk = true))}>${icon(mdiPlay, 18)}${t('alarm.test_live')}</button>
+      ${this._sirenErr ? html`<p class="muted">${this._sirenErr}</p>` : nothing}
+    </div>`;
+  }
+
   /** settings for every mode: messages (notify), sound and announcement (sound), switching off (security) */
   private _globalPart(part: 'notify' | 'cameras' | 'sound' | 'announce' | 'security') {
     const cfg = this.cfg;
@@ -1203,12 +1262,24 @@ export class HrAlarmView extends StoreElement {
             <div class="group">${players.map((p) => this._check(cfg.sound.players.includes(p.entity_id), p.name, undefined, () => this._save({ sound: { ...cfg.sound, players: this._toggleIn(cfg.sound.players, p.entity_id) } })))}</div>
           </details>
           <div class="group">
-            <div class="row wrap"><span class="grow"><div class="title">${t('alarm.volume')}</div></span>${this._stepper(cfg.sound.volume, '%', (v) => this._save({ sound: { ...cfg.sound, volume: v } }), 10, 0, 100)}</div>
+            <div class="row wrap"><span class="grow"><div class="title">${t('alarm.volume')}</div></span>${this._stepper(
+              cfg.sound.volume,
+              '%',
+              (v) => {
+                this._save({ sound: { ...cfg.sound, volume: v } });
+                // a live test is running: the speakers and sirens follow at once
+                if (this.store.alarm?.siren_test) void this.store.alarmSirenTest(this._sirenSec ?? 5, v);
+              },
+              10,
+              0,
+              100,
+            )}</div>
             <div class="row wrap">
               <span class="grow"><div class="title">${t('alarm.duration')}</div><div class="sub">${t('alarm.duration_sub')}</div></span>
               ${this._stepper(Math.round(cfg.duration / 60), t('alarm.unit_min'), (v) => this._save({ duration: Math.max(1, v) * 60 }), 1, 1, 30)}
             </div>
           </div>
+          ${this._sirenTest(cfg)}
           <details class="sub">
             <summary><span>${t('alarm.sirens')}</span><span class="muted">${t('alarm.n_of', { n: cfg.sirens.length, total: sirens.length })}</span></summary>
             <div class="group">

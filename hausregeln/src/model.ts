@@ -1178,6 +1178,8 @@ export interface AlarmView {
   tones?: Record<string, string>;
   notify_services?: string[];
   sounds_url?: string;
+  /** a live test of the alarm sound is running (alarm/siren_test): until when, at which volume */
+  siren_test?: { until: number; volume: number } | null;
 }
 
 export interface AiReview {

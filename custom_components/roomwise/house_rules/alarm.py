@@ -44,6 +44,10 @@ ACTION_PREFIX = "HR_ALARM_"
 MAX_CHALLENGES = 20  # open Face ID / Touch ID challenges at once
 SOUNDS_URL = "/house_rules_sounds"
 # sound files in sounds/ (ids are file names); names: texts alarm.tone_<id>
+# live sound test: at most this long (s); siren features (SirenEntityFeature.VOLUME_SET / DURATION)
+SIREN_TEST_MAX = 10
+SIREN_VOLUME_SET = 8
+SIREN_DURATION = 16
 TONES = ("sirene", "martinshorn", "evakuierung", "alarm", "piepen", "gong")
 DASHBOARD_PATH = "/hausregeln/alarm"
 HOUSE_MODES = ("home", "away", "sleep", "vacation", "guests")
@@ -223,6 +227,9 @@ class Alarm:
         self._time_unsub: list[Callable[[], None]] = []
         self._away_timer: CALLBACK_TYPE | None = None
         self._repeat: CALLBACK_TYPE | None = None
+        # live test of the sound (siren_test): until, volume, the speakers' volume before it, its stop timer
+        self._test: dict[str, Any] | None = None
+        self._test_unsub: CALLBACK_TYPE | None = None
         self._repeat_count = 0
         self._listeners: list[Callable[[str], None]] = []
         self._activated: list[str] = []
@@ -496,6 +503,8 @@ class Alarm:
         self._watch()
 
     def stop(self) -> None:
+        if self._test:
+            self.hass.async_create_task(self.siren_test_stop())
         for u in self._unsub:
             u()
         self._unsub.clear()
@@ -658,6 +667,7 @@ class Alarm:
                 n for n in self.hass.services.async_services_for_domain("notify") if not n.startswith("mobile_app_") and n not in ("notify", "send_message", "persistent_notification")
             ),
             "sounds_url": SOUNDS_URL,
+            "siren_test": {"until": self._test["until"], "volume": self._test["volume"]} if self._test else None,
         }
 
     def _set(self, state: str, mode: str | None = None, until: float | None = None) -> None:
@@ -1015,6 +1025,7 @@ class Alarm:
         cause = self._name(eid) if eid else tr(self.core, "alarm.cause_manual")
         mode_name = arm_mode_label(self.core, self.mode)
         if not test:
+            self._test_drop()  # a real alarm takes over the speakers and sirens of a running sound test
             self.cause = eid
             self.silenced = False
             self._set("triggered")
@@ -1237,6 +1248,81 @@ class Alarm:
         """Plays a tone on one speaker at a low volume, to choose."""
         ctx = self.core.history.new_context("alarm")
         await self._play(tone, ctx, volume=30, players=[player])
+
+    # ------------------------------------------------------------------ live test of the sound
+    async def siren_test(self, seconds: float, volume: int) -> dict[str, Any]:
+        """Live test of the alarm sound at `volume` %: the chosen tone on the chosen speakers and the chosen sirens,
+        for at most SIREN_TEST_MAX seconds – never an alarm: no messages, no extra devices, the alarm's state stays.
+        Called again while it runs: only the volume follows (live), the time keeps running."""
+        if self.state in ("pending", "triggered"):
+            return {"ok": False, "error": "alarm"}
+        volume = int(max(0, min(100, volume)))
+        s = self.config["sound"]
+        players = [p for p in (s.get("players") or []) if self.hass.states.get(p) is not None]
+        sirens = [e for e in (self.config.get("sirens") or []) if self.hass.states.get(e) is not None]
+        if not players and not sirens:
+            return {"ok": False, "error": "nothing"}
+        ctx = self.core.history.new_context("alarm")
+        if self._test:
+            self._test["volume"] = volume
+            if players:
+                await self._call("media_player", "volume_set", players, {"volume_level": volume / 100}, ctx)
+            for e in sirens:
+                if e.startswith("siren.") and self._siren_can(e, SIREN_VOLUME_SET):
+                    await self._call("siren", "turn_on", e, {"volume_level": volume / 100}, ctx)
+            self._changed()
+            return {"ok": True, "until": self._test["until"]}
+        seconds = float(max(1, min(SIREN_TEST_MAX, seconds)))
+        prev = {p: st.attributes.get("volume_level") for p in players if (st := self.hass.states.get(p)) is not None}
+        self._test = {"until": time.time() + seconds, "volume": volume, "prev": prev, "players": players, "sirens": sirens}
+        if players:
+            await self._play(s.get("tone") or "sirene", ctx, volume=volume, players=players)
+        for e in sirens:
+            if e.startswith("siren."):
+                data: dict[str, Any] = {}
+                if self._siren_can(e, SIREN_VOLUME_SET):
+                    data["volume_level"] = volume / 100
+                if self._siren_can(e, SIREN_DURATION):
+                    data["duration"] = int(seconds)
+                await self._call("siren", "turn_on", e, data, ctx)
+            else:
+                await self._call("homeassistant", "turn_on", e, {}, ctx)
+        # the backend ends it, also when the panel is closed
+        self._test_unsub = async_call_later(self.hass, seconds, self._test_timeout)
+        self.core.history.add("alarm", tr(self.core, "alarm.h_siren_test"), tr(self.core, "alarm.h_siren_test_why", seconds=int(seconds), volume=volume))
+        self._changed()
+        return {"ok": True, "until": self._test["until"]}
+
+    @callback
+    def _test_timeout(self, _now: Any) -> None:
+        self._test_unsub = None
+        self.hass.async_create_task(self.siren_test_stop())
+
+    def _siren_can(self, eid: str, feature: int) -> bool:
+        st = self.hass.states.get(eid)
+        return bool(st and int(st.attributes.get("supported_features") or 0) & feature)
+
+    def _test_drop(self) -> None:
+        """Forget a running test without touching the devices (a real alarm takes them over)."""
+        if self._test_unsub:
+            self._test_unsub()
+            self._test_unsub = None
+        self._test = None
+
+    async def siren_test_stop(self) -> None:
+        """Ends the live test at once: speakers stop and get their volume back, sirens off."""
+        test = self._test
+        self._test_drop()
+        if not test:
+            return
+        for p in test["players"]:
+            await self._call("media_player", "media_stop", p, {}, None)
+            before = test["prev"].get(p)
+            if isinstance(before, (int, float)):
+                await self._call("media_player", "volume_set", p, {"volume_level": before}, None)
+        for e in test["sirens"]:
+            await self._call("siren" if e.startswith("siren.") else "homeassistant", "turn_off", e, {}, None)
+        self._changed()
 
     async def _stop_sound(self) -> None:
         for p in self.config["sound"].get("players", []):
