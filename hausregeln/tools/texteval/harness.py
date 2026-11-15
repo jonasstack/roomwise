@@ -19,7 +19,7 @@ import types
 import urllib.request
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2] / "custom_components" / "house_rules"
+ROOT = Path(__file__).resolve().parents[3] / "custom_components" / "roomwise" / "house_rules"
 STATE_HOME = "home"
 
 
