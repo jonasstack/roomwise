@@ -125,6 +125,32 @@ def is_light_switch(entity_id: str, name: str) -> bool:
     return bool(LIGHT_WORDS.search(text)) and not LIGHT_NOT.search(text)
 
 
+# a binary_sensor without a fitting device class (mmWave / radar, ESPHome, a template, an FP2 zone with another class):
+# what its name or id says – presence or motion; never a battery, link, status or tamper sensor
+PRESENCE_WORDS = re.compile(r"anwesen|praesenz|prasenz|presence|occupan|belegt|mmwave|radar|(?<![a-z])fp[12](?![a-z0-9])")
+MOTION_WORDS = re.compile(r"bewegung|motion|(?<![a-z])pir(?![a-z])")
+SENSOR_NOT = re.compile(r"batter|akku|connect|verbund|online|offline|status|problem|update|tamper|sabotage|signal|rssi|linkquality|firmware|error|fehler")
+NOT_PRESENCE_CLASSES = {
+    "battery", "battery_charging", "connectivity", "problem", "update", "tamper", "plug", "power", "running", "safety", "smoke",
+    "gas", "carbon_monoxide", "heat", "cold", "sound", "vibration", "light", "lock", "moisture", "door", "garage_door", "opening",
+    "window",
+}  # fmt: skip
+
+
+def presence_kind(entity_id: str, name: str, device_class: str = "") -> str | None:
+    """presence / motion for a sensor whose device class does not say it (by its name or id), else None"""
+    if device_class in NOT_PRESENCE_CLASSES:
+        return None
+    text = norm_name(f"{name} {entity_id.split('.', 1)[-1]}").replace("_", " ")
+    if SENSOR_NOT.search(text):
+        return None
+    if PRESENCE_WORDS.search(text):
+        return "presence"
+    if MOTION_WORDS.search(text):
+        return "motion"
+    return None
+
+
 def classify(entity_id: str, state: State | None, name: str) -> tuple[str | None, str | None]:
     """(kind, hint): kind for Hausregeln, hint = what HA says when the name suggests something else."""
     domain = entity_id.split(".")[0]
@@ -166,7 +192,8 @@ def classify(entity_id: str, state: State | None, name: str) -> tuple[str | None
             return "presence", None
         if dc == "moisture":
             return "leak", None
-        return None, None
+        # no fitting class: the name tells (Radar Flur, Anwesenheit Küche, Bewegung Bad …)
+        return presence_kind(entity_id, name, dc), None
     if domain == "sensor":
         if dc == "temperature":
             return "temperature", None

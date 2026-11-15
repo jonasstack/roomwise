@@ -62,7 +62,7 @@ export class HrAssistantWindow extends HrAssistantBase {
         ${this.check(!!a.lights, 'Licht an der Tür blinkt 3× rot', 'danach wieder wie vorher', () => this.set({ lights: !a.lights }))}
         ${this.check(!!a.announce, 'Durchsage, wenn niemand bestätigt', 'auf den Lautsprechern der Alarmanlage, z. B. „Noch offen: Küchenfenster“', () => this.set({ announce: !a.announce }))}
         ${this.check(!!a.notify, 'Nachricht aufs Handy', 'wenn niemand bestätigt', () => this.set({ notify: !a.notify }))}
-        ${this.line('Bestätigen innerhalb von', 'danach Durchsage bzw. Nachricht', this.stepper(a.timeout ?? 30, 'Sek.', (v) => this.set({ timeout: v }), 5, 5, 300))}
+        ${this.line('Bestätigen innerhalb von', 'danach Durchsage bzw. Nachricht', this.stepper(a.timeout ?? 30, 'Sek.', (v) => this.set({ timeout: v }), 5, 0, 300))}
       </div>`;
   }
 

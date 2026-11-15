@@ -440,9 +440,9 @@ function manualRows(manual: HeatPlan['manual'], hours: number, max: number, set:
     </div>
     ${manual === 'smart'
       ? html`<p class="note">Bleibt, bis sich wirklich etwas ändert: anderer Hausmodus, alle gehen, der Raum ist lange leer oder der Plan wechselt (Komfort, Absenken, Nacht). Ein gelüftetes Fenster beendet es nicht.</p>
-          <div class="group">${row('Höchstens', 'Danach gilt in jedem Fall wieder der Plan', durationStepper(max * 60, (x) => set({ ...v, manual_max: Math.min(12, Math.max(1, x / 60)) }), 60, 720))}</div>`
+          <div class="group">${row('Höchstens', 'Danach gilt in jedem Fall wieder der Plan', durationStepper(max * 60, (x) => set({ ...v, manual_max: Math.min(12, Math.max(0, x / 60)) }), 0, 720))}</div>`
       : nothing}
-    ${manual === 'hours' ? html`<div class="group">${row('Wie lange', undefined, durationStepper(hours * 60, (x) => set({ ...v, manual_hours: Math.max(0.05, x / 60) }), 1, 2880))}</div>` : nothing}`;
+    ${manual === 'hours' ? html`<div class="group">${row('Wie lange', undefined, durationStepper(hours * 60, (x) => set({ ...v, manual_hours: Math.max(0, x / 60) }), 0, 2880))}</div>` : nothing}`;
 }
 
 function preheatRows(ph: HeatPlan['preheat'], set: (ph: HeatPlan['preheat']) => void, sub: string | TemplateResult, rate: number | undefined): TemplateResult {
@@ -600,7 +600,7 @@ export class HrHeatPlans extends StoreElement {
           ${g.exercise.on
             ? html`<div class="row wrap"><div class="seg">${WEEKDAYS.map((d, i) => html`<button aria-pressed=${g.exercise.weekday === i ? 'true' : 'false'} @click=${() => this._global({ exercise: { ...g.exercise, weekday: i } })}>${d}</button>`)}</div>
                   <input type="time" aria-label="Uhrzeit" .value=${g.exercise.time} @change=${(e: Event) => this._global({ exercise: { ...g.exercise, time: (e.target as HTMLInputElement).value } })} /></div>
-                ${row('Wie lange offen', g.summer.on ? 'Nur im Sommerbetrieb (im Winter bewegen sie sich ohnehin)' : undefined, durationStepper(g.exercise.minutes, (v) => this._global({ exercise: { ...g.exercise, minutes: Math.max(0.05, v) } }), 0, 30))}`
+                ${row('Wie lange offen', g.summer.on ? 'Nur im Sommerbetrieb (im Winter bewegen sie sich ohnehin)' : undefined, durationStepper(g.exercise.minutes, (v) => this._global({ exercise: { ...g.exercise, minutes: Math.max(0, v) } }), 0, 30))}`
             : nothing}
           <div class="row"><button class="btn small" @click=${() => this.store.heatingDo('exercise')}>Jetzt einmal durchführen</button></div>
         </div>`
@@ -716,7 +716,7 @@ export class HrHeatPlans extends StoreElement {
         <span class="label">${t('heat.airing_title')}</span>
         <div class="group">
           ${row(t('heat.airing_morning'), air.morning == null ? t('heat.airing_unknown') : t('heat.airing_prior_note'), sw(!!air.morning, t('heat.airing_morning'), () => setAir({ morning: !air.morning })))}
-          ${air.morning ? row(t('heat.airing_minutes'), undefined, durationStepper(air.minutes, (x) => setAir({ minutes: Math.max(1, x) }), 1, 60)) : nothing}
+          ${air.morning ? row(t('heat.airing_minutes'), undefined, durationStepper(air.minutes, (x) => setAir({ minutes: Math.max(0, x) }), 0, 60)) : nothing}
         </div>
 
         <span class="label">Lüftungsplan und Erinnerungen</span>
@@ -1198,7 +1198,7 @@ export class HrHeatPlans extends StoreElement {
       <p class="note">${heatStyles().find((x) => x[0] === sm.style)?.[2]}</p>
       <div class="group">
         ${row('Beim Aufheizen in Schritten', step ? `${n(step)} °C alle ${minutes} Min.${sm.ramp.step == null ? ' (wie der Stil)' : ''}` : 'Gleich auf das Ziel', stepper(step, '°C', (v) => save({ ramp: { step: v, minutes: minutes || 10 } }), 0.5, 0, 5, 'Schritt'))}
-        ${step ? row('Alle', undefined, durationStepper(minutes, (v) => save({ ramp: { step, minutes: v } }), 1, 120)) : nothing}
+        ${step ? row('Alle', undefined, durationStepper(minutes, (v) => save({ ramp: { step, minutes: v } }), 0, 120)) : nothing}
         ${sm.ramp.step != null ? html`<div class="row"><button class="btn small plain" @click=${() => save({ ramp: { step: null, minutes: null } })}>Wie der Stil</button></div>` : nothing}
       </div>
       ${this._evening(sm, save)}

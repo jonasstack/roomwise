@@ -6,6 +6,40 @@ All notable changes to roomwise are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0-beta.9] - 2026-11-15
+
+### Changed
+
+- House rules light rules: the end of a rule ("Aus", its own cool-down, "erst dimmen") is shown and tested to touch only
+  the lamps the rule picked – other lamps of the room, switched on by hand or by other rules, stay as they are; the
+  wizard says so under "Aus" (new test `test-rule-end.mjs`).
+
+### Added
+
+- House rules "Raum einstellen": the room's **light sensor** can be any light sensor of the house, also one of
+  another room (e.g. the living room's for the hallway), or none.
+- Card first steps, from the robot vacuum's map: **"Welche Etage ist welche?"** – one choice per map (Home
+  Assistant's floors, else basement, ground floor, upper floors, attic, an own name, or "leave out"); the
+  suggestion is marked as one, an unsure one says "Bitte wählen" with the reason, and "Apply" waits until every map
+  has a floor; picking a floor another map has makes the two swap.
+- **"Richtig herum drehen"** in the same preview: quarter turns, mirror and a fine correction (±15°), the same for
+  all floors by default; rooms, doors, the vacuum and its dock turn together, the vacuum's live alignment with them.
+- Editor, floor settings: **"Etage drehen"** – a quarter turn or a mirror for everything on the floor (rooms,
+  doors, devices, furniture, tracing image, the vacuum's alignment), undoable.
+- House rules "Raum einstellen": **"Sensor suchen …"** – any sensor of Home Assistant can be a room's presence or
+  motion sensor, also one without a fitting device class (radar / mmWave, ESPHome, templates, a people counter).
+  A binary_sensor without a fitting class is now also recognised by its name (radar, Anwesenheit, Bewegung …),
+  never a battery, link or status sensor.
+- "Sensor aus anderem Raum" also offers the zones of multi-zone presence sensors (FP2 & co.) – they were missing.
+
+### Changed
+
+- House rules: every time setting goes down to 0 (= at once) – room empty after, door pulse, conditions "for", alarm
+  windows, heating airing / manual / ramp / valve exercise, window warning confirmation; 0 no longer falls back to the preset.
+- Which floor a robot map is: weighed by the area of its rooms that match a Home Assistant floor's areas (not the
+  first hit), the map's name ("EG", "OG", "DG", "Keller", "oben", "unten", also as one word in it) as a second hint;
+  rooms split over floors, a name pointing elsewhere or two maps on one floor leave it open instead of guessing.
+
 ## [0.1.0-beta.8] - 2026-11-15
 
 ### Added
@@ -380,7 +414,8 @@ The first public alpha. roomwise has been in daily use in one home before this r
 - Pause for motion sensors while a robot vacuum cleans.
 - Setup assistant and per-feature switches; after installation only the automatic house mode runs.
 
-[Unreleased]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.8...HEAD
+[Unreleased]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.9...HEAD
+[0.1.0-beta.9]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.8...v0.1.0-beta.9
 [0.1.0-beta.8]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.7...v0.1.0-beta.8
 [0.1.0-beta.7]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.6...v0.1.0-beta.7
 [0.1.0-beta.6]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.5...v0.1.0-beta.6

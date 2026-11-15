@@ -395,14 +395,15 @@ export class HrPicker extends StoreElement {
     this._draft = d;
   }
 
-  /** quick choices plus a − / + down to seconds; `none` = label of the "no time" choice */
-  private _duration(value: unknown, set: (d: string | undefined) => void, none?: string): TemplateResult {
+  /** quick choices plus a − / + down to seconds; `none` = label of the "no time" choice; `zero` = what 0 is stored as
+   * (a time with a preset, e.g. "for 5 min": '0s' – else 0 would fall back to the preset) */
+  private _duration(value: unknown, set: (d: string | undefined) => void, none?: string, zero?: string): TemplateResult {
     const sec = durToSec(value);
     return html`<div class="chips">
         ${none ? html`<button aria-pressed=${!sec ? 'true' : 'false'} @click=${() => set(undefined)}>${none}</button>` : nothing}
         ${DURATIONS.map((d) => html`<button aria-pressed=${sec && sec === durToSec(d) ? 'true' : 'false'} @click=${() => set(d)}>${formatDuration(d)}</button>`)}
       </div>
-      <div class="exact"><span>${t('rules.exact')}</span>${durationStepper(sec / 60, (m) => set(secToDur(m * 60) || undefined), 0, 1440)}</div>`;
+      <div class="exact"><span>${t('rules.exact')}</span>${durationStepper(sec / 60, (m) => set(secToDur(m * 60) || zero), 0, 1440)}</div>`;
   }
 
   /** the lamps a step is for: one light, or all/any lights (of a room) */
@@ -425,7 +426,7 @@ export class HrPicker extends StoreElement {
         return html`<div class="chips">${all.map((d) => html`<button aria-pressed=${days.includes(d) ? 'true' : 'false'} @click=${() => toggle(d)}>${t(`logic.day_${d}` as I18nKey)}</button>`)}</div>`;
       }
       case 'duration':
-        return this._duration(v, (d) => this._set(p.key, d ?? p.default));
+        return this._duration(v, (d) => this._set(p.key, d ?? p.default), undefined, '0s');
       case 'percent':
         return html`<div class="stepper">
           <input

@@ -519,7 +519,7 @@ class SmartHeating:
                 sw = self.habits.sleep_window(day)
                 wake = sw[1] if sw else (6 * 60 + 30 if self.habits.workday(day) else 8 * 60)
                 start = wake + 10
-                return [{"a": start, "z": start + int(a.get("minutes") or 10), "mean": 0.5, "source": "prior"}]
+                return [{"a": start, "z": start + int(10 if a.get("minutes") is None else a["minutes"]), "mean": 0.5, "source": "prior"}]
             return []
 
         return self._cached(("air", rid, day.isoformat()), make)

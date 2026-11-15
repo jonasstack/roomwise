@@ -1570,7 +1570,9 @@ export class HrLightPlans extends StoreElement {
           <p class="note">${x.kind === 'never_on' ? 'Diese gehen nicht von selbst an, solange die Bedingung gilt. Sind sie schon an, bleiben sie.' : 'Diese gehen nicht aus, solange die Bedingung gilt: weder durch andere Regeln, noch wenn der Raum kurz leer ist, noch durch andere Automationen.'}</p>
           ${lightChips}`;
         break;
-      case 'after':
+      case 'after': {
+        // "Aus" at the end of a rule only touches its own lamps – say so when it has picked some
+        const ownOnly = x.lights.length ? (x.lights.length === 1 ? `Nur ${this._name(x.lights[0])}, die anderen Lampen bleiben, wie sie sind` : 'Nur die Lampen dieser Regel, die anderen bleiben, wie sie sind') : `Alle Lampen ${r.in}`;
         body =
           x.kind === 'while'
             ? html`<h3>Und wenn es nicht mehr gilt?</h3>
@@ -1579,7 +1581,7 @@ export class HrLightPlans extends StoreElement {
                     [
                       ['others', 'Was die anderen Regeln sagen', 'Z. B. die „Wenn“-Regel vom Reinkommen'],
                       ['restore', 'Wieder wie vorher', 'So, wie die Lichter vorher waren'],
-                      ['off', 'Aus', ''],
+                      ['off', 'Aus', ownOnly],
                       ['nothing', 'Bleibt, wie es ist', ''],
                     ] as const
                   ).map(([k, l, h]) => html`<button aria-pressed=${x.after === k ? 'true' : 'false'} @click=${() => up({ after: k })}><span><b>${l}</b><span>${h}</span></span></button>`)}
@@ -1590,13 +1592,14 @@ export class HrLightPlans extends StoreElement {
                 <div class="kinds">
                   ${(
                     [
-                      ['off', 'Aus', ''],
+                      ['off', 'Aus', ownOnly],
                       ['dim', 'Erst dimmen', 'Wie unter „Wenn niemand mehr da ist“ eingestellt'],
                       ['keep', 'Anlassen', ''],
                     ] as const
                   ).map(([k, l, h]) => html`<button aria-pressed=${x.empty_after === k ? 'true' : 'false'} @click=${() => up({ empty_after: k })}><span><b>${l}</b><span>${h}</span></span></button>`)}
                 </div>`;
         break;
+      }
       default:
         body = html`<h3>Name und Überblick</h3>
           <input class="text" .value=${x.name} placeholder=${this._autoName(r, x)} @input=${(e: Event) => up({ name: (e.target as HTMLInputElement).value })} />

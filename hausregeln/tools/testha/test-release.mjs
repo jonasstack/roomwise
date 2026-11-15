@@ -200,6 +200,7 @@ const P = {
   from_text: { text: 'Wenn die Haustür aufgeht, Flurlicht an' },
   for_entity: { entity_id: 'light.none' },
   for_entities: { entity_ids: ['light.none'] },
+  'entities/search': { query: 'radar' },
   'mode/set': { mode: snap0.mode },
   'room/save': { room: {} },
   'behaviour/set': { behaviour: 'none', on: false },

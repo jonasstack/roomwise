@@ -338,7 +338,7 @@ class Alarm:
                         if isinstance(s.get("on"), bool):
                             dst["smart"][key]["on"] = s["on"]
                         if isinstance(s.get(unit), (int, float)):
-                            dst["smart"][key][unit] = int(max(1, min(hi, s[unit])))
+                            dst["smart"][key][unit] = int(max(0, min(hi, s[unit])))
                         if key == "arrival" and isinstance(s.get("disarm"), bool):
                             dst["smart"][key]["disarm"] = s["disarm"]
                 if isinstance(src.get("auto"), dict):

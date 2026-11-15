@@ -1017,7 +1017,7 @@ export class HrAlarmView extends StoreElement {
               ${this._switch(mc.smart.inside.on, t('alarm.smart_inside_short'), () => this._saveMode(m, { smart: { ...mc.smart, inside: { ...mc.smart.inside, on: !mc.smart.inside.on } } }))}
             </div>
             ${mc.smart.inside.on
-              ? html`<div class="row wrap"><span class="grow"><div class="sub">${t('alarm.smart_inside_window')}</div></span>${this._stepper(mc.smart.inside.seconds, 's', (v) => this._saveMode(m, { smart: { ...mc.smart, inside: { ...mc.smart.inside, seconds: v } } }), 15, 15, 600)}</div>`
+              ? html`<div class="row wrap"><span class="grow"><div class="sub">${t('alarm.smart_inside_window')}</div></span>${this._stepper(mc.smart.inside.seconds, 's', (v) => this._saveMode(m, { smart: { ...mc.smart, inside: { ...mc.smart.inside, seconds: v } } }), 15, 0, 600)}</div>`
               : nothing}
             <div class="row wrap">
               <span class="grow">
@@ -1027,7 +1027,7 @@ export class HrAlarmView extends StoreElement {
               ${this._switch(mc.smart.arrival.on, t('alarm.smart_arrival_short'), () => this._saveMode(m, { smart: { ...mc.smart, arrival: { ...mc.smart.arrival, on: !mc.smart.arrival.on } } }))}
             </div>
             ${mc.smart.arrival.on
-              ? html`<div class="row wrap"><span class="grow"><div class="sub">${t('alarm.smart_arrival_window')}</div></span>${this._stepper(mc.smart.arrival.minutes, t('alarm.unit_min'), (v) => this._saveMode(m, { smart: { ...mc.smart, arrival: { ...mc.smart.arrival, minutes: v } } }), 1, 1, 60)}</div>
+              ? html`<div class="row wrap"><span class="grow"><div class="sub">${t('alarm.smart_arrival_window')}</div></span>${this._stepper(mc.smart.arrival.minutes, t('alarm.unit_min'), (v) => this._saveMode(m, { smart: { ...mc.smart, arrival: { ...mc.smart.arrival, minutes: v } } }), 1, 0, 60)}</div>
                   <div class="row wrap">
                     <span class="grow"><div class="title">${t('alarm.smart_disarm')}</div><div class="sub">${t('alarm.smart_disarm_sub')}</div></span>
                     ${this._switch(!!mc.smart.arrival.disarm, t('alarm.smart_disarm_short'), () => this._saveMode(m, { smart: { ...mc.smart, arrival: { ...mc.smart.arrival, disarm: !mc.smart.arrival.disarm } } }))}

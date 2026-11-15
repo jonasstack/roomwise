@@ -295,6 +295,7 @@ Die vollständige Rechte-Tabelle prüft `tools/testha/test-permissions.mjs`. Ein
 | `house_rules/subscribe` | – | Abo: erst `snapshot`, dann Änderungen (siehe 5) |
 | `house_rules/vocabulary` | – | `{ kinds, modes, en }` (`en`: englische Wörter, siehe oben) |
 | `house_rules/for_entity` | `entity_id` | `{ starts: [rule_id], checks: [rule_id], switches: [rule_id], automations: [HaAutomation], history: [Entry], device, subject, kind }` |
+| `house_rules/entities/search` | `query` (Text, optional), `ids` (Liste, optional) | Sensoren, die ein Raum von Hand als Anwesenheit/Bewegung nehmen kann (jeder `binary_sensor`, `input_boolean`, zählender `sensor`; nicht die eigenen Entitäten): `[{ entity_id, name, state, unit, room, room_name, kind: presence/motion/null, device_class }]`, höchstens 60; mit `ids` genau diese. Bewohner |
 | `house_rules/for_entities` | `entity_ids` (Liste, höchstens 1000) | `{ <entity_id>: { starts: [rule_id], checks: [rule_id], switches: [rule_id], automations: [automation entity_id] } }`, ein Aufruf für alle Zähler im Plan, ohne Verlauf |
 | `house_rules/rule/entities` | `rule` | je Teil die betroffenen Geräte, Platzhalter aufgelöst: `{ when: [{ subject, entities: [...], room }], and, then, only }` – ideal zum Hervorheben im Plan |
 | `house_rules/rule/describe` | `rule` | `{ sentence, clauses: { when: [text], … } }` |

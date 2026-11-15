@@ -48,6 +48,7 @@ const MATRIX = {
   'house_rules/from_text': ['any', { text: 'Wenn die Haustür aufgeht, Flurlicht an' }],
   'house_rules/for_entity': ['any', { entity_id: 'light.none' }],
   'house_rules/for_entities': ['any', { entity_ids: ['light.none'] }],
+  'house_rules/entities/search': ['any', { query: 'radar' }],
   'house_rules/mode/set': ['any', { mode: snap.mode }],
   'house_rules/room/save': ['admin', { room: {} }],
   'house_rules/behaviour/set': ['admin', { behaviour: 'none', on: false }],

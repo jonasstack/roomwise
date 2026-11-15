@@ -1406,7 +1406,7 @@
        "label": "Ankunft in unter",
        "default": 10,
        "unit": "Min.",
-       "min": 1,
+       "min": 0,
        "max": 120,
        "step": 1
       }
@@ -1425,7 +1425,7 @@
        "label": "Unterwegs seit",
        "default": 30,
        "unit": "Min.",
-       "min": 5,
+       "min": 0,
        "max": 600,
        "step": 5
       }
@@ -1597,7 +1597,7 @@
        "label": "Ankunft in unter",
        "default": 10,
        "unit": "Min.",
-       "min": 1,
+       "min": 0,
        "max": 120,
        "step": 1
       }
@@ -1615,7 +1615,7 @@
        "label": "Unterwegs seit",
        "default": 30,
        "unit": "Min.",
-       "min": 5,
+       "min": 0,
        "max": 600,
        "step": 5
       }

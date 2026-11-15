@@ -11,6 +11,7 @@ import type { FloorMaterial, FloorType, LabelSpot, Point, WalkReminder } from '.
 import { pointInPolygon, round } from '../geometry';
 import { areasOnFloor, floorLevel, floorShort, orderedFloors, stairsTarget } from '../levels';
 import type { FloorConfig } from '../types';
+import { turnFloor, type FloorTurn } from '../floor-turn';
 import { normalizeTime, petLook } from '../pets';
 import { dogPicture } from '../gl/dog-studio';
 import { until } from 'lit/directives/until.js';
@@ -2372,6 +2373,13 @@ function floorsSection(ed: Ed) {
         ${stepper(t('editor.floor_height'), floor.height ?? 250, 10, (v) => setFloor((f) => (f.height = Math.max(180, Math.min(600, v)) === 250 ? undefined : Math.max(180, Math.min(600, v)))), ' cm')}
       </div>
       <div class="hint-s">${t('editor.floor_level_hint')} ${haFloors.length ? t('editor.floor_ha_hint') : ''}</div>
+      <div class="section-title">${t('editor.floor_turn')}</div>
+      <div class="btn-row floor-turn" style="grid-template-columns:1fr 1fr 1fr;margin-top:0">
+        <button class="btn pressable gap" data-floor-turn="-90" @click=${() => turnThisFloor(ed, floor.id, { deg: -90 })}><ha-icon icon="mdi:rotate-left"></ha-icon>90°</button>
+        <button class="btn pressable gap" data-floor-turn="90" @click=${() => turnThisFloor(ed, floor.id, { deg: 90 })}><ha-icon icon="mdi:rotate-right"></ha-icon>90°</button>
+        <button class="btn pressable gap" data-floor-mirror @click=${() => turnThisFloor(ed, floor.id, { deg: 0, mirror: true })}><ha-icon icon="mdi:flip-horizontal"></ha-icon>${t('vacplan.mirror')}</button>
+      </div>
+      <div class="hint-s">${t('editor.floor_turn_hint')}</div>
       ${multi
         ? html`<div class="group" style="margin-top:var(--fp-space-3)">
               ${switchRow(t('editor.floor_below'), d.floor_below !== false, () => ed.mutate((x) => (x.floor_below = x.floor_below === false ? undefined : false)), t('editor.floor_below_sub'))}
@@ -2388,6 +2396,15 @@ function floorsSection(ed: Ed) {
         : nothing}`,
     { icon: 'mdi:layers-outline', sub: multi ? t('editor.n_floors', { n: d.floors.length }) : floor.name, key: 'floors', open: ed.floorsOpen },
   );
+}
+
+/** "Etage drehen": the whole floor a quarter turn or mirrored – rooms, doors, devices, pieces and the vacuum's
+ * alignment with it (floor-turn.ts); undoable like every change */
+function turnThisFloor(ed: Ed, id: string, turn: FloorTurn) {
+  ed.mutate((d) => {
+    const i = d.floors.findIndex((f) => f.id === id);
+    if (i >= 0) d.floors[i] = turnFloor(d.floors[i], turn);
+  });
 }
 
 /** "Take the floors from Home Assistant": each HA floor no plan floor is linked to — a floor with its name and level

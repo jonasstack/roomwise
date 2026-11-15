@@ -168,6 +168,7 @@ def async_register(hass: HomeAssistant) -> None:
         ws_trash_purge,
         ws_rule_export,
         ws_rule_exported,
+        ws_entities_search,
     ):
         # every command checks the role of the user first (permissions.py), whatever the frontend shows
         websocket_api.async_register_command(hass, permissions.guard(handler))
@@ -340,6 +341,23 @@ def ws_for_entities(hass: HomeAssistant, connection: websocket_api.ActiveConnect
     if (core := _core(hass, connection, msg)) is None:
         return
     connection.send_result(msg["id"], core.for_entities(msg["entity_ids"]))
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "house_rules/entities/search",
+        vol.Optional("query", default=""): vol.All(str, vol.Length(max=80)),
+        vol.Optional("ids", default=[]): vol.All([str], vol.Length(max=80)),
+        vol.Optional("kind", default="presence"): vol.In(("presence",)),
+    }
+)
+@callback
+def ws_entities_search(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Sensors a room can take by hand as presence / motion sensors – every binary_sensor, input_boolean and a sensor
+    that counts people or targets, also ones without a fitting device class (Raum einstellen → "Sensor suchen")."""
+    if (core := _core(hass, connection, msg)) is None:
+        return
+    connection.send_result(msg["id"], core.presence_candidates(msg["query"], msg["ids"]))
 
 
 @websocket_api.websocket_command({vol.Required("type"): "house_rules/mode/set", vol.Required("mode"): vol.In(MODES)})

@@ -201,7 +201,7 @@ export interface Room {
   /** zones inside the room (e.g. FP2 areas): sofa, bed, desk */
   zones: string[];
   /** brightness sensor and the level below which the room counts as dark */
-  lux?: string;
+  lux?: string | null;
   dark_below?: number;
   /** room counts as empty after this many minutes without presence */
   empty_after: number;
@@ -237,6 +237,20 @@ export interface Behaviour {
   icon: string;
   /** default for all rooms */
   all: boolean;
+}
+
+/** a sensor a room can take by hand as presence / motion (websocket entities/search) */
+export interface SensorCandidate {
+  entity_id: string;
+  name: string;
+  state: string;
+  unit?: string | null;
+  /** its Home Assistant area */
+  room?: string | null;
+  room_name?: string | null;
+  /** what it looks like (device class or name); null: nothing to tell */
+  kind: 'presence' | 'motion' | null;
+  device_class?: string | null;
 }
 
 export interface Device {

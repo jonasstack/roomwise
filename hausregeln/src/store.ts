@@ -2,7 +2,7 @@
  * Where the UI gets its data from. Today: DemoStore (example data, nothing is switched).
  * Later: a store that talks to the integration over the websocket API (docs/API.md).
  */
-import type { GlowGlobal, LightCalEntry, LightCalView, RoomPage, UiLayout, DeviceChange, ObjectAlarm, UnusedDevice, Me, Role, RoleUser, AutomationUser, RuleExport, RuleVersion, TrashItem, PlacesView, PlaceDetail, WindowWarningConfig, WindowWarningView, Features, FeatureId, SetupView, SetupSuggest, CleaningView, HeatPlan, HeatWindow, HeatExplain, HeatAssistant, LightPlan, PlansView, Resident, AiReview, AutoMode, ModeAutoView, WakeupView, AiPublic, AlarmConfig, AlarmMode, AlarmView, Behaviour, BehaviourId, Clause, Device, Group, HaAutomation, HistoryEntry, HouseMode, Person, Room, Rule, Suggestion, Zone, SimConfig, SimView, AssistantId, AssistantState, SmartLearned, HeatPlanView } from './model';
+import type { GlowGlobal, SensorCandidate, LightCalEntry, LightCalView, RoomPage, UiLayout, DeviceChange, ObjectAlarm, UnusedDevice, Me, Role, RoleUser, AutomationUser, RuleExport, RuleVersion, TrashItem, PlacesView, PlaceDetail, WindowWarningConfig, WindowWarningView, Features, FeatureId, SetupView, SetupSuggest, CleaningView, HeatPlan, HeatWindow, HeatExplain, HeatAssistant, LightPlan, PlansView, Resident, AiReview, AutoMode, ModeAutoView, WakeupView, AiPublic, AlarmConfig, AlarmMode, AlarmView, Behaviour, BehaviourId, Clause, Device, Group, HaAutomation, HistoryEntry, HouseMode, Person, Room, Rule, Suggestion, Zone, SimConfig, SimView, AssistantId, AssistantState, SmartLearned, HeatPlanView } from './model';
 import { t } from './i18n';
 import type { LampState } from './lightlive';
 // i18n: complete
@@ -76,6 +76,22 @@ export abstract class Store extends EventTarget {
   cleaning: CleaningView | null = null;
   plans: PlansView | null = null;
   async planSet(_kind: 'light' | 'heat', _room: string, _plan: LightPlan | HeatPlan): Promise<void> {}
+  /** Raum einstellen → "Sensor suchen": every sensor a room can take as presence / motion, also ones without a fitting
+   * device class; `ids`: exactly these (sensors already chosen that are not in the device list). Example data: the
+   * presence / motion devices plus the extra sensors of the demo. */
+  async sensorSearch(query: string, ids: string[] = []): Promise<SensorCandidate[]> {
+    const all: SensorCandidate[] = [
+      ...this.devices
+        .filter((d) => d.kind === 'presence' || d.kind === 'motion')
+        .map((d) => ({ entity_id: d.entity_id, name: d.name, state: d.state, room: d.room ?? null, room_name: this.room(d.room ?? '')?.name ?? null, kind: d.kind as 'presence' | 'motion' })),
+      ...this.extraSensors,
+    ];
+    if (ids.length) return all.filter((c) => ids.includes(c.entity_id));
+    const q = query.trim().toLowerCase();
+    return all.filter((c) => !q || `${c.name} ${c.entity_id}`.toLowerCase().includes(q));
+  }
+  /** sensors Home Assistant has that are not in the device list (example data) */
+  protected extraSensors: SensorCandidate[] = [];
   /** Lampen abgleichen (lightcal.py): the corrections per lamp; the example data keeps them in memory */
   protected calData: Record<string, LightCalEntry> = {};
   async lightcalGet(): Promise<LightCalView> {

@@ -4,6 +4,7 @@ import { suggestForArea } from './ha';
 import { t } from './i18n';
 import type { VacuumMapEntry } from './entry-server';
 import { floorNameFor, haFloorsSorted, skeletonFloors, type HomeKind } from './home-floors';
+import { turnFloor, type FloorTurn } from './floor-turn';
 
 /**
  * A floor plan from a robot vacuum's own map (first steps "from the vacuum's map").
@@ -829,14 +830,47 @@ export interface VacuumHomeResult {
   skipped: number;
   /** maps the robot keeps but the integration has not loaded (no floor made for them) */
   missing: { entity: string; id: string; name: string }[];
+  /** floor id → the map it was made from (`entity|map id`) */
+  source?: Record<string, string>;
 }
 
-/** Short storey names and their level, to match a map's name ("OG", "Keller") with Home Assistant's floors */
+/** Which floor a map is: `ha:<floor id>` (Home Assistant's), `lv:<level>` (by storey), `top` (attic, above the
+ * rest), `own:<name>`, or `skip` (not taken over) */
+export type FloorPick = string;
+
+/** Turning a map's floor: quarter turns (clockwise), a fine correction (degrees) and a mirror */
+export interface MapTurn {
+  q: number;
+  fine: number;
+  mirror: boolean;
+}
+
+/** One map with geometry, made into a floor, with the suggestion which floor it is */
+export interface VacuumMapFloor {
+  key: string;
+  entity: string;
+  mapId: string;
+  mapName?: string | null;
+  floor: FloorConfig;
+  /** the suggestion; undefined: unsure ("Bitte wählen") */
+  guess?: FloorPick;
+  /** where the suggestion comes from: the rooms' areas, the map's name; 'conflict': hints disagree */
+  why: 'areas' | 'name' | 'conflict' | 'none';
+}
+
+export interface VacuumMapsRead {
+  maps: VacuumMapFloor[];
+  skipped: number;
+  missing: VacuumHomeResult['missing'];
+}
+
+/** Short storey names and their level (99: the attic, at the top), to match a map's name with a floor */
 const STOREYS: [RegExp, number][] = [
-  [/^(eg|erdgeschoss|parterre|ground|groundfloor|gf)$/, 0],
-  [/^(og|1og|obergeschoss|ersterstock|upstairs|firstfloor|upper|upperfloor)$/, 1],
-  [/^(2og|dg|dachgeschoss|dachboden|zweiterstock|attic|secondfloor)$/, 2],
-  [/^(ug|kg|keller|untergeschoss|basement|cellar|downstairs)$/, -1],
+  [/^(eg|erdgeschoss|parterre|ground|groundfloor|gf|unten|downstairs)$/, 0],
+  [/^(og|1og|obergeschoss|ersterstock|upstairs|firstfloor|upper|upperfloor|oben)$/, 1],
+  [/^(2og|zweitesobergeschoss|zweiterstock|secondfloor)$/, 2],
+  [/^(dg|dachgeschoss|dachboden|speicher|attic|loft)$/, 99],
+  [/^(ug|kg|keller|untergeschoss|basement|cellar)$/, -1],
 ];
 const plain = (s: string) =>
   s
@@ -846,94 +880,220 @@ const plain = (s: string) =>
     .replace(/ü/g, 'u')
     .replace(/ß/g, 'ss')
     .replace(/[^a-z0-9]/g, '');
-function storeyOf(name?: string | null): number | undefined {
-  const n = plain(name ?? '');
-  return STOREYS.find(([re]) => re.test(n))?.[1];
+/** The storey a name means: the whole name, else a word in it ("Karte OG", "oben") */
+export function storeyOf(name?: string | null): number | undefined {
+  const whole = STOREYS.find(([re]) => re.test(plain(name ?? '')))?.[1];
+  if (whole !== undefined) return whole;
+  for (const w of (name ?? '').split(/[\s_\-.,/()]+/)) {
+    const hit = STOREYS.find(([re]) => re.test(plain(w)))?.[1];
+    if (hit !== undefined) return hit;
+  }
+  return undefined;
 }
 /** "Map 1", "Karte 2", a bare number: a name the robot made up, not one to show */
 const madeUp = (name?: string | null) => !name || /^(map|karte|floor|etage)?\s*\d+$/i.test(name.trim());
 
-/**
- * The plan of a home from every map of every vacuum: one floor per map with geometry. Each floor is put on Home
- * Assistant's floor whose areas its rooms match (most rooms win), else the floor whose name or storey matches the
- * map's name; names come from Home Assistant, else from the map. The vacuum stands on the floor of the map it
- * uses right now. `kind`/`n`: a house with that many floors — floors the maps do not cover stay empty (named after
- * Home Assistant's floors, else by storey). Maps the robot keeps without geometry are listed in `missing`.
- */
-export function planFromVacuumMaps(sources: VacuumSource[], opts: { hass?: HomeAssistant; kind: HomeKind; n: number }): VacuumHomeResult | undefined {
-  const hass = opts.hass;
-  const ha = haFloorsSorted(hass);
-  const made: { f: FloorConfig; mapName?: string | null }[] = [];
+function polyArea(pts: Point[]): number {
+  let a = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const [x1, y1] = pts[i];
+    const [x2, y2] = pts[(i + 1) % pts.length];
+    a += x1 * y2 - x2 * y1;
+  }
+  return Math.abs(a) / 2;
+}
+
+/** Every map with geometry of every vacuum, made into a floor each (not yet put on a storey), with suggestions */
+export function readVacuumMaps(sources: VacuumSource[], hass?: HomeAssistant): VacuumMapsRead | undefined {
+  const maps: VacuumMapFloor[] = [];
   const missing: VacuumHomeResult['missing'] = [];
   let skipped = 0;
   let k = 0;
+  const geo = (m: VacuumMapEntry) => !!m.map && m.map.rooms.some((r) => r.pts.length);
+  const multi = sources.length > 1 || sources.some((s) => s.maps.filter(geo).length > 1);
   for (const src of sources) {
-    const withGeo = src.maps.filter((m) => m.map && m.map.rooms.some((r) => r.pts.length));
+    const withGeo = src.maps.filter(geo);
     // the vacuum stands on the map it uses now (or the only one)
     const here = withGeo.find((m) => m.current) ?? withGeo[0];
     for (const m of src.maps) {
-      if (!m.map || !m.map.rooms.some((r) => r.pts.length)) {
+      if (!geo(m)) {
         missing.push({ entity: src.entity, id: m.id, name: m.name || m.id });
         continue;
       }
       k++;
-      const multi = sources.length > 1 || withGeo.length > 1;
-      const res = planFromVacuumMap(m.map, { entity: src.entity, adapter: src.adapter, hass, floorId: `floor_vac_${k}`, floorName: m.name ?? undefined, idPrefix: multi ? `${k}_` : '', robot: m === here });
+      const res = planFromVacuumMap(m.map!, { entity: src.entity, adapter: src.adapter, hass, floorId: `floor_vac_${k}`, floorName: m.name ?? undefined, idPrefix: multi ? `${k}_` : '', robot: m === here });
       if (!res) continue;
       skipped += res.skipped;
-      made.push({ f: res.floor, mapName: m.name });
+      maps.push({ key: `${src.entity}|${m.id}`, entity: src.entity, mapId: m.id, mapName: m.name, floor: res.floor, why: 'none' });
     }
+  }
+  if (!maps.length) return undefined;
+  guessFloors(maps, hass);
+  return { maps, skipped, missing };
+}
+
+/**
+ * Which floor each map is – only a suggestion, and only when the hints are clear. Weighed by room area: the share of
+ * the map's rooms (by area) whose name matches an area on a Home Assistant floor; the map's name ("OG", "Keller",
+ * "oben") as a second hint. Unsure – no or split area hits, the name pointing elsewhere, or two maps coming out on
+ * the same floor without one being clearly stronger – leaves it open ("Bitte wählen").
+ */
+export function guessFloors(maps: VacuumMapFloor[], hass?: HomeAssistant) {
+  const ha = haFloorsSorted(hass);
+  const areaFloor = (id?: string) => (id ? (hass?.areas?.[id]?.floor_id ?? undefined) : undefined);
+  const haOfStorey = (st: number) => ha.find((h) => (st === 99 ? storeyOf(h.name) === 99 : storeyOf(h.name) === st || (storeyOf(h.name) === undefined && h.level === st)));
+  const scored = maps.map((m) => {
+    const total = m.floor.rooms.reduce((s, r) => s + polyArea(r.points), 0) || 1;
+    const votes = new Map<string, number>();
+    for (const r of m.floor.rooms) {
+      const fl = areaFloor(r.area);
+      if (fl) votes.set(fl, (votes.get(fl) ?? 0) + polyArea(r.points));
+    }
+    const ranked = [...votes.entries()].sort((a, b) => b[1] - a[1]);
+    const matched = ranked.reduce((s, [, v]) => s + v, 0);
+    const best = ranked[0]?.[0];
+    const bestW = ranked[0]?.[1] ?? 0;
+    // clear: most of the matched area on one floor, and a fair part of the map matched at all
+    const areaSure = !!best && bestW / matched >= 0.75 && matched / total >= 0.2;
+    const st = madeUp(m.mapName) ? undefined : storeyOf(m.mapName);
+    const byName = ha.length ? (st !== undefined ? haOfStorey(st) : ha.find((h) => plain(h.name) === plain(m.mapName ?? ''))) : undefined;
+    const namePick: FloorPick | undefined = byName ? `ha:${byName.floor_id}` : st !== undefined && !ha.length ? (st === 99 ? 'top' : `lv:${st}`) : undefined;
+    let guess: FloorPick | undefined;
+    let why: VacuumMapFloor['why'] = 'none';
+    let weight = 0;
+    if (best && areaSure) {
+      guess = `ha:${best}`;
+      why = 'areas';
+      weight = bestW / total;
+      // the map's name says another floor: unsure
+      if (namePick && namePick !== guess) {
+        guess = undefined;
+        why = 'conflict';
+      }
+    } else if (best) {
+      // rooms split over several floors (or hardly any matched): unsure, unless the name settles it
+      why = 'conflict';
+      if (namePick && votes.has(namePick.slice(3))) {
+        guess = namePick;
+        why = 'name';
+        weight = 0.4;
+      }
+    } else if (namePick) {
+      guess = namePick;
+      why = 'name';
+      weight = 0.4;
+    }
+    return { m, guess, why, weight };
+  });
+  // two maps on the same floor: the clearly stronger one keeps it, else both stay open
+  for (const s of scored) {
+    if (!s.guess) continue;
+    const rivals = scored.filter((o) => o !== s && o.guess === s.guess);
+    if (!rivals.length) continue;
+    if (rivals.every((o) => s.weight >= o.weight * 2 && s.weight > 0))
+      for (const o of rivals) {
+        o.guess = undefined;
+        o.why = 'conflict';
+      }
+  }
+  for (const s of scored) {
+    if (!s.guess || !scored.some((o) => o !== s && o.guess === s.guess)) continue;
+    for (const o of scored.filter((x) => x.guess === s.guess)) {
+      o.guess = undefined;
+      o.why = 'conflict';
+    }
+  }
+  for (const s of scored) {
+    s.m.guess = s.guess;
+    s.m.why = s.why;
+  }
+}
+
+/** The name and level a pick stands for */
+export function pickInfo(pick: FloorPick, hass?: HomeAssistant): { name: string; level?: number; ha?: string } | undefined {
+  if (pick.startsWith('ha:')) {
+    const h = hass?.floors?.[pick.slice(3)];
+    return h ? { name: h.name, level: typeof h.level === 'number' ? h.level : undefined, ha: h.floor_id } : undefined;
+  }
+  if (pick.startsWith('lv:')) {
+    const l = Number(pick.slice(3));
+    return { name: l === 2 ? t('vacplan.floor_upper2') : floorNameFor(l, 'house'), level: l };
+  }
+  if (pick === 'top') return { name: t('home.floor_attic') };
+  if (pick.startsWith('own:')) return { name: pick.slice(4) };
+  return undefined;
+}
+
+/** The storeys offered when Home Assistant has no floors */
+export const STOREY_PICKS: FloorPick[] = ['lv:-1', 'lv:0', 'lv:1', 'lv:2', 'top'];
+
+/** The turn a map's floor gets (quarter turns + fine angle, mirror) as a floor turn */
+export function mapTurn(tr?: MapTurn): FloorTurn | undefined {
+  if (!tr) return undefined;
+  const q = ((tr.q % 4) + 4) % 4;
+  if (!q && !tr.fine && !tr.mirror) return undefined;
+  return { deg: q * 90 + tr.fine, mirror: tr.mirror };
+}
+
+/**
+ * The home from the maps: each map on the floor picked for it (none picked: a free storey), turned as chosen, maps
+ * marked "skip" left out. `kind`/`n`: a house with that many floors – floors the maps do not cover stay empty
+ * (Home Assistant's floors first, else by storey).
+ */
+export function homeFromMaps(read: VacuumMapsRead, picks: Record<string, FloorPick | undefined>, turns: Record<string, MapTurn | undefined>, opts: { hass?: HomeAssistant; kind: HomeKind; n: number; pending?: boolean }): VacuumHomeResult | undefined {
+  const hass = opts.hass;
+  const made: { f: FloorConfig; key: string; pick?: FloorPick }[] = [];
+  for (const m of read.maps) {
+    const pick = picks[m.key];
+    if (pick === 'skip') continue;
+    const turn = mapTurn(turns[m.key]);
+    made.push({ f: turn ? turnFloor(m.floor, turn, [30, 30]) : structuredClone(m.floor), key: m.key, pick });
   }
   if (!made.length) return undefined;
-  // which Home Assistant floor: the one most of its rooms' areas are on, else by the map's name
-  const taken = new Set<string>();
-  const areaFloor = (id?: string) => (id ? hass?.areas?.[id]?.floor_id ?? undefined : undefined);
-  const assign = made.map(({ f, mapName }) => {
-    const votes = new Map<string, number>();
-    for (const r of f.rooms) {
-      const fl = areaFloor(r.area);
-      if (fl) votes.set(fl, (votes.get(fl) ?? 0) + 1);
-    }
-    const best = [...votes.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
-    return { f, mapName, best };
-  });
-  // most votes first, so a floor goes to the map that fits it best
-  for (const a of assign.filter((x) => x.best).sort((x, y) => (y.f.rooms.length - x.f.rooms.length))) {
-    if (a.best && !taken.has(a.best)) {
-      taken.add(a.best);
-      link(a.f, a.best);
-    }
+  const levels = new Set<number>();
+  const take = (l: number) => {
+    while (levels.has(l)) l++;
+    levels.add(l);
+    return l;
+  };
+  const house = made.length > 1 || opts.kind === 'house' ? 'house' : 'flat';
+  // Home Assistant's floors and the storeys first (their levels are fixed), own names and the rest after, the attic on top
+  for (const x of made) {
+    if (!x.pick || x.pick === 'top' || x.pick.startsWith('own:')) continue;
+    const info = pickInfo(x.pick, hass);
+    if (!info) continue;
+    x.f.name = info.name;
+    if (info.ha) x.f.floor = info.ha;
+    x.f.level = take(info.level ?? 0);
   }
-  for (const a of assign) {
-    if (a.f.floor) continue;
-    const st = storeyOf(a.mapName);
-    const byName = ha.find((h) => !taken.has(h.floor_id) && (plain(h.name) === plain(a.mapName ?? '') || (st !== undefined && (storeyOf(h.name) === st || h.level === st))));
-    if (byName) {
-      taken.add(byName.floor_id);
-      link(a.f, byName.floor_id);
-    } else if (st !== undefined) a.f.level = st;
+  for (const x of made) {
+    if (x.pick && x.pick !== 'top' && !x.pick.startsWith('own:') && pickInfo(x.pick, hass)) continue;
+    if (x.pick === 'top') continue;
+    x.f.level = take(0);
+    if (x.pick?.startsWith('own:')) x.f.name = x.pick.slice(4) || x.f.name;
+    // still to choose (the preview while the floors are asked for): say so instead of looking like a floor
+    else if (!x.pick && opts.pending) x.f.name = t('vacplan.floor_pending', { map: read.maps.find((m) => m.key === x.key)?.mapName || '?' });
+    else if (madeUp(x.f.name) || x.f.name === t('card.default_floor')) x.f.name = floorNameFor(x.f.level, house);
   }
-  function link(f: FloorConfig, id: string) {
-    const h = hass?.floors?.[id];
-    if (!h) return;
-    f.floor = id;
-    // linked: Home Assistant's name (the map's own name is only used for floors Home Assistant does not know)
-    f.name = h.name;
-    if (typeof h.level === 'number') f.level = h.level;
-  }
-  // levels for the rest: the current map's floor at the bottom of what is left, then upwards
-  const levels = new Set(made.map((m) => m.f.level).filter((l): l is number => typeof l === 'number'));
-  for (const { f } of made) {
-    if (typeof f.level !== 'number') {
-      let l = 0;
-      while (levels.has(l)) l++;
-      f.level = l;
-      levels.add(l);
-    }
-    if (madeUp(f.name) || f.name === t('card.default_floor')) f.name = floorNameFor(f.level, made.length > 1 || opts.kind === 'house' ? 'house' : 'flat');
+  for (const x of made) {
+    if (x.pick !== 'top') continue;
+    x.f.level = take(Math.max(1, ...[...levels].map((l) => l + 1)));
+    x.f.name = t('home.floor_attic');
   }
   const n = opts.kind === 'house' ? Math.max(opts.n, made.length) : made.length;
-  const floors = skeletonFloors(hass, made.length > 1 ? 'house' : opts.kind, n, made.map((m) => m.f));
+  const floors = skeletonFloors(hass, house, n, made.map((x) => x.f));
   floors.sort((a, b) => (a.level ?? 0) - (b.level ?? 0));
-  return { floors, skipped, missing };
+  const source: Record<string, string> = {};
+  for (const x of made) source[x.f.id] = x.key;
+  return { floors, skipped: read.skipped, missing: read.missing, source };
+}
+
+/**
+ * The plan of a home from every map of every vacuum, the suggestions taken as they are (open ones on a free storey)
+ * and nothing turned – see `readVacuumMaps` / `homeFromMaps` for the steps.
+ */
+export function planFromVacuumMaps(sources: VacuumSource[], opts: { hass?: HomeAssistant; kind: HomeKind; n: number }): VacuumHomeResult | undefined {
+  const read = readVacuumMaps(sources, opts.hass);
+  if (!read) return undefined;
+  return homeFromMaps(read, Object.fromEntries(read.maps.map((m) => [m.key, m.guess])), {}, opts);
 }

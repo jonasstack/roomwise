@@ -151,6 +151,9 @@ def predicate(core: HouseRules, kind: str, verb: str, clause: dict[str, Any]) ->
         except (TypeError, ValueError):
             num = 0.0
 
+        # an explicit 0 (minutes) is meant: "arrives within 0 min" / "on the way for 0 min" – not the default
+        given = clause.get("value") is not None
+
         def heading_home(st: State | None) -> bool:
             # the prediction says home, at least as sure as wanted (percent, default 60)
             s = status(st)
@@ -161,11 +164,11 @@ def predicate(core: HouseRules, kind: str, verb: str, clause: dict[str, Any]) ->
             # home in less than N minutes (prediction home with at least 50 %)
             s = status(st)
             p = (s or {}).get("prediction") or {}
-            return bool(s and s["kind"] == "moving" and p.get("destination") == "home" and p.get("probability", 0) >= 0.5 and p.get("eta_min") is not None and p["eta_min"] <= (num or 10))
+            return bool(s and s["kind"] == "moving" and p.get("destination") == "home" and p.get("probability", 0) >= 0.5 and p.get("eta_min") is not None and p["eta_min"] <= (num if given else 10))
 
         def moving_for(st: State | None) -> bool:
             s = status(st)
-            return bool(s and s["kind"] == "moving" and s.get("since") and time.time() - s["since"] >= (num or 30) * 60)
+            return bool(s and s["kind"] == "moving" and s.get("since") and time.time() - s["since"] >= (num if given else 30) * 60)
 
         zid = str(clause.get("zone") or "home")
         zst = core.hass.states.get(f"zone.{zid}")
@@ -259,7 +262,9 @@ def duration_of(kind: str, verb: str, clause: dict[str, Any]) -> float | None:
     """How long the state must hold: the verb's own duration (open_for …) or a 'for' on the clause."""
     v = find_verb(kind, verb) or {}
     if any(p["key"] == "for" for p in v.get("params", [])):
-        return seconds(clause.get("for") or next(p.get("default") for p in v["params"] if p["key"] == "for"))
+        given = clause.get("for")
+        # an explicit 0 ("for 0 min") means at once, not the verb's preset
+        return seconds(given if given not in (None, "") else next(p.get("default") for p in v["params"] if p["key"] == "for"))
     return seconds(clause.get("for"))
 
 

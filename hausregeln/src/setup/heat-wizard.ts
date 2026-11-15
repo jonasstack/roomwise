@@ -284,7 +284,7 @@ export class HrHeatWizard extends StoreElement {
           </div>
           ${ai.morning
             ? html`<div class="group">
-                  ${this._row(t('heat.airing_minutes'), wake ? t('heat.wiz_airing_wake', { time: wake }) : undefined, this._stepper(ai.minutes, 'Min.', (v) => (ai.minutes = v), 5, 5, 60, t('heat.airing_minutes')))}
+                  ${this._row(t('heat.airing_minutes'), wake ? t('heat.wiz_airing_wake', { time: wake }) : undefined, this._stepper(ai.minutes, 'Min.', (v) => (ai.minutes = v), 5, 0, 60, t('heat.airing_minutes')))}
                 </div>
                 ${withWindows.length
                   ? html`<p class="note">${t('heat.wiz_airing_rooms')}</p>

@@ -24,7 +24,7 @@ from .alarm import Alarm
 from .objects import ObjectAlarms
 from .behaviours import behaviour_list, migrate as migrate_behaviours
 from .conditions import Checker
-from .const import API_VERSION, MODES, STORAGE_KEY, STORAGE_VERSION, VERSION
+from .const import API_VERSION, IGNORED_PLATFORMS, MODES, STORAGE_KEY, STORAGE_VERSION, VERSION
 from .i18n import mode_label, quote, tr
 from .engine import Engine
 from .history import ACTUATOR_KINDS, History
@@ -49,7 +49,7 @@ from .modes import ModeAuto
 from .wakeup import WakeUp
 from .native import Native
 from .notify import Notifier
-from .rooms import RoomTracker, clean_dark
+from .rooms import PRESENCE_DOMAINS, RoomTracker, clean_dark
 from .suggest import suggestions
 from .telemetry import Telemetry
 from .setup import Features, Setup
@@ -766,16 +766,67 @@ class HouseRules:
         self.save()
         self._restart_rooms()
 
+    def presence_candidates(self, query: str = "", ids: list[str] | None = None) -> list[dict[str, Any]]:
+        """Sensors a room can take by hand as presence / motion (websocket entities/search): every binary_sensor,
+        input_boolean and sensor counting people or targets – with name, state, area and what they look like
+        (presence / motion by device class or name). `ids`: exactly these (for sensors already chosen)."""
+        from .inventory import norm_name, presence_kind
+
+        ent_reg, dev_reg = er.async_get(self.hass), dr.async_get(self.hass)
+        areas = {a.id: a.name for a in ar.async_get(self.hass).async_list_areas()}
+        q = norm_name(query) if query else ""
+        out: list[dict[str, Any]] = []
+        states = [s for i in (ids or []) if (s := self.hass.states.get(i))] if ids else self.hass.states.async_all(("binary_sensor", "input_boolean", "sensor"))
+        for st in states:
+            eid = st.entity_id
+            reg = ent_reg.async_get(eid)
+            if reg and reg.platform in IGNORED_PLATFORMS:
+                continue  # Hausregeln's own "… belegt" would make a room its own sensor
+            dc = str(st.attributes.get("device_class") or "")
+            name = str(st.attributes.get("friendly_name") or eid)
+            dev = self.inventory.devices.get(eid)
+            kind = dev["kind"] if dev and dev.get("kind") in ("presence", "motion") else ("motion" if dc in ("motion", "moving") else "presence" if dc in ("occupancy", "presence") else presence_kind(eid, name, dc))
+            if not ids:
+                if eid.startswith("sensor."):
+                    # a sensor only when it counts people / targets (a number) and its name says so
+                    if kind is None:
+                        continue
+                    try:
+                        float(st.state)
+                    except ValueError:
+                        continue
+                if dc in ("battery", "connectivity", "problem", "update", "tamper") and not q:
+                    continue
+                if q and q not in norm_name(f"{name} {eid}"):
+                    continue
+            area_id = (reg.area_id if reg else None) or ((d.area_id if (d := dev_reg.async_get(reg.device_id)) else None) if reg and reg.device_id else None)
+            out.append({"entity_id": eid, "name": name, "state": st.state, "unit": st.attributes.get("unit_of_measurement"), "room": area_id, "room_name": areas.get(area_id or ""), "kind": kind, "device_class": dc or None})
+        # what looks like presence / motion first, then by name
+        out.sort(key=lambda x: (x["kind"] is None, x["name"].lower()))
+        return out[:60]
+
     def room_patch(self, raw: dict[str, Any]) -> None:
         """Takes over the valid settings of a room (no save, no restart; also used when restoring a backup)."""
         stored = self.data["rooms"].setdefault(raw["id"], {})
         known = set(self.inventory.devices)
         for key in ("presence", "motion", "doors", "zones", "door_pulse"):
             if isinstance(raw.get(key), list):
-                stored[key] = [e for e in raw[key] if isinstance(e, str) and e in known][:40]
+                # presence / motion: also any sensor of Home Assistant chosen by hand (no fitting class, not found)
+                def ok(e: Any, key: str = key) -> bool:
+                    if not isinstance(e, str):
+                        return False
+                    if e in known:
+                        return True
+                    if key not in ("presence", "motion") or not e.startswith(PRESENCE_DOMAINS) or self.hass.states.get(e) is None:
+                        return False
+                    # never Hausregeln's own entities ("Bad belegt" as the Bad's sensor would hold it forever)
+                    reg = er.async_get(self.hass).async_get(e)
+                    return not (reg and reg.platform in IGNORED_PLATFORMS)
+
+                stored[key] = [e for e in raw[key] if ok(e)][:40]
         if "lux" in raw and (raw["lux"] is None or raw["lux"] in known):
             stored["lux"] = raw["lux"]
-        for key, lo, hi in (("dark_below", 0, 100000), ("empty_after", 0, 240), ("door_pulse_for", 1, 600)):
+        for key, lo, hi in (("dark_below", 0, 100000), ("empty_after", 0, 240), ("door_pulse_for", 0, 600)):
             if isinstance(raw.get(key), (int, float)) and not isinstance(raw[key], bool):
                 stored[key] = max(lo, min(hi, raw[key]))
         if isinstance(raw.get("dark"), dict):

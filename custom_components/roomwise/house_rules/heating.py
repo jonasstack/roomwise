@@ -541,10 +541,10 @@ class HeatingController:
         if raw.get("manual") in MANUAL:
             p["manual"] = raw["manual"]
         if "manual_hours" in raw:
-            p["manual_hours"] = _num(raw["manual_hours"], 2, 0.001, 48)
+            p["manual_hours"] = _num(raw["manual_hours"], 2, 0, 48)
         if "manual_max" in raw:
             # the screens offer 1–12 hours; fractions are for the tests
-            p["manual_max"] = _num(raw["manual_max"], 4, 0.001, 12)
+            p["manual_max"] = _num(raw["manual_max"], 4, 0, 12)
         if isinstance(w := raw.get("window"), dict):
             cur = p["window"]
             p["window"] = {
@@ -607,7 +607,7 @@ class HeatingController:
                 "on": bool(x.get("on", g["exercise"]["on"])),
                 "weekday": int(_num(x.get("weekday", g["exercise"]["weekday"]), 0, 0, 6)),
                 "time": _clean_time(x.get("time", g["exercise"]["time"]), "11:00"),
-                "minutes": _num(x.get("minutes", g["exercise"]["minutes"]), 5, 0.05, 30),
+                "minutes": _num(x.get("minutes", g["exercise"]["minutes"]), 5, 0, 30),
             }
         if isinstance(raw.get("notify"), list):
             g["notify"] = [str(x)[:60] for x in raw["notify"] if isinstance(x, str)][:10]
@@ -636,7 +636,7 @@ class HeatingController:
                 if "morning" in ai:
                     a["morning"] = None if ai["morning"] is None else bool(ai["morning"])
                 if "minutes" in ai:
-                    a["minutes"] = _num(ai["minutes"], 10, 1, 60)
+                    a["minutes"] = _num(ai["minutes"], 10, 0, 60)
                 if isinstance(ai.get("rooms"), list):
                     a["rooms"] = [r for r in ai["rooms"] if isinstance(r, str) and r in self.core.rooms][:50]
                 cur["airing"] = a
@@ -1995,6 +1995,8 @@ class HeatingController:
 
     def exercise(self, why: str = "von Hand gestartet") -> None:
         minutes = self.cfg["exercise"]["minutes"]
+        if minutes <= 0:
+            return  # 0 min: the valve exercise is off
         self._g["exercise_until"] = time.time() + minutes * 60
         self.core.data.setdefault("runtime", {})["valve_exercise"] = dt_util.now().date().isoformat()
         self.core.save()

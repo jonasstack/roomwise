@@ -41,6 +41,23 @@ SUN_MARGIN = 3.0  # degrees above the sun limit before the sun counts as bright 
 CONFIG_KEYS = ("presence", "motion", "doors", "zones", "lux", "dark_below", "empty_after", "door_logic", "door_pulse", "door_pulse_for", "dark", "behaviours", "in", "name")
 
 
+# a presence / motion sensor of a room can be any binary_sensor or input_boolean (on), or a sensor that counts people
+# or targets (a number above 0) – also ones assigned by hand without a fitting device class
+PRESENCE_DOMAINS = ("binary_sensor.", "input_boolean.", "sensor.")
+
+
+def seen(entity_id: str, state: str) -> bool:
+    """Does this state of a presence / motion sensor mean someone is there?"""
+    if state == STATE_ON:
+        return True
+    if entity_id.startswith("sensor."):
+        try:
+            return float(state) > 0
+        except ValueError:
+            return state.lower() in ("detected", "occupied", "present", "home", "anwesend", "belegt")
+    return False
+
+
 def _hm(s: Any) -> int | None:
     try:
         h, m = (int(x) for x in str(s).split(":")[:2])
@@ -188,9 +205,9 @@ class RoomTracker:
 
     def _on(self, eid: str) -> bool:
         st = self.hass.states.get(eid)
-        if st and st.state == STATE_ON and self.core.cleaning.ignores(eid, st):
+        if st and seen(st.entity_id, st.state) and self.core.cleaning.ignores(eid, st):
             return False  # the robot vacuum, not a person
-        return bool(st and st.state == STATE_ON)
+        return bool(st and seen(st.entity_id, st.state))
 
     def reevaluate(self) -> None:
         """After the robot vacuum is done: look at all rooms again."""
@@ -207,7 +224,8 @@ class RoomTracker:
                 return inv.devices.get(e, {}).get("name")
         for e in (*room["presence"], *room["motion"]):
             if self._on(e):
-                return inv.devices.get(e, {}).get("name")
+                st = self.hass.states.get(e)
+                return inv.devices.get(e, {}).get("name") or (str(st.attributes.get("friendly_name") or e) if st else e)
         if room["door_logic"] and self._sealed.get(room["id"]):
             return tr(self.core, "home.door_closed")
         if self._pulsing(room["id"]):
@@ -235,7 +253,10 @@ class RoomTracker:
 
     def _door_pulse(self, rid: str, room: dict[str, Any]) -> None:
         """A chosen door opened: the room counts as occupied for door_pulse_for seconds."""
-        secs = max(1.0, float(room.get("door_pulse_for") or DEFAULTS["door_pulse_for"]))
+        raw = room.get("door_pulse_for")
+        secs = max(0.0, float(DEFAULTS["door_pulse_for"] if raw is None else raw))
+        if secs <= 0:
+            return  # 0 s: a door opening alone does not make the room occupied
         if not self.occupied(rid):
             self._pulse_only.add(rid)
         self._pulse[rid] = time.time() + secs

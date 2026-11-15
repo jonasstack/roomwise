@@ -58,6 +58,7 @@ COMMANDS: dict[str, str] = {
     "trash/list": "guest",
     "for_entity": "guest",
     "for_entities": "guest",
+    "entities/search": "resident",
     "window_warning/get": "guest",
     "window_warning/ack": "guest",
     "alarm/challenge": "guest",

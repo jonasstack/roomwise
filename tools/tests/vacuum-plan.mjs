@@ -204,6 +204,150 @@ ok(three.length === 3 && three.map((f) => f.name).join() === 'Erdgeschoss,Oberge
 errs.push(...m.errors);
 await m.browser.close();
 
+// 7. which floor is which, and the right way round: picks per map (suggestions marked, unsure → "Bitte wählen",
+// Apply only when every map has a floor), two maps swap when one takes the other's floor; quarter turn and mirror
+// turn rooms and the vacuum's alignment together (a robot point still lands in its room); "the same for all floors";
+// "Etage drehen" in the editor
+const inside = (pt, poly) => {
+  let c = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i];
+    const [xj, yj] = poly[j];
+    if (yi > pt[1] !== yj > pt[1] && pt[0] < ((xj - xi) * (pt[1] - yi)) / (yj - yi) + xi) c = !c;
+  }
+  return c;
+};
+const toPlanT = (tf, x, y) => {
+  const s = tf.scale ?? 0.1;
+  const yy = tf.mirror ? -y : y;
+  const a = ((tf.rot ?? 0) * Math.PI) / 180;
+  return [tf.x + s * (x * Math.cos(a) - yy * Math.sin(a)), tf.y + s * (x * Math.sin(a) + yy * Math.cos(a))];
+};
+const box = (pts) => {
+  const xs2 = pts.map((p) => p[0]);
+  const ys2 = pts.map((p) => p[1]);
+  return { w: Math.max(...xs2) - Math.min(...xs2), h: Math.max(...ys2) - Math.min(...ys2) };
+};
+// robot points (mm) in the middle of the living room and of the bedroom
+const LIVING = [2500, 2000];
+const BED = [2000, 1750];
+const vs = (expr) => page.evaluate(`(() => { const v = ${sr('fp-vacuum-start')}; return ${expr}; })()`);
+const openStart = async () => {
+  await page.evaluate(`${sr('.onboard-vacuum')}.click()`);
+  await page.waitForFunction(`!!${sr('fp-vacuum-start .vp-preview')}`, null, { timeout: 8000 }).catch(() => {});
+  await wait(200);
+};
+const choose = async (key, value) => {
+  await vs(`(() => { const s = v.querySelector('[data-map-key="${key}"] select'); s.value = ${JSON.stringify(value)}; s.dispatchEvent(new Event('change')); return true; })()`);
+  await wait(250);
+};
+
+// 7a. one map (a flat): turn a quarter, mirror – rooms and the vacuum turn together
+m = await openMock({ config, states, areas, size: '1280x900', ws: { 'floorplan_card/vacuums/info': info, 'floorplan_card/vacuums/map': map } });
+page = m.page;
+await wait(900);
+await openStart();
+ok(await vs('!!v.querySelector(".vp-turn [data-turn=\\"1\\"]") && !v.querySelector(".vp-picks")'), 'one map, a flat: turning offered, no floor choice');
+const before = JSON.parse(await vs('JSON.stringify(v._res.floors[0].rooms.find((r) => r.name === "Wohnzimmer").points)'));
+await vs('v.querySelector(".vp-turn [data-turn=\\"1\\"]").click()');
+await wait(300);
+const turned = JSON.parse(await vs('JSON.stringify(v._res.floors[0])'));
+const wz = turned.rooms.find((r) => r.name === 'Wohnzimmer');
+ok(box(wz.points).w === box(before).h && box(wz.points).h === box(before).w, `quarter turn: the living room turns (${box(before).w}×${box(before).h} → ${box(wz.points).w}×${box(wz.points).h})`);
+let vtf = turned.furniture.find((p) => p.kind === 'robot_vacuum')?.vacuum?.transform;
+ok(vtf && inside(toPlanT(vtf, ...LIVING), wz.points), 'the vacuum is turned with it: a point of its map still lands in the living room', vtf);
+if (out) await page.screenshot({ path: `${out}/vacuum-plan-turned.png` });
+await vs('v.querySelector(".vp-turn [data-mirror]").click()');
+await wait(300);
+const mirrored = JSON.parse(await vs('JSON.stringify(v._res.floors[0])'));
+vtf = mirrored.furniture.find((p) => p.kind === 'robot_vacuum')?.vacuum?.transform;
+const wz2 = mirrored.rooms.find((r) => r.name === 'Wohnzimmer');
+ok(vtf && !vtf.mirror && inside(toPlanT(vtf, ...LIVING), wz2.points), 'mirrored: the vacuum\'s mirror flips, its map still fits the rooms', vtf);
+const kz = mirrored.rooms.find((r) => r.name === 'Küche');
+const kitchenMid = toPlanT(vtf, 6500, 1250);
+ok(inside(kitchenMid, kz.points), 'and the kitchen too');
+await page.evaluate(`${sr('fp-vacuum-start .vp-apply')}.click()`);
+await wait(1800);
+const fa = JSON.parse(await ed('JSON.stringify(ed._draft.floors[0])'));
+ok(fa.rooms.length === 4 && box(fa.rooms.find((r) => r.name === 'Wohnzimmer').points).w === box(before).h, 'Apply: the draft is turned as shown');
+// "Etage drehen" in the editor: settings → floors
+await ed('(ed._panel = "settings", ed.floorsOpen = true, true)');
+await wait(500);
+ok(await ed('!!ed.shadowRoot.querySelector("[data-floor-turn=\\"90\\"]")'), 'editor: "Etage drehen" in the floor settings');
+await ed('ed.shadowRoot.querySelector("[data-floor-turn=\\"90\\"]").click()');
+await wait(300);
+const fe = JSON.parse(await ed('JSON.stringify(ed._draft.floors[0])'));
+const wze = fe.rooms.find((r) => r.name === 'Wohnzimmer');
+const vte = fe.furniture.find((p) => p.kind === 'robot_vacuum')?.vacuum?.transform;
+ok(box(wze.points).w === box(before).w && vte && inside(toPlanT(vte, ...LIVING), wze.points), 'editor: turned once more – rooms and the vacuum together', vte);
+const segDist = (p, a, b) => { const dx = b[0] - a[0]; const dy = b[1] - a[1]; const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (dx * dx + dy * dy || 1))); return Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy); };
+const edgeDist = (p, poly) => Math.min(...poly.map((q, i) => segDist(p, q, poly[(i + 1) % poly.length])));
+const dm = fe.openings[0] && [(fe.openings[0].a[0] + fe.openings[0].b[0]) / 2, (fe.openings[0].a[1] + fe.openings[0].b[1]) / 2];
+ok(dm && edgeDist(dm, wze.points) < 3 && edgeDist(dm, fe.rooms.find((r) => r.name === 'Flur').points) < 3, 'the door goes along (still on the wall between hallway and living room)', fe.openings);
+await ed('ed.undo()');
+await wait(300);
+ok((await ed('ed._draft.floors[0].rooms.find((r) => r.name === "Wohnzimmer").points.length')) === 4 && box(JSON.parse(await ed('JSON.stringify(ed._draft.floors[0].rooms.find((r) => r.name === "Wohnzimmer").points)'))).w === box(before).h, 'undo turns it back');
+errs.push(...m.errors);
+await m.browser.close();
+
+// 7b. a house, two maps: suggestions marked, swap, the same turn for all
+m = await openMock({ config, states, areas: haAreas, floors: haFloors, size: '1280x900', ws: { 'floorplan_card/vacuums/info': info, 'floorplan_card/vacuums/maps': maps } });
+page = m.page;
+await wait(900);
+await openStart();
+const rows = JSON.parse(await vs('JSON.stringify([...v.querySelectorAll(".vp-pick-row")].map((r) => ({ key: r.dataset.mapKey, state: r.dataset.state, value: r.querySelector("select").value })))'));
+const k0 = 'vacuum.demo_robot|0';
+const k1 = 'vacuum.demo_robot|1';
+ok(rows.length === 2 && rows.every((r) => r.state === 'suggested'), 'two maps, each with a suggestion marked as one', rows);
+ok(rows.find((r) => r.key === k0)?.value === 'ha:eg' && rows.find((r) => r.key === k1)?.value === 'ha:og', 'suggested from the rooms: living room → Erdgeschoss, bedroom/bath → Obergeschoss', rows);
+ok(await vs('!!v.querySelector(".vp-assign") && !v.querySelector(".vp-apply").disabled'), 'the assignment is listed before Apply');
+await choose(k0, 'ha:og');
+const swapped = JSON.parse(await vs('JSON.stringify(v._picks)'));
+ok(swapped[k0] === 'ha:og' && swapped[k1] === 'ha:eg', 'a map takes the other\'s floor: the two swap', swapped);
+ok(await vs('v._same === true && !!v.querySelector(".vp-turn [data-same]")'), '"Für alle Etagen gleich" on by default');
+await vs('v.querySelector(".vp-turn [data-turn=\\"1\\"]").click()');
+await wait(300);
+const turns = JSON.parse(await vs('JSON.stringify(v._turns)'));
+ok(turns[k0]?.q === 1 && turns[k1]?.q === 1, 'one turn turns every map', turns);
+if (out) if (out) {
+  await vs('(v.querySelector(".vp-picks").scrollIntoView({ block: "start" }), true)');
+  await wait(200);
+  await page.screenshot({ path: `${out}/vacuum-plan-picks.png` });
+}
+await page.evaluate(`${sr('fp-vacuum-start .vp-apply')}.click()`);
+await wait(1800);
+const hf = JSON.parse(await ed('JSON.stringify(ed._draft.floors)'));
+const og2 = hf.find((x) => x.floor === 'og');
+const eg2 = hf.find((x) => x.floor === 'eg');
+ok(og2?.rooms.some((r) => r.name === 'Wohnzimmer') && eg2?.rooms.some((r) => r.name === 'Schlafzimmer'), 'Apply: each map on the floor chosen (swapped)', hf.map((x) => ({ n: x.name, fl: x.floor, r: x.rooms.map((r) => r.name) })));
+const bedTf = eg2?.furniture.find((p) => p.kind === 'robot_vacuum')?.vacuum?.transform;
+ok(!bedTf, 'the robot stays with its own map (the living room\'s)');
+const livTf = og2?.furniture.find((p) => p.kind === 'robot_vacuum')?.vacuum?.transform;
+ok(livTf && inside(toPlanT(livTf, ...LIVING), og2.rooms.find((r) => r.name === 'Wohnzimmer').points), 'and is turned with it');
+errs.push(...m.errors);
+await m.browser.close();
+
+// 7c. contradicting hints: the upper map is called "Keller" but its rooms are upstairs → "Bitte wählen", Apply waits
+const maps2 = { select: null, maps: [ { id: '0', name: 'Map 1', current: true, map }, { id: '1', name: 'Keller', current: false, map: upper } ] };
+m = await openMock({ config, states, areas: haAreas, floors: { ...haFloors, kg: { floor_id: 'kg', name: 'Keller', level: -1 } }, size: '390x844', scheme: 'dark', ws: { 'floorplan_card/vacuums/info': info, 'floorplan_card/vacuums/maps': maps2 } });
+page = m.page;
+await wait(900);
+await openStart();
+const open1 = JSON.parse(await vs('JSON.stringify({ state: v.querySelector(`[data-map-key="${"vacuum.demo_robot|1"}"]`)?.dataset.state, note: v.querySelector(`[data-map-key="${"vacuum.demo_robot|1"}"] .vp-pick-note`)?.textContent, sel: v.querySelector(`[data-map-key="${"vacuum.demo_robot|1"}"] select`)?.value, dis: v.querySelector(".vp-apply").disabled, open: !!v.querySelector(".vp-open") })'));
+ok(open1.state === 'open' && open1.sel === '' && /widersprechen/.test(open1.note), `contradicting hints: "Bitte wählen" with the reason (${open1.note})`, open1);
+ok(open1.dis && open1.open, 'Apply waits until every map has a floor', open1);
+if (out) {
+  await vs('(v.querySelector(".vp-picks").scrollIntoView({ block: "start" }), true)');
+  await wait(200);
+  await page.screenshot({ path: `${out}/vacuum-plan-unsure-phone.png` });
+}
+await choose('vacuum.demo_robot|1', 'ha:og');
+ok(await vs('!v.querySelector(".vp-apply").disabled'), 'chosen: Apply possible');
+await choose('vacuum.demo_robot|1', 'skip');
+ok((await vs('v._res.floors.filter((f) => f.rooms.length).length')) === 1, '"Nicht übernehmen": that map is left out');
+errs.push(...m.errors);
+await m.browser.close();
+
 // 4. no vacuum: the path is not offered
 m = await openMock({ config, states: {}, size: '1280x900' });
 await wait(700);

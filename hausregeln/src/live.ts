@@ -303,6 +303,9 @@ export class LiveStore extends Store {
     this.plans = await this.ws<PlansView>({ type: 'house_rules/plan/set', kind, room, plan });
     this.changed();
   }
+  override async sensorSearch(query: string, ids: string[] = []) {
+    return this.ws<import('./model').SensorCandidate[]>({ type: 'house_rules/entities/search', query, ids });
+  }
   override async lightcalGet() {
     return this.ws<import('./model').LightCalView>({ type: 'house_rules/lightcal/get' });
   }

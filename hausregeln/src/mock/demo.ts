@@ -627,6 +627,11 @@ export class DemoStore extends Store {
   readonly demo = true;
   rooms = rooms;
   devices = devices;
+  // a radar sensor without a device class: not in the device list, found with "Sensor suchen"
+  protected override extraSensors: import('../model').SensorCandidate[] = [
+    { entity_id: 'binary_sensor.radar_bad', name: 'Radar Bad', state: 'off', room: 'bad', room_name: 'Bad', kind: 'presence', device_class: null },
+    { entity_id: 'input_boolean.gaeste_im_gaestezimmer', name: 'Gäste im Gästezimmer', state: 'off', room: null, room_name: null, kind: null },
+  ];
   override devicesUnused: UnusedDevice[] = [
     { entity_id: 'binary_sensor.auto_tur_vorne_links', name: 'Auto Tür vorne links', kind: 'door', reason: 'vehicle', vehicle: 'Familienauto' },
     { entity_id: 'lock.auto_verriegelung', name: 'Auto Verriegelung', kind: 'lock', reason: 'vehicle', vehicle: 'Familienauto' },
