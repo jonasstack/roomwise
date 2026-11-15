@@ -6,6 +6,21 @@ All notable changes to roomwise are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0-beta.3] - 2026-11-15
+
+### Fixed
+
+- HACS: the installed integration missed the card file ("Kartendatei fehlt") – HACS installs the release package
+  `floorplan_card.zip` again, which contains the built card.
+- House rules heating: a temperature set by hand in smart mode now really ends once the room has been empty long
+  enough – before, it only ended at the next sensor change in the room.
+
+### Removed
+
+- Song recognition (microphone of a wall tablet, AcoustID): gone from the card, the companion integration and the
+  privacy notes; old settings and the last recognized songs are dropped, leftover "… now playing" sensors are
+  removed from the entity list.
+
 ## [0.1.0-beta.2] - 2026-11-15
 
 ### Fixed
@@ -234,7 +249,8 @@ The first public alpha. roomwise has been in daily use in one home before this r
 - Pause for motion sensors while a robot vacuum cleans.
 - Setup assistant and per-feature switches; after installation only the automatic house mode runs.
 
-[Unreleased]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.2...HEAD
+[Unreleased]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.3...HEAD
+[0.1.0-beta.3]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.2...v0.1.0-beta.3
 [0.1.0-beta.2]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.1...v0.1.0-beta.2
 [0.1.0-beta.1]: https://github.com/jonasstack/roomwise/compare/v0.1.0-alpha.1...v0.1.0-beta.1
 [0.1.0-alpha.1]: https://github.com/jonasstack/roomwise/releases/tag/v0.1.0-alpha.1

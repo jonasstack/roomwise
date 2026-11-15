@@ -21,10 +21,8 @@ export interface CompanionInfo {
   vacuums?: Record<string, string>;
   /** card id → signature of the warning settings the server has */
   entry_alert_sig?: Record<string, string>;
-  /** what this version offers beyond the basics: 'plans' (shared floor plans), 'images' (trace images), 'songs' (song recognition) */
+  /** what this version offers beyond the basics: 'plans' (shared floor plans), 'images' (trace images), 'wifi' */
   features?: string[];
-  /** an AcoustID API key is set in the companion's options (song recognition) */
-  song_key?: boolean;
 }
 
 let infoPromise: Promise<CompanionInfo | undefined> | undefined;

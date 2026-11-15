@@ -20,23 +20,6 @@ Part of the editor's lazily loaded chunk, never the card's entry file. Vendored 
 |---|---|---|
 | [jsQR](https://github.com/cozmo/jsQR) 1.4.0 | Apache-2.0 | Cosmo Wolfe |
 
-## Loaded separately, only for song recognition
-
-Not part of the card's entry file: a lazily loaded chunk (`chunks/song-capture-*.js`) and the WebAssembly file
-`chunks/chromaprint.wasm`, fetched only when a browser the owner picked actually listens for a song. Vendored in
-[`src/vendor/chromaprint/`](src/vendor/chromaprint/README.md) (origin, checksums).
-
-| Library | License | Copyright |
-|---|---|---|
-| [Chromaprint](https://github.com/acoustid/chromaprint) (compiled to WebAssembly, `chromaprint.wasm`) | LGPL-2.1-or-later (its own code is MIT; it includes parts of FFmpeg under LGPL-2.1) | Lukas Lalinsky, FFmpeg authors |
-| [KissFFT](https://github.com/mborgerding/kissfft) (inside `chromaprint.wasm`) | BSD-3-Clause | Mark Borgerding |
-| [`@unimusic/chromaprint`](https://github.com/unimusic-app/unimusic-chromaprint) 0.1.4 (the WebAssembly build and its Emscripten glue `chromaprint.js`) | MIT | Im-Beast |
-
-LGPL: Chromaprint is used as a separate, dynamically loaded file and only through its public C API. You may replace
-`chromaprint.wasm` (together with the glue in the chunk) with your own build of Chromaprint, for example with the
-`build-wasm.sh` script of `@unimusic/chromaprint`; the complete source code is available at the links above. The
-LGPL-2.1 text: https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
-
 The license headers of these libraries stay in the built files (`floorplan-card.js`, `house-rules-panel.js`).
 In the card, icons are not bundled: it uses the Material Design Icons that Home Assistant provides at runtime.
 No fonts are bundled; both use the system font of the device.

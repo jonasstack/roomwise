@@ -487,9 +487,12 @@ await set(P, 'off');
 await cond('Raum belegt', { subject: `room:${R.Wohnzimmer}`, verb: 'is_occupied' }, () => set(M, 'on'), () => set(M, 'off'), 4500);
 await cond('Raum leer', { subject: `room:${R.Wohnzimmer}`, verb: 'is_empty' }, () => set(M, 'off'), () => set(M, 'on'), 4500);
 await set(M, 'off');
+// a room only counts as bright again once it has been bright for `bright_for` minutes (10 by default): none here
+await ws.call({ type: 'house_rules/room/save', room: { id: R.Flur, dark: { bright_for: 0 } } });
 await cond('Raum dunkel (Lux)', { subject: `room:${R.Flur}`, verb: 'is_dark' }, () => set(LUX, '2'), () => set(LUX, '800'), 600);
 await cond('Raum hell (Lux)', { subject: `room:${R.Flur}`, verb: 'is_bright' }, () => set(LUX, '800'), () => set(LUX, '2'), 600);
 await set(LUX, '10');
+await ws.call({ type: 'house_rules/room/save', room: { id: R.Flur, dark: { bright_for: 10 } } });
 await cond('Heizung heizt', { subject: C, verb: 'is_heating' }, () => set(C, 'heat', { hvac_action: 'heating' }), () => set(C, 'heat', { hvac_action: 'idle' }));
 await set(C, 'heat', { hvac_action: '' });
 await cond('Rollladen offen', { subject: CV, verb: 'is_open' }, () => set(CV, 'open', { instant: true }), () => set(CV, 'closed', { instant: true }));

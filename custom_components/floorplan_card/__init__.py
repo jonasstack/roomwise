@@ -5,11 +5,9 @@ without any tablet:
   * the front door warning (announcement, flashing lights, acknowledged by a switch or a tap on a tablet),
   * walk check-offs of the dogs, shared by every device,
   * shared floor plans (one plan on several dashboards) and the editor's trace images,
-  * the home's Wi-Fi networks for the QR codes on the tablets (wifi.py, kept out of the dashboard config),
-  * the last recognized song of media devices that cannot report it (songs.py, optional: AcoustID API key in the options).
+  * the home's Wi-Fi networks for the QR codes on the tablets (wifi.py, kept out of the dashboard config).
 
-Everything else is configured from the card's own editor. It creates no automations or helpers; the only entities
-are one sensor per media device with song recognition (created once it recognized a song).
+Everything else is configured from the card's own editor. It creates no automations, helpers or entities.
 """
 
 from __future__ import annotations
@@ -27,15 +25,14 @@ from aiohttp import web
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers import config_validation as cv, issue_registry as ir
+from homeassistant.helpers import config_validation as cv, entity_registry as er, issue_registry as ir
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN, EVENT_SONG, STORAGE_KEY, STORAGE_VERSION, VERSION
+from .const import DOMAIN, STORAGE_KEY, STORAGE_VERSION, VERSION
 from .entry_alert import EntryAlert, sanitize
 from .pets import ACTION_PREFIX, PetTracker, sanitize_pets
 from .plans import PlanStore
-from .songs import ACOUSTID_URL, CONF_ACOUSTID_KEY, CONF_ACOUSTID_URL, MAX_SONGS, SongError, SongLookup
 from .vacuum import VacuumTracker, sanitize_vacuums
 from .wifi import WifiStore
 from .websocket import async_register_commands
@@ -78,10 +75,6 @@ class FloorplanData:
         self.plans = PlanStore(hass)
         # the home's Wi-Fi networks (QR codes on the tablets; own storage file)
         self.wifi = WifiStore(hass)
-        # last recognized song per media device: "card_id|item_id" → {title, artist, album, recording_id, score, at, name, …}
-        self.songs: dict[str, dict[str, Any]] = {}
-        self.song_listeners: set[Callable[[str], None]] = set()
-        self.song_lookup = SongLookup(hass)
         self.entry: ConfigEntry | None = None
         self._unsub_action: Callable[[], None] | None = None
 
@@ -94,7 +87,7 @@ class FloorplanData:
         self.reminded = data.get("reminded", {})
         self.learned = data.get("learned", {})
         self.paths = data.get("paths", {})
-        self.songs = data.get("songs", {})
+        # "songs" of the former song recognition (removed) is dropped with the next save
         for card_id, card in self.cards.items():
             if card.get("entry_alert"):
                 self._arm(card_id, card["entry_alert"])
@@ -109,35 +102,7 @@ class FloorplanData:
         self.store.async_delay_save(self.stored, 5)
 
     def stored(self) -> dict[str, Any]:
-        return {"cards": self.cards, "walks": self.walks, "reminded": self.reminded, "learned": self.learned, "paths": self.paths, "songs": self.songs}
-
-    def song_options(self) -> tuple[str, str]:
-        """AcoustID API key ("" = none set) and server URL from the integration's options"""
-        opts = self.entry.options if self.entry else {}
-        return str(opts.get(CONF_ACOUSTID_KEY) or "").strip(), str(opts.get(CONF_ACOUSTID_URL) or "").strip() or ACOUSTID_URL
-
-    async def song_lookup_for(self, card_id: str, item_id: str, name: str, fingerprint: str, duration: int) -> dict[str, Any] | None:
-        """Fingerprint → AcoustID → the song (kept as the device's last one, sensor and event), or None without a match"""
-        api_key, url = self.song_options()
-        if not api_key:
-            raise SongError("no_api_key", "No AcoustID API key set in the integration's options")
-        key = f"{card_id}|{item_id}"
-        found = await self.song_lookup.lookup(key, api_key, url, fingerprint, duration)
-        if not found:
-            return None
-        song = found | {"at": dt_util.utcnow().isoformat(timespec="seconds"), "name": name, "card_id": card_id, "item_id": item_id}
-        self.songs.pop(key, None)
-        self.songs[key] = song
-        while len(self.songs) > MAX_SONGS:
-            self.songs.pop(next(iter(self.songs)))
-        self._save()
-        for listener in list(self.song_listeners):
-            listener(key)
-        self.hass.bus.async_fire(EVENT_SONG, {k: song[k] for k in ("card_id", "item_id", "name", "title", "artist", "album", "recording_id", "score")})
-        return song
-
-    def songs_of(self, card_id: str) -> dict[str, dict[str, Any]]:
-        return {s["item_id"]: {k: s.get(k) for k in ("title", "artist", "album", "at")} for s in self.songs.values() if s.get("card_id") == card_id}
+        return {"cards": self.cards, "walks": self.walks, "reminded": self.reminded, "learned": self.learned, "paths": self.paths}
 
     def _arm(self, card_id: str, cfg: dict[str, Any]) -> None:
         old = self.alerts.pop(card_id, None)
@@ -383,22 +348,21 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     return True
 
 
-PLATFORMS = ["sensor"]
-
-
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     data = FloorplanData(hass)
     data.entry = entry
     await data.async_load()
     hass.data[DOMAIN] = data
     await _async_register_frontend(hass)
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    # the song sensors of the former song recognition (removed): their registry entries would stay "unavailable"
+    ent_reg = er.async_get(hass)
+    for ent in er.async_entries_for_config_entry(ent_reg, entry.entry_id):
+        if ent.domain == "sensor":
+            ent_reg.async_remove(ent.entity_id)
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    if not await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
-        return False
     data: FloorplanData | None = hass.data.pop(DOMAIN, None)
     if data:
         data.shutdown()

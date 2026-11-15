@@ -158,28 +158,6 @@ export interface MediaControlsConfig {
   sources?: MediaInputConfig[];
   /** Further buttons (menu, OK, a favourite channel …) */
   buttons?: MediaButtonConfig[];
-  /** Song recognition through the microphone of chosen wall tablets (song.ts); off unless enabled */
-  recognize?: SongRecognizeConfig;
-}
-
-/** A browser (wall tablet, display) allowed to listen: its random id from song.ts and the name the owner gave it */
-export interface SongListenerConfig {
-  id: string;
-  name: string;
-}
-
-/**
- * Song recognition of a media device that cannot report what it plays (infrared): a chosen browser listens for about
- * 10 s every few minutes while the device is on, the fingerprint goes to the companion integration (AcoustID).
- */
-export interface SongRecognizeConfig {
-  enabled?: boolean;
-  /** Browsers that may listen; none = nobody listens */
-  listeners?: SongListenerConfig[];
-  /** Entity that tells whether the device is on (default: the device's own entity) */
-  entity?: string;
-  /** Minutes between two listening rounds (default 3) */
-  interval?: number;
 }
 
 /** What a popup is opened for */
@@ -194,9 +172,8 @@ export interface PopupTarget {
   /** Name / icon shown when there is no entity */
   name?: string;
   icon?: string;
-  /** The piece / device the popup belongs to and the card's server key (recognized song of a media device) */
+  /** The piece / device the popup belongs to */
   item?: string;
-  cardKey?: string;
   /** Router / access point: the Wi-Fi QR codes (networks from the companion, the router's guest Wi-Fi) */
   wifi?: FurnitureConfig;
 }

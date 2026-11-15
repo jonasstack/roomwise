@@ -45,7 +45,9 @@ const G0 = { outside: 'sensor.temp_aussen', summer: { on: false, above: 18, hold
 const glob = (cfg) => ws.call({ type: 'house_rules/heating/set', config: cfg });
 // local clock of the test HA (Europe/Berlin)
 const hm = (offsetMin) => new Date(Date.now() + offsetMin * 60000).toLocaleTimeString('de-DE', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' });
-const ALLDAY = [{ from: '00:00', to: '23:59', days: 'all', level: 'comfort', temp: 21 }];
+// comfort all day – as one block around the time the test runs (from 12 h ago to almost 12 h ahead): a block
+// 00:00–23:59 has a change of the plan at 23:59, and tests run shortly before midnight then ended "by hand" there
+const ALLDAY = [{ from: hm(-720), to: hm(719), days: 'all', level: 'comfort', temp: 21 }];
 const base = (extra = {}) => ({
   on: true,
   thermostats: [],
@@ -216,7 +218,11 @@ await test('Von Hand: intelligent (Hausmodus, Fenster, alle weg, Höchstdauer)',
   await set('binary_sensor.fenster_kueche', 'on');
   ok(await until(async () => (await st('climate.heizung_kueche')).state === 'off', 8000), 'Fenster auf → aus');
   await set('binary_sensor.fenster_kueche', 'off');
-  ok(await until(async () => { const c = await st('climate.heizung_kueche'); return c.state === 'heat' && c.attributes.temperature === 23; }, 20000), 'Fenster zu → wieder 23 °C von Hand', (await now(k)).line);
+  // the window of the kitchen opened several times in the last minutes (tests above): it counts as flapping and waits
+  // at least 2 min after closing (heating.py) – so up to 2,5 min here
+  ok(await until(async () => { const c = await st('climate.heizung_kueche'); return c.state === 'heat' && c.attributes.temperature === 23; }, 150000), 'Fenster zu → wieder 23 °C von Hand', (await now(k)).line);
+  // the value comes back once as it was set; the next evaluation (right after the thermostat reported it) hands off
+  await until(async () => { const n = await now(k); return n.level === 'manual' && n.mode === 'hands_off'; }, 10000);
   s = await now(k);
   ok(s.level === 'manual' && s.mode === 'hands_off', 'danach wieder Finger weg (von Hand)', s);
   // the house mode changes → the plan again

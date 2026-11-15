@@ -1158,6 +1158,8 @@ class HeatingController:
             empty_for = (now - max(float(manual["at"]), self.core.room_tracker.changed_at(rid))) * self.smart.factor
             if empty_for >= MANUAL_EMPTY_MINUTES * 60:
                 return tr(self.core, "heat.m_end_empty", minutes=round(empty_for / 60))
+            # look again once the room has been empty long enough (otherwise only the next sensor change would)
+            self.schedule(rid, (MANUAL_EMPTY_MINUTES * 60 - empty_for) / max(self.smart.factor, 1e-6) + 1)
         return None
 
     def _manual_restored(self, rid: str, p: dict[str, Any], manual: dict[str, Any]) -> bool:

@@ -5,7 +5,6 @@ import { isUnavailable } from '../ha';
 import { t } from '../i18n';
 import { commandSet, runMediaCommand, type MediaSlot } from '../media-controls';
 import type { MediaCommand, MediaControlsConfig } from '../types';
-import { SONG_EVENT, SONG_MAX_AGE, songAgeMin, type SongResult } from '../song';
 import '../components/controls';
 
 // MediaPlayerEntityFeature bits
@@ -25,15 +24,6 @@ export class FpMediaPlayerPopup extends PopupBase {
     _vol: { state: true },
     _now: { state: true },
     _imgFailed: { state: true },
-    song: { attribute: false },
-    _song: { state: true },
-  };
-  /** Song recognition of the device: where the companion keeps its last result (card key, piece / device id) */
-  declare song?: { card: string; item: string };
-  declare _song?: SongResult;
-  private readonly onSong = (e: Event) => {
-    const d = (e as CustomEvent<{ card: string; item: string; song: SongResult }>).detail;
-    if (d && this.song && d.card === this.song.card && d.item === this.song.item) this._song = d.song;
   };
   /** Own buttons of the device (scripts for infrared …); with them the popup also works without an entity */
   declare media?: MediaControlsConfig;
@@ -54,44 +44,12 @@ export class FpMediaPlayerPopup extends PopupBase {
     super.connectedCallback();
     this.timer = window.setInterval(() => {
       if (this.stateObj?.state === 'playing') this._now = Date.now();
-      // "recognized 2 min ago" moves on
-      else if (this._song && Date.now() - this._now > 30000) this._now = Date.now();
     }, 1000);
-    window.addEventListener(SONG_EVENT, this.onSong);
   }
 
   override disconnectedCallback() {
     super.disconnectedCallback();
     clearInterval(this.timer);
-    window.removeEventListener(SONG_EVENT, this.onSong);
-  }
-
-  override willUpdate(changed: Map<string, unknown>) {
-    super.willUpdate(changed);
-    if (changed.has('song') && this.song && this.hass) {
-      const want = this.song;
-      this.hass
-        .callWS<{ songs: Record<string, SongResult> }>({ type: 'floorplan_card/songs', card_id: want.card })
-        .then((r) => {
-          if (this.song === want && r?.songs?.[want.item]) this._song ??= r.songs[want.item];
-        })
-        .catch(() => undefined);
-    }
-  }
-
-  /** The song the microphone recognized last, while it is recent and the device not known to be off */
-  private renderSong() {
-    const r = this._song;
-    const s = this.stateObj;
-    if (!r || this._now - Date.parse(r.at) > SONG_MAX_AGE || s?.state === 'off' || s?.state === 'standby') return nothing;
-    const n = songAgeMin(r, this._now);
-    return html`<div class="song" role="status">
-      <ha-icon icon="mdi:music-note"></ha-icon>
-      <div class="song-text">
-        <div class="song-title">${r.artist ? t('media.song_now', { title: r.title, artist: r.artist }) : t('media.song_now_title', { title: r.title })}</div>
-        <div class="song-age">${n < 1 ? t('media.song_just') : t('media.song_ago', { n })}</div>
-      </div>
-    </div>`;
   }
 
   private get isPlayer() {
@@ -213,7 +171,6 @@ export class FpMediaPlayerPopup extends PopupBase {
           : { icon: html`<ha-icon .icon=${this.deviceIcon || 'mdi:remote-tv'}></ha-icon>`, title: this.deviceName || t('media.device'), subtitle: t('media.remote'), trailing: power.trailing },
       )}
       ${power.chips}
-      ${this.song ? this.renderSong() : nothing}
       ${player
         ? html`<div class="now">
             <div class="art ${pic && !this._imgFailed ? '' : 'empty'}">
@@ -433,33 +390,6 @@ export class FpMediaPlayerPopup extends PopupBase {
       }
       .chips.power {
         margin-bottom: var(--fp-space-4);
-      }
-      .song {
-        display: flex;
-        align-items: center;
-        gap: var(--fp-space-3);
-        padding: var(--fp-space-3) var(--fp-space-4);
-        margin-bottom: var(--fp-space-4);
-        border-radius: var(--fp-radius-m);
-        background: var(--fp-fill);
-      }
-      .song ha-icon {
-        --mdc-icon-size: 22px;
-        color: var(--fp-accent);
-        flex: none;
-      }
-      .song-text {
-        min-width: 0;
-      }
-      .song-title {
-        font-weight: var(--fp-weight-semibold);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .song-age {
-        font-size: var(--fp-text-footnote);
-        color: var(--fp-label-2);
       }
       .chips.power ha-icon {
         --mdc-icon-size: 18px;

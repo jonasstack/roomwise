@@ -170,9 +170,6 @@ const MATRIX = {
   'floorplan_card/vacuums/path': ['any', { entity: 'vacuum.none' }],
   'floorplan_card/vacuums/map': ['any', { entity: 'vacuum.none' }],
   'floorplan_card/vacuums/reset': ['admin', { entity: 'vacuum.none' }],
-  // song recognition: a wall tablet (plain user) looks up; without an API key the answer is no_api_key, never unauthorized
-  'floorplan_card/song/lookup': ['any', { card_id: 'perm', item_id: 'tv', fingerprint: 'AQAAperm_test', duration: 10 }],
-  'floorplan_card/songs': ['any', { card_id: 'perm' }],
   'floorplan_card/wifi/get': ['any', {}],
   'floorplan_card/wifi/set': ['admin', { networks: [] }],
 };

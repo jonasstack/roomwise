@@ -27,8 +27,6 @@
   floorplan_card/images/get                 → a trace image (data URL)
   floorplan_card/images/save       (admin)  ← a trace image, resized by the card
   floorplan_card/images/delete     (admin)
-  floorplan_card/song/lookup                ← a Chromaprint fingerprint from a listening tablet → the song (AcoustID)
-  floorplan_card/songs                      → the last recognized song per media device of a card
   floorplan_card/wifi/get                   → the home's Wi-Fi networks for the QR codes (non-admins: those for everyone)
   floorplan_card/wifi/set           (admin) ← the Wi-Fi networks (replaces the list)
 """
@@ -76,9 +74,7 @@ def ws_info(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg
             "vacuums": {k: v.get("vacuums_sig", "") for k, v in (data.cards.items() if data else []) if "vacuums" in v},
             "entry_alert_sig": {k: v.get("entry_alert_sig", "") for k, v in (data.cards.items() if data else []) if v.get("entry_alert")},
             # what this version offers beyond the basics (older cards ignore it)
-            "features": ["plans", "images", "songs", "wifi"],
-            # song recognition: an AcoustID API key is set in the options
-            "song_key": bool(data and data.song_options()[0]),
+            "features": ["plans", "images", "wifi"],
         },
     )
 
@@ -464,40 +460,6 @@ def ws_images_delete(hass: HomeAssistant, connection: websocket_api.ActiveConnec
     connection.send_result(msg["id"], {"deleted": data.plans.delete_image(msg["image_id"])})
 
 
-@websocket_api.websocket_command(
-    {
-        vol.Required("type"): "floorplan_card/song/lookup",
-        vol.Required("card_id"): CARD_ID,
-        vol.Required("item_id"): vol.All(str, vol.Length(min=1, max=80)),
-        vol.Optional("name", default=""): vol.All(str, vol.Length(max=120)),
-        # compressed Chromaprint fingerprint (URL-safe base64): a few hundred characters for 10 s of sound
-        vol.Required("fingerprint"): vol.All(str, vol.Length(min=8, max=20000), vol.Match(r"^[A-Za-z0-9_\-]+$")),
-        vol.Required("duration"): vol.All(int, vol.Range(min=1, max=120)),
-    }
-)
-@websocket_api.async_response
-async def ws_song_lookup(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
-    """Any signed-in device may send one (a wall tablet usually runs as a plain user); limited per device and overall."""
-    from .songs import SongError
-
-    if (data := _data(hass, connection, msg)) is None:
-        return
-    try:
-        song = await data.song_lookup_for(msg["card_id"], msg["item_id"], msg["name"], msg["fingerprint"], msg["duration"])
-    except SongError as err:
-        connection.send_error(msg["id"], err.code, str(err))
-        return
-    connection.send_result(msg["id"], {"match": song is not None, "song": {k: song.get(k) for k in ("title", "artist", "album", "at")} if song else None})
-
-
-@websocket_api.websocket_command({vol.Required("type"): "floorplan_card/songs", vol.Required("card_id"): CARD_ID})
-@callback
-def ws_songs(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
-    if (data := _data(hass, connection, msg)) is None:
-        return
-    connection.send_result(msg["id"], {"songs": data.songs_of(msg["card_id"])})
-
-
 # ---------- Wi-Fi (QR codes on the tablets) ----------
 
 
@@ -531,6 +493,6 @@ def ws_wifi_set(hass: HomeAssistant, connection: websocket_api.ActiveConnection,
 def async_register_commands(hass: HomeAssistant) -> None:
     for cmd in (ws_info, ws_entry_set, ws_entry_remove, ws_entry_ack, ws_walks, ws_walk_done, ws_walk_undo, ws_walks_subscribe, ws_alert_subscribe, ws_pets_set, ws_pets_subscribe, ws_vacuums_set, ws_vacuums_subscribe, ws_vacuum_learned, ws_vacuum_reset, ws_vacuum_map, ws_vacuum_path, ws_vacuum_info, ws_vacuum_clean,
         ws_plans_list, ws_plans_get, ws_plans_save, ws_plans_delete, ws_plans_subscribe, ws_images_get, ws_images_save, ws_images_delete,
-        ws_song_lookup, ws_songs, ws_wifi_get, ws_wifi_set,
+        ws_wifi_get, ws_wifi_set,
     ):
         websocket_api.async_register_command(hass, cmd)

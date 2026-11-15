@@ -19,8 +19,6 @@ import { CAR_GROUPS, CAR_ROLE, CAR_ROLE_KEYS, LEGACY_MAIN, carInfo, type CarGrou
 import type { I18nKey } from '../i18n';
 import type { ManualEntityConfig, MediaCommand, MediaControlsConfig } from '../types';
 import { MEDIA_SLOTS, commandSet, type MediaSlot } from '../media-controls';
-import { DEFAULT_INTERVAL, browserId, defaultBrowserName } from '../song';
-import type { SongRecognizeConfig } from '../types';
 
 type Ed = FloorplanEditorUI;
 import { companionInfo, serverKey, vacuumReset } from '../entry-server';
@@ -713,7 +711,7 @@ function listTools(list: unknown[], i: number, move: (from: number, to: number) 
  * Own media buttons of a device / piece: fixed slots (power, volume, playback), inputs and further buttons,
  * each a script or another action. Mostly for devices only reachable by infrared.
  */
-function mediaSection(ed: Ed, media: MediaControlsConfig | undefined, setItem: (fn: (m: { media?: MediaControlsConfig }) => void) => void, irOnly: boolean, entity?: string) {
+function mediaSection(ed: Ed, media: MediaControlsConfig | undefined, setItem: (fn: (m: { media?: MediaControlsConfig }) => void) => void, irOnly: boolean) {
   const m = media ?? {};
   const set = (fn: (m: MediaControlsConfig) => void) =>
     setItem((x) => {
@@ -722,7 +720,8 @@ function mediaSection(ed: Ed, media: MediaControlsConfig | undefined, setItem: (
       for (const k of MEDIA_SLOTS) if (!n[k]) delete n[k];
       if (!n.sources?.length) delete n.sources;
       if (!n.buttons?.length) delete n.buttons;
-      if (n.recognize && !n.recognize.enabled && !n.recognize.listeners?.length && !n.recognize.entity && !n.recognize.interval) delete n.recognize;
+      // the former song recognition's settings go with the next edit
+      delete (n as Record<string, unknown>).recognize;
       x.media = Object.keys(n).length ? n : undefined;
     });
   const move = (key: 'sources' | 'buttons') => (from: number, to: number) =>
@@ -765,83 +764,9 @@ function mediaSection(ed: Ed, media: MediaControlsConfig | undefined, setItem: (
       )}
       <button class="btn tinted block pressable" data-media-add-button @click=${() => set((x) => (x.buttons = [...(x.buttons ?? []), { name: t('editor.media_new_button', { n: (x.buttons?.length ?? 0) + 1 }) }]))}>
         <ha-icon icon="mdi:plus"></ha-icon>${t('editor.media_add_button')}
-      </button>
-      ${songSection(ed, m.recognize, (fn) => set((x) => fn((x.recognize ??= {}))), entity)}`,
+      </button>`,
     { icon: 'mdi:remote-tv', sub: n ? t('editor.media_n', { n }) : undefined },
   );
-}
-
-/** Result of "allow microphone" on this browser (editor session) */
-let micAnswer: string | undefined;
-
-/**
- * Song recognition of a media device: on / off, which browsers may listen (by their own id, song.ts), the entity
- * that tells whether the device is on, the interval. Needs the companion with an AcoustID key and HTTPS.
- */
-function songSection(ed: Ed, r: SongRecognizeConfig | undefined, set: (fn: (r: SongRecognizeConfig) => void) => void, entity: string | undefined) {
-  const on = !!r?.enabled;
-  const me = browserId();
-  const listeners = r?.listeners ?? [];
-  const info = companionInfo();
-  const server = !!info?.features?.includes('songs');
-  const ask = async () => {
-    const { askMicrophone } = await import('../song-capture');
-    const res = await askMicrophone();
-    micAnswer = res === 'ok' ? t('editor.song_mic_ok') : t(res === 'denied' ? 'song.denied' : res === 'no_mic' ? 'song.no_mic' : 'song.unsupported');
-    ed.requestUpdate();
-  };
-  return html`<div class="section-title">${t('editor.song_title')}</div>
-    <div class="group" data-song>
-      ${switchRow(t('editor.song_enable'), on, () => set((x) => (x.enabled = !x.enabled || undefined)), t('editor.song_enable_sub'))}
-    </div>
-    <div class="hint-s">${t('editor.song_hint')}</div>
-    ${on
-      ? html`${!window.isSecureContext ? html`<div class="hint-s" data-song-https style="color:var(--fp-red)">${t('editor.song_https')}</div>` : nothing}
-          ${!server ? html`<div class="hint-s" data-song-server style="color:var(--fp-red)">${t('editor.song_no_server')}</div>` : info?.song_key === false ? html`<div class="hint-s" data-song-key style="color:var(--fp-red)">${t('editor.song_no_key')}</div>` : nothing}
-          <div class="section-title">${t('editor.song_listeners')}</div>
-          ${listeners.map(
-            (l, i) => html`<div class="group" data-song-listener=${l.id}>
-              ${textField(l.id === me ? t('editor.song_this_browser') : t('editor.name'), l.name, (v) => set((x) => (x.listeners![i].name = v.trim() || l.name)))}
-              <div class="row list-tools">
-                <span class="grow subtitle mono">${l.id}</span>
-                <button class="icon-btn plain pressable" data-song-remove aria-label=${t('editor.media_remove')} @click=${() => set((x) => x.listeners!.splice(i, 1))}><ha-icon icon="mdi:trash-can-outline" style="color:var(--fp-red)"></ha-icon></button>
-              </div>
-            </div>`,
-          )}
-          ${listeners.length ? nothing : html`<div class="hint-s">${t('editor.song_nobody')}</div>`}
-          ${listeners.some((l) => l.id === me)
-            ? nothing
-            : html`<button class="btn tinted block pressable" data-song-add @click=${() => set((x) => (x.listeners = [...(x.listeners ?? []), { id: me, name: defaultBrowserName() }]))}>
-                <ha-icon icon="mdi:tablet"></ha-icon>${t('editor.song_add_this')}
-              </button>`}
-          <div class="hint-s">${t('editor.song_listeners_hint')}</div>
-          <button class="btn block pressable" data-song-ask @click=${ask}><ha-icon icon="mdi:microphone"></ha-icon>${t('editor.song_ask')}</button>
-          ${micAnswer ? html`<div class="hint-s" data-song-answer>${micAnswer}</div>` : nothing}
-          <div class="group">
-            ${entityRow(ed, t('editor.song_entity'), r?.entity, {}, (v) => set((x) => (x.entity = v || undefined)))}
-            <label class="row field-row">
-              <span class="subtitle">${t('editor.song_interval')}</span>
-              <input
-                class="field len"
-                type="number"
-                inputmode="numeric"
-                min="1"
-                max="60"
-                data-song-interval
-                placeholder=${String(DEFAULT_INTERVAL)}
-                .value=${r?.interval ? String(r.interval) : ''}
-                @change=${(e: any) => {
-                  const v = Math.round(Number(e.target.value));
-                  set((x) => (x.interval = v >= 1 && v <= 60 && v !== DEFAULT_INTERVAL ? v : undefined));
-                }}
-              />
-              <span class="unit">min</span>
-            </label>
-          </div>
-          <div class="hint-s" ?data-song-no-state=${!r?.entity && !entity} style=${!r?.entity && !entity ? 'color:var(--fp-red)' : ''}>
-            ${t(!r?.entity && !entity ? 'editor.song_entity_needed' : 'editor.song_entity_hint')}
-          </div>`
-      : nothing}`;
 }
 
 function deviceInspector(ed: Ed, d: DeviceConfig): TemplateResult {
@@ -872,7 +797,7 @@ function deviceInspector(ed: Ed, d: DeviceConfig): TemplateResult {
       ${d.display === 'value' ? nothing : switchRow(t('editor.show_state'), !!d.show_state, () => set((x) => (x.show_state = !x.show_state || undefined)))}
     </div>
     ${actions(ed, d, 'device', (k, v) => set((x) => ((x as any)[k] = v)))}
-    ${d.display === 'value' ? nothing : mediaSection(ed, d.media, set, false, d.entity)}
+    ${d.display === 'value' ? nothing : mediaSection(ed, d.media, set, false)}
     <button class="btn danger block pressable gap" @click=${ed.deleteSelection}><ha-icon icon="mdi:trash-can-outline"></ha-icon>${t('editor.delete_device')}</button>
   `;
 }
@@ -1749,7 +1674,7 @@ function furnitureInspector(ed: Ed, f: FurnitureConfig): TemplateResult {
           }),
         )
       : nothing}
-    ${r.role === 'media' ? mediaSection(ed, f.media, set, !f.entity, f.entity) : nothing}
+    ${r.role === 'media' ? mediaSection(ed, f.media, set, !f.entity) : nothing}
     <div class="btn-row">
       <button class="btn pressable" @click=${() => set((x) => (x.flip = !x.flip || undefined))}><ha-icon icon="mdi:flip-horizontal"></ha-icon>${t('editor.mirror')}</button>
       <button class="btn pressable" @click=${ed.duplicateSelection}><ha-icon icon="mdi:content-copy"></ha-icon>${t('editor.duplicate')}</button>

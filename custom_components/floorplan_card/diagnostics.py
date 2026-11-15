@@ -85,7 +85,5 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
         "images": {"count": len(data.plans.images), "bytes": sum(i.get("bytes", 0) for i in data.plans.images.values())},
         # Wi-Fi for the QR codes: how many networks, never names, SSIDs or passwords
         "wifi": data.wifi.summary(),
-        # song recognition: whether it is set up, never the key or what was played
-        "songs": {"api_key_set": bool(data.song_options()[0]), "own_server": bool((entry.options or {}).get("acoustid_url")), "devices": len(data.songs)},
     }
     return _pseudonymize(hass, async_redact_data(out, REDACT))

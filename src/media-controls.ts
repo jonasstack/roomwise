@@ -59,18 +59,7 @@ export function validMediaControls(m: unknown): boolean {
     if (!Array.isArray(list) || list.length > 50) return false;
     if (!list.every((x) => isCommand(x) && typeof x?.name === 'string' && (x.icon === undefined || typeof x.icon === 'string'))) return false;
   }
-  return validRecognize(c.recognize);
+  // `recognize` (the former song recognition) in an old file is ignored
+  return true;
 }
 
-/** Song recognition settings (song.ts) from outside */
-function validRecognize(r: unknown): boolean {
-  if (r === undefined) return true;
-  if (!r || typeof r !== 'object' || Array.isArray(r)) return false;
-  const x = r as Record<string, unknown>;
-  if (x.enabled !== undefined && typeof x.enabled !== 'boolean') return false;
-  if (x.entity !== undefined && (typeof x.entity !== 'string' || !/^[a-z0-9_]+\.[a-z0-9_]+$/.test(x.entity))) return false;
-  if (x.interval !== undefined && !(typeof x.interval === 'number' && x.interval >= 1 && x.interval <= 60)) return false;
-  const l = x.listeners;
-  if (l === undefined) return true;
-  return Array.isArray(l) && l.length <= 20 && l.every((b) => !!b && typeof b.id === 'string' && b.id.length <= 40 && typeof b.name === 'string' && b.name.length <= 80);
-}

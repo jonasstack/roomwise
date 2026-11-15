@@ -4,10 +4,6 @@ tools/companion/testha/start.sh, never in a real home).
 * Records service calls (tts, light, scene, notify, mqtt, segment cleaning) for `fp_fake/calls`; registers
   stand-ins for the services the bare test instance does not have (tts.speak, light.*, scene.*, the phones
   notify.fake_alex / notify.fake_sam, mqtt.publish).
-* An AcoustID stand-in at /api/fp_fake/acoustid (the companion's song lookup points there through its option
-  "acoustid_url", so no test ever reaches the real service): answers by the fingerprint ("…match…" → a song,
-  "…weak…" → a score below the threshold, anything else → no result) and the key ("badkey…" → error 4); the
-  requests it got are in `fp_fake/acoustid`.
 * A Roborock stand-in: `roborock.get_vacuum_current_position` answers for `vacuum.fake` (a state set over REST)
   with a robot driving lanes through a 4 × 3 m room (robot mm, x = 25000 + 10·px, y = 28000 − 10·py).
 * A Dreame-like robot (`vacuum.demo_dreame` + map camera `camera.demo_dreame_map` on the same device, attributes
@@ -23,11 +19,9 @@ import math
 import time
 from typing import Any
 
-from aiohttp import web
 import voluptuous as vol
 
 from homeassistant.components import websocket_api
-from homeassistant.components.http import HomeAssistantView
 from homeassistant.const import EVENT_CALL_SERVICE
 from homeassistant.core import Event, HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse, callback
 from homeassistant.helpers import config_validation as cv
@@ -183,45 +177,9 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         data["robots"][msg["robot"]].set(msg["state"])
         connection.send_result(msg["id"], {"ok": True})
 
-    data["acoustid"] = []
-    hass.http.register_view(FakeAcoustId(data))
-
-    @websocket_api.websocket_command({vol.Required("type"): "fp_fake/acoustid"})
-    @callback
-    def ws_acoustid(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
-        connection.send_result(msg["id"], list(data["acoustid"]))
-
     websocket_api.async_register_command(hass, ws_calls)
     websocket_api.async_register_command(hass, ws_vacuum)
-    websocket_api.async_register_command(hass, ws_acoustid)
     return True
-
-
-class FakeAcoustId(HomeAssistantView):
-    """Answers like https://api.acoustid.org/v2/lookup (format=json, meta=recordings releasegroups)"""
-
-    url = "/api/fp_fake/acoustid"
-    name = "api:fp_fake:acoustid"
-    requires_auth = False
-
-    def __init__(self, data: dict[str, Any]) -> None:
-        self.data = data
-
-    async def post(self, request: web.Request) -> web.Response:
-        form = dict(await request.post())
-        self.data["acoustid"].append({k: str(v) for k, v in form.items()})
-        if str(form.get("client", "")).startswith("badkey"):
-            return web.json_response({"status": "error", "error": {"code": 4, "message": "invalid API key"}}, status=400)
-        fp = str(form.get("fingerprint", ""))
-        rec = {"id": "0f2e7c1a-demo-recording", "title": "Demo Song", "artists": [{"name": "Demo Band"}, {"name": "Guest", "joinphrase": ""}], "releasegroups": [{"title": "Demo Album"}]}
-        rec["artists"][0]["joinphrase"] = " feat. "
-        if "match" in fp:
-            results = [{"id": "r1", "score": 0.93, "recordings": [rec]}, {"id": "r2", "score": 0.6, "recordings": [{"id": "x", "title": "Other"}]}]
-        elif "weak" in fp:
-            results = [{"id": "r3", "score": 0.2, "recordings": [rec]}]
-        else:
-            results = []
-        return web.json_response({"status": "ok", "results": results})
 
 
 async def async_setup_entry(hass: HomeAssistant, entry) -> bool:

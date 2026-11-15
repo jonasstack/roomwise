@@ -29,8 +29,6 @@ import { PetController } from './pets';
 import { scheduleClientReport } from './client-info';
 import { furnitureContents, furnitureLabel, isWifiContent, isWifiPiece, resolveFurniture, wifiContentTarget } from './furniture';
 import { hasMediaControls } from './media-controls';
-import { SONG_EVENT, deviceOn, songDevices, songEnabled, type SongDevice, type SongResult } from './song';
-import type { SongListener } from './song-listener';
 import { formatState, fireEvent, navigate } from './ha';
 import { mergePlan, sharesPlans, watchPlan, type SharedPlan } from './shared-plans';
 import { traceHref } from './trace';
@@ -74,10 +72,7 @@ export class FloorplanCard extends LitElement {
     _texts: { state: true },
     _shared: { state: true },
     _planState: { state: true },
-    _mic: { state: true },
   };
-  /** Name of the media device the microphone listens for right now (song.ts); shown as long as it does */
-  declare _mic?: string;
   /** Shared floor plan (companion integration) as last pushed; undefined: none, or not loaded yet */
   declare _shared?: SharedPlan;
   /** A shared plan that cannot be shown (yet): loading, deleted, or no companion that keeps shared plans */
@@ -219,7 +214,6 @@ export class FloorplanCard extends LitElement {
     this._config = withHrRooms(this._base, this._hass);
     if (!this._config.floors.some((f) => f.id === this._floorId)) this._floorId = this.defaultFloorId;
     this.computeRelevant();
-    this.followSongs();
     this.layer?.setCardConfig(this._config, this._base);
   }
 
@@ -315,56 +309,6 @@ export class FloorplanCard extends LitElement {
     // Hausregeln (optional): one shared live subscription per connection
     if (!old || old.connection !== hass.connection) this.watchHouseRules(hass);
     else this.hrLink && houseRules(hass);
-    this.followSongs();
-  }
-
-  /** Song recognition (song.ts): the media devices this browser was picked to listen for — none unless the owner chose it */
-  private song?: SongListener;
-  private songCfg?: FloorplanCardConfig;
-  private songList: SongDevice[] = [];
-  private songTold = false;
-  private followSongs() {
-    const hass = this._hass;
-    if (!hass || !this.isConnected) return;
-    if (this.songCfg !== this._config) {
-      this.songCfg = this._config;
-      this.songList = songDevices(this._config, (x) => {
-        const k = 'kind' in x && x.kind ? resolveFurniture(x as FurnitureConfig).k : undefined;
-        return x.name || (x.entity ? hass.states[x.entity]?.attributes.friendly_name : undefined) || (k ? furnitureLabel(k) : t('media.device'));
-      });
-    }
-    if (!this.songList.length && !this.song) return;
-    // the scheduler is loaded only on a browser that listens (it stays out of the entry file)
-    if (!this.song) {
-      if (!this.songLoading)
-        this.songLoading = import('./song-listener').then(({ SongListener }) => {
-          if (this.isConnected && !this.song) this.song = this.makeSongListener(SongListener);
-          this.songLoading = undefined;
-          this.followSongs();
-        });
-      return;
-    }
-    this.song.update(this.songList.map((d) => ({ ...d, on: deviceOn(hass, d.entity) === true })));
-  }
-
-  private songLoading?: Promise<void>;
-  private makeSongListener(L: typeof SongListener): SongListener {
-    return new L({
-      lookup: async (d, fingerprint, duration) => {
-        const card = serverKey(this._config);
-        const r = await this._hass!.callWS<{ match: boolean; song?: SongResult }>({ type: 'floorplan_card/song/lookup', card_id: card, item_id: d.item, name: d.name, fingerprint, duration });
-        if (r?.song) window.dispatchEvent(new CustomEvent(SONG_EVENT, { detail: { card, item: d.item, song: r.song } }));
-        return r?.song ?? null;
-      },
-      changed: () => {
-        this._mic = this.song?.listening;
-        const b = this.song?.blocked;
-        if (b && b !== 'no_server' && !this.songTold) {
-          this.songTold = true;
-          this.ensureLayer().toast(t(b === 'denied' ? 'song.denied' : b === 'no_mic' ? 'song.no_mic' : 'song.unsupported'));
-        }
-      },
-    });
   }
 
   /** Hausregeln' Fenster-Warnung beim Gehen is on: the card shows that one (a tap acknowledges it there); its own
@@ -708,7 +652,6 @@ export class FloorplanCard extends LitElement {
       this.fsTimer = window.setTimeout(() => (this._fsOffer = false), 5000);
     }
     if (this._hass) this.syncCompanion();
-    this.followSongs();
     this.applyTheme();
     this.ro = new ResizeObserver(() => {
       const r = this.getBoundingClientRect();
@@ -725,11 +668,6 @@ export class FloorplanCard extends LitElement {
     super.disconnectedCallback();
     this.pets.stop();
     this.vacuums.stop();
-    // the microphone goes off with the card
-    this.song?.dispose();
-    this.song = undefined;
-    this._mic = undefined;
-    this.songCfg = undefined;
     this.offHr?.();
     this.offHrPulse?.();
     this.offHr = this.offHrPulse = undefined;
@@ -1002,8 +940,7 @@ export class FloorplanCard extends LitElement {
       hass: this._hass!,
       node: this,
       optimistic: this.optimistic,
-      // a media device that recognizes songs shows the last one: the popup asks the companion with the card's key
-      openPopup: (target) => this.ensureLayer().openPopup(songEnabled(target.media) && target.item ? { ...target, cardKey: serverKey(this._config) } : target),
+      openPopup: (target) => this.ensureLayer().openPopup(target),
       confirm: (text) => this.ensureLayer().confirm(text),
       confirmOpen: (req) => this.ensureLayer().confirmOpen(req),
       toast: (text) => this.ensureLayer().toast(text),
@@ -1457,11 +1394,6 @@ export class FloorplanCard extends LitElement {
         </div>
         ${multi ? this.renderFloorSlider(cfg) : nothing}
         ${strip && floor ? this.renderStrip(floor, strip.cols) : nothing}
-        ${this._mic
-          ? html`<div class="mic-on" role="status" aria-live="polite">
-              <ha-icon icon="mdi:microphone"></ha-icon><span>${t('song.listening', { name: this._mic })}</span>
-            </div>`
-          : nothing}
         ${this._fsOffer
           ? html`<button class="fs-offer pressable" @click=${this.toggleFullscreen}>
               <ha-icon icon="mdi:fullscreen"></ha-icon><span>${t('card.fullscreen')}</span>
@@ -1767,36 +1699,6 @@ export class FloorplanCard extends LitElement {
       }
       .chrome .left > * {
         pointer-events: auto;
-      }
-      /* the microphone listens for a song (song.ts): always visible while it does */
-      .mic-on {
-        position: absolute;
-        left: 50%;
-        top: calc(var(--fp-space-4) + 4px);
-        transform: translateX(-50%);
-        z-index: 3;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        max-width: calc(100% - 32px);
-        padding: 6px 14px 6px 10px;
-        border-radius: var(--fp-radius-full);
-        background: color-mix(in srgb, var(--fp-surface) 92%, transparent);
-        color: var(--fp-label);
-        box-shadow: var(--fp-shadow-2);
-        font-size: var(--fp-text-footnote);
-        font-weight: var(--fp-weight-semibold);
-        pointer-events: none;
-        --mdc-icon-size: 18px;
-      }
-      .mic-on ha-icon {
-        color: var(--fp-red);
-        flex: none;
-      }
-      .mic-on span {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
       }
       /* offered for 5 s after opening: full screen */
       .fs-offer {

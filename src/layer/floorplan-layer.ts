@@ -23,8 +23,7 @@ import '../components/slide-confirm';
 import type { OpenRequest } from '../access';
 import { houseRules, loadHouseRulesUi, type HrRule } from '../house-rules';
 
-/** The editor, the car popup (it brings three.js for its picture) and the media popup (own buttons, recognized
- *  song) are chunks of their own: fetched the first time they open, so the card starts without them */
+/** The editor, the car popup (it brings three.js for its picture) and the media popup (own buttons) are chunks of their own: fetched the first time they open, so the card starts without them */
 const LAZY: Record<string, () => Promise<unknown>> = {
   'fp-car-popup': () => import('../popups/car-popup'),
   'fp-media-player-popup': () => import('../popups/media-player-popup'),
@@ -448,7 +447,6 @@ export class FloorplanLayer extends LitElement {
         .media=${entry.media}
         .deviceName=${entry.name}
         .deviceIcon=${entry.icon}
-        .song=${entry.item && entry.cardKey ? { card: entry.cardKey, item: entry.item } : undefined}
       ></fp-media-player-popup>`;
     return staticHtml`<${tag} .ctx=${ctx} .entityId=${entry.entity}></${tag}>`;
   }

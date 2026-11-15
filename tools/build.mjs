@@ -47,19 +47,10 @@ export function syncChunks(dst, keepDays = 3) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   // chunks of earlier builds would pile up otherwise
   if (!single) rmSync('dist/chunks', { recursive: true, force: true });
-  // Chromaprint (song recognition, LGPL-2.1) stays its own file, fetched next to the chunk that uses it
-  const wasm = 'src/vendor/chromaprint/chromaprint.wasm';
-  const putWasm = () => {
-    const dir = single ? 'dist/single' : 'dist/chunks';
-    mkdirSync(dir, { recursive: true });
-    copyFileSync(wasm, `${dir}/chromaprint.wasm`);
-  };
   if (process.argv.includes('--watch')) {
-    putWasm();
     await (await esbuild.context(options)).watch();
   } else {
     await esbuild.build(options);
-    putWasm();
   }
   // 3D models (CC0) ship next to the script
   if (existsSync('models')) cpSync('models', 'dist/models', { recursive: true });

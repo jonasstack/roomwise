@@ -10,16 +10,13 @@ configuration, never in this repository or anywhere else:
 
 - **Card:** the floor plan, the links between plan and entities, view settings per user. Part of the dashboard.
 - **Companion integration:** walk times and check-offs, the state of the front door alert, learned robot vacuum
-  paths and the vacuum map alignment; with song recognition the last recognized song per media device (title,
-  artist, album, time) and the AcoustID API key you entered in its options.
+  paths and the vacuum map alignment.
 - **Wi-Fi QR codes:** the Wi-Fi networks an admin enters for the QR codes on the tablets (name, SSID, password,
   encryption) are stored locally in Home Assistant (`.storage/floorplan_card.wifi`, in plain text like every
   Home Assistant storage file), never in the dashboard configuration, the diagnostics (only their number) or the log.
   Every signed-in user can read the networks not marked "admins only" (whoever may open the popup on a tablet sees
   the QR code anyway). A QR code read from a picture in the editor is decoded in the browser; the picture is not
   uploaded or kept.
-- **Browser:** a random id of the browser (`roomwise-browser-id` in its local storage) so the editor can pick which
-  wall tablet may listen for songs.
 - **Hausregeln:** rules, rooms and their sensors, light and heating plans, house mode settings, alarm settings
   (the PIN only as a salted PBKDF2 hash, passkeys only as public keys), the history of what ran and why, and the
   daily patterns the vacation mode learns from your recorder.
@@ -31,7 +28,6 @@ reinstall picks up where you left off. Delete those files while Home Assistant i
 
 - **Card and companion integration:** nothing. Even the 3D models are served by your own Home Assistant.
   Notifications and announcements use your own `notify` and `tts` services, and only when you set them up.
-  The one exception is the optional **song recognition** (below): an audio fingerprint goes to AcoustID.
 - **Hausregeln:** only what an administrator configures:
   - the **AI provider** you choose for sentence rules (a local Ollama, or Gemini, OpenAI, Anthropic, Mistral or
     an OpenAI-compatible service). It receives the sentence you typed and the names of your rooms, devices and
@@ -42,26 +38,6 @@ reinstall picks up where you left off. Delete those files while Home Assistant i
 
 None of these is used unless you enter it under Settings in Hausregeln.
 - **Anonymous diagnostics** (Hausregeln, opt-in, off by default): see below.
-
-## Song recognition (optional, off by default)
-
-For media devices that cannot report what they play (infrared), a wall tablet's microphone can recognize the song.
-It stays off until an administrator turns it on for a device, picks the browsers that may listen, and enters an
-AcoustID API key in the companion integration's options (no key is shipped).
-
-- **Who listens:** only the browsers picked in the editor, only while the device is on, only while the page is
-  visible, every few minutes (3 by default) for about 10 seconds. The card shows "Microphone on" the whole time, and
-  the browser shows its own microphone indicator. Switching the device off or hiding the page stops it at once.
-- **What leaves the browser:** only the Chromaprint fingerprint (computed in the browser) and its duration, sent to
-  your own Home Assistant. No audio is sent or stored anywhere; it is kept in memory for the seconds it takes to
-  compute the fingerprint. Silence is not even fingerprinted.
-- **What leaves your network:** the companion integration sends that fingerprint, its duration and your API key to
-  [AcoustID](https://acoustid.org) (`api.acoustid.org`, or your own AcoustID server). AcoustID answers with matching
-  recordings from MusicBrainz. See AcoustID's own privacy policy.
-- **What is kept:** only the last recognized song per device (title, artist, album, time), shown in the media popup,
-  as the sensor "… now playing" and in the event `floorplan_card_song`. No fingerprints, no history.
-- **Microphone permission:** asked by the browser the first time it listens (or when you tap "Allow microphone"
-  in the editor). It only works over HTTPS (or on localhost). If you deny it, that browser stops listening.
 
 ## Anonymous diagnostics (opt-in, off by default)
 
@@ -132,28 +108,6 @@ Log. Alle angemeldeten Benutzer können die Netze lesen, die nicht „Nur für A
 Tablet öffnen darf, sieht den QR-Code ohnehin). Ein QR-Code, der im Editor aus einem Bild gelesen wird, wird im
 Browser entschlüsselt; das Bild wird weder hochgeladen noch gespeichert. Beim Löschen der Integration wird die
 Datei mit entfernt.
-
-### Lied-Erkennung (optional, standardmäßig aus)
-
-Bei Mediengeräten, die nicht melden, was sie spielen (Infrarot), kann das Mikrofon eines Wandtablets das Lied
-erkennen. Das bleibt aus, bis ein Administrator es für ein Gerät einschaltet, die Browser auswählt, die zuhören
-dürfen, und in den Optionen der Begleit-Integration einen AcoustID-API-Schlüssel einträgt (mitgeliefert wird keiner).
-
-- **Wer zuhört:** nur die im Editor ausgewählten Browser, nur solange das Gerät an und die Seite sichtbar ist, alle
-  paar Minuten (standardmäßig 3) für etwa 10 Sekunden. Die Karte zeigt die ganze Zeit „Mikrofon an“, der Browser
-  zusätzlich sein eigenes Zeichen. Gerät aus oder Seite verdeckt: sofort Schluss.
-- **Was den Browser verlässt:** nur der im Browser berechnete Chromaprint-Fingerabdruck und seine Dauer, an dein
-  eigenes Home Assistant. Ton wird nirgends verschickt oder gespeichert; er liegt nur für die Sekunden im Speicher,
-  die die Berechnung braucht. Von Stille wird nicht einmal ein Fingerabdruck berechnet.
-- **Was dein Netzwerk verlässt:** Die Begleit-Integration schickt diesen Fingerabdruck, die Dauer und deinen
-  API-Schlüssel an [AcoustID](https://acoustid.org) (`api.acoustid.org` oder deinen eigenen AcoustID-Server).
-  AcoustID antwortet mit passenden Aufnahmen aus MusicBrainz. Es gilt die Datenschutzerklärung von AcoustID.
-- **Was bleibt:** nur das zuletzt erkannte Lied je Gerät (Titel, Interpret, Album, Zeit) – im Medien-Popup, als
-  Sensor „… läuft gerade“ und im Ereignis `floorplan_card_song`. Keine Fingerabdrücke, kein Verlauf.
-- **Mikrofon-Erlaubnis:** fragt der Browser beim ersten Zuhören (oder wenn du im Editor „Mikrofon erlauben“
-  tippst). Das geht nur über HTTPS (oder localhost). Lehnst du ab, hört dieser Browser nicht mehr zu.
-- **Im Browser gespeichert:** eine zufällige Kennung (`roomwise-browser-id` im lokalen Speicher), damit der Editor
-  auswählen kann, welches Tablet zuhören darf.
 
 ### Anonyme Diagnosedaten (freiwillig, standardmäßig aus)
 
