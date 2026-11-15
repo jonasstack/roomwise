@@ -17,6 +17,7 @@ import type {
   VacuumLive,
   VacuumRoomFit,
   VacuumTransform,
+  FreeWallConfig,
 } from '../types';
 import type { FloorplanCard } from '../floorplan-card';
 import type { FloorplanLayer } from '../layer/floorplan-layer';
@@ -26,6 +27,7 @@ import '../components/vacuum-start';
 import { autoFit, autoFitMap, fitPairs, mapperOf, roomMatch, sameRoom, toPlan, toRobot, type LearnedFloor, type VacuumMap } from '../vacuum-live';
 import type { FpPlan } from '../components/fp-plan';
 import { boundsOf, closestPointOnSegment, floorBounds, pointInPolygon, pointsToPath, polylabel, round, snapPoint, type SnapResult } from '../geometry';
+import { passagesBetween, roomsBeside, sharedWalls } from '../walls';
 import { PLAN_MAX_BYTES, normalizeConfig, planFile, readPlanFile, uid } from '../config';
 import { moveWalls, planWalls, roomFromMap, snapToMap, wallEnds, wallLines } from '../vac-plan';
 import { applyEdgeMove, edgeMove, sharedCorners, snapCorner, snapEdge, type CornerRef, type EdgeMove } from './wall-drag';
@@ -34,6 +36,8 @@ import type { HrMarks } from '../components/fp-plan';
 import { t } from '../i18n';
 import { floorBelow, floorLevel, floorOfEntity, floorShort, orderedFloors, reorderLevels } from '../levels';
 import { askStairsOnStart, onStairsEvent, startStairsTool, stairsHint, stairsTap } from './stairs-tool';
+import { resetSplit, splitHint, splitHover, splitOverlay, splitPoints, splitTap } from './split-tool';
+import { finishWall, freeWallAt, resetWall, wallHint, wallHover, wallOverlay, wallPoints, wallTap } from './wall-tool';
 import { CATEGORIES, FURNITURE_BY_KIND, LIBRARY, categoryLabel, drawFurniture, snapsToWall, type LibraryItem } from '../furniture';
 import { saveCardConfig } from './save';
 import { renderTracePanel, traceOverlay, traceTap, patchTrace, storeTraceImages, dropUnusedImages, type TraceMode } from './trace-panel';
@@ -52,15 +56,15 @@ import { markTourSeen, tourSeen } from './tour';
 import './tour';
 import { labelStyleOf, setLabelStyle, type LabelStyle } from '../components/label-style';
 
-export type Tool = 'select' | 'draw' | 'door' | 'window' | 'garage' | 'stairs';
+export type Tool = 'select' | 'draw' | 'door' | 'window' | 'garage' | 'passage' | 'stairs' | 'split' | 'wall';
 export type Panel = 'inspect' | 'furniture' | 'settings' | 'rules' | 'trace' | null;
-export type Selection = { kind: 'room' | 'device' | 'opening' | 'furniture'; id: string } | null;
+export type Selection = { kind: 'room' | 'device' | 'opening' | 'furniture' | 'wall'; id: string } | null;
 
 /** First entry of the furniture library: nothing fits — any Home Assistant entity, placed as a device marker */
 const OTHER = { id: 'other', de: 'Sonstige', en: 'Other', icon: 'mdi:dots-horizontal-circle-outline' };
 
 interface Drag {
-  type: 'trace' | 'vertex' | 'edge' | 'room' | 'device' | 'opening' | 'opening-a' | 'opening-b' | 'furniture' | 'rotate' | 'resize' | 'rect' | 'point' | 'label' | 'vacmap' | 'vacrot' | 'vacscale' | 'vaccrop' | 'vacedge' | 'planwall';
+  type: 'trace' | 'vertex' | 'edge' | 'room' | 'device' | 'opening' | 'opening-a' | 'opening-b' | 'wall-a' | 'wall-b' | 'furniture' | 'rotate' | 'resize' | 'rect' | 'point' | 'label' | 'vacmap' | 'vacrot' | 'vacscale' | 'vaccrop' | 'vacedge' | 'planwall';
   id?: string;
   index?: number;
   start: Point;
@@ -1016,7 +1020,7 @@ export class FloorplanEditorUI extends LitElement {
     return this.renderRoot.querySelector('fp-plan');
   }
 
-  private get scale() {
+  get scale() {
     return this.plan?.panZoom?.scale ?? 1;
   }
 
@@ -1106,10 +1110,11 @@ export class FloorplanEditorUI extends LitElement {
     this.refit();
   }
 
-  findSel(sel: Selection): RoomConfig | DeviceConfig | OpeningConfig | FurnitureConfig | undefined {
+  findSel(sel: Selection): RoomConfig | DeviceConfig | OpeningConfig | FurnitureConfig | FreeWallConfig | undefined {
     if (!sel) return undefined;
     const f = this.floor;
     if (sel.kind === 'room') return f.rooms.find((r) => r.id === sel.id);
+    if (sel.kind === 'wall') return f.walls?.find((w) => w.id === sel.id);
     if (sel.kind === 'device') return f.devices.find((d) => d.id === sel.id);
     if (sel.kind === 'opening') return f.openings?.find((o) => o.id === sel.id);
     return f.furniture?.find((x) => x.id === sel.id);
@@ -1135,7 +1140,10 @@ export class FloorplanEditorUI extends LitElement {
   }
 
   private polygons(exclude?: { room: string; index: number }): Point[][] {
-    return this.floor.rooms.map((r) => (exclude && r.id === exclude.room ? r.points.filter((_, i) => i !== exclude.index) : r.points));
+    const rooms = this.floor.rooms.map((r) => (exclude && r.id === exclude.room ? r.points.filter((_, i) => i !== exclude.index) : r.points));
+    // walls standing on their own: their ends and lines snap too (not the one being dragged)
+    const walls = (this.floor.walls ?? []).filter((w) => !exclude || exclude.room !== `wall:${w.id}`).map((w) => [w.a, w.b]);
+    return [...rooms, ...walls];
   }
 
   /** The floor below (with indoor rooms): shown as a ghost, its corners and walls snap */
@@ -1179,6 +1187,11 @@ export class FloorplanEditorUI extends LitElement {
         const c = closestPointOnSegment(p, a, b);
         if (c.dist <= tolPx / this.scale && (!best || c.dist < best.dist)) best = { a, b, point: c.point, t: c.t, dist: c.dist };
       }
+    // a wall standing on its own takes a door or a window too
+    for (const w of this.floor.walls ?? []) {
+      const c = closestPointOnSegment(p, w.a, w.b);
+      if (c.dist <= tolPx / this.scale && (!best || c.dist < best.dist)) best = { a: w.a, b: w.b, point: c.point, t: c.t, dist: c.dist };
+    }
     return best;
   }
 
@@ -1204,6 +1217,8 @@ export class FloorplanEditorUI extends LitElement {
       if (w) this.kbCursor = undefined;
       if (this._tool === 'draw' && w) this._hover = this.snap(w, undefined, this._drawing.length ? [this._drawing] : []);
       else if (this._hover) this._hover = null;
+      if (this._tool === 'split') splitHover(this, w);
+      if (this._tool === 'wall') wallHover(this, w);
     },
   };
 
@@ -1214,12 +1229,20 @@ export class FloorplanEditorUI extends LitElement {
     const h = this.parseHandle(tg);
     if (this._tool === 'draw') return this.addDrawPoint(w, h);
     if (this._tool === 'door' || this._tool === 'window' || this._tool === 'garage') return this.placeOpening(w, this._tool);
+    if (this._tool === 'passage') return this.placePassage(w);
     if (this._tool === 'stairs') return stairsTap(this, w);
+    if (this._tool === 'split') return splitTap(this, w);
+    if (this._tool === 'wall') return wallTap(this, w);
     if (h?.startsWith('label:')) return this.select({ kind: 'room', id: h.slice(6) });
     if (h) {
       if (h.startsWith('v:')) this._vertex = Number(h.slice(2));
       else if (h.startsWith('m:')) this.insertVertex(Number(h.slice(2)));
       return;
+    }
+    // a wall standing on its own: it lies in a room, so it is looked for before the room
+    if (tg.kind === 'background' || tg.kind === 'room') {
+      const fw = freeWallAt(this, w);
+      if (fw) return this.select({ kind: 'wall', id: fw.id });
     }
     if (tg.kind === 'background') return this.select(null);
     if (tg.kind === 'room' && this._sel?.kind === 'room' && this._sel.id === tg.id) return;
@@ -1256,6 +1279,44 @@ export class FloorplanEditorUI extends LitElement {
   removeLastPoint = () => {
     this._drawing = this._drawing.slice(0, -1);
   };
+
+  /** "Wand entfernen": a tap on a wall between two rooms opens it over its whole length (one straight run) */
+  private placePassage(w: Point) {
+    const e = this.nearestEdge(w);
+    if (!e) return this.layer.toast(t('editor.passage_hint'));
+    // the two rooms right at the tapped spot (a long room edge may border several rooms)
+    const el = Math.hypot(e.b[0] - e.a[0], e.b[1] - e.a[1]) || 1;
+    const ed: Point = [(e.b[0] - e.a[0]) / el, (e.b[1] - e.a[1]) / el];
+    const pair = roomsBeside(this.floor, [e.point[0] - ed[0] * 4, e.point[1] - ed[1] * 4], [e.point[0] + ed[0] * 4, e.point[1] + ed[1] * 4]);
+    if (!pair) return this.layer.toast(t('editor.passage_outside'));
+    const runs = sharedWalls(this.floor, pair[0].id, pair[1].id);
+    const run = runs.find(([a, b]) => closestPointOnSegment(w, a, b).dist < 40) ?? runs[0];
+    if (!run) return this.layer.toast(t('editor.passage_outside'));
+    const id = this.openWall(run);
+    this._tool = 'select';
+    if (id) this.select({ kind: 'opening', id });
+  }
+
+  /** A passage over one straight run of wall (replacing passages already on it); returns its id */
+  openWall(run: [Point, Point]): string | undefined {
+    const [a, b] = run;
+    const id = uid('open');
+    this.mutate((_d, f) => {
+      const on = (o: OpeningConfig) => o.type === 'passage' && closestPointOnSegment(o.a, a, b).dist < 2 && closestPointOnSegment(o.b, a, b).dist < 2;
+      f.openings = [...(f.openings ?? []).filter((o) => !on(o)), { id, type: 'passage', a: [round(a[0]), round(a[1])], b: [round(b[0]), round(b[1])] }];
+    });
+    return id;
+  }
+
+  /** "Wand wieder einsetzen": the passages between two rooms go, the wall is back */
+  closeWalls(roomA: string, roomB: string) {
+    const ids = new Set(passagesBetween(this.floor, roomA, roomB).map((o) => o.id));
+    if (!ids.size) return;
+    this.mutate((_d, f) => {
+      f.openings = (f.openings ?? []).filter((o) => !ids.has(o.id));
+    });
+    if (this._sel?.kind === 'opening' && ids.has(this._sel.id)) this.select(null);
+  }
 
   private placeOpening(w: Point, type: 'door' | 'window' | 'garage') {
     const e = this.nearestEdge(w);
@@ -1401,6 +1462,11 @@ export class FloorplanEditorUI extends LitElement {
         if (!mv) return false;
         this.snapshot();
         this.drag = { type: 'edge', id: sel.id, index: Number(h.slice(2)), start: w, orig: { mv, rooms: structuredClone(this.floor.rooms), openings: structuredClone(this.floor.openings ?? []) }, moved: false };
+        return true;
+      }
+      if ((h === 'wa' || h === 'wb') && sel.kind === 'wall') {
+        this.snapshot();
+        this.drag = { type: h === 'wa' ? 'wall-a' : 'wall-b', id: sel.id, start: w, orig: structuredClone(this.findSel(sel)), moved: false };
         return true;
       }
       if ((h === 'oa' || h === 'ob') && sel.kind === 'opening') {
@@ -1678,6 +1744,19 @@ export class FloorplanEditorUI extends LitElement {
           const it = f.furniture!.find((x) => x.id === d.id)!;
           it.w = Math.max(20, Math.round((Math.abs(lx) * 2) / 5) * 5);
           it.h = Math.max(20, Math.round((Math.abs(ly) * 2) / 5) * 5);
+        }, false);
+        break;
+      }
+      case 'wall-a':
+      case 'wall-b': {
+        const s = this.snap(w, { room: `wall:${d.id}`, index: -1 });
+        this._hover = s;
+        const p: Point = [round(s.point[0]), round(s.point[1])];
+        this.mutate((_x, f) => {
+          const it = f.walls?.find((x) => x.id === d.id);
+          if (!it) return;
+          if (d.type === 'wall-a') it.a = p;
+          else it.b = p;
         }, false);
         break;
       }
@@ -1993,7 +2072,7 @@ export class FloorplanEditorUI extends LitElement {
         const x = f.furniture!.find((p) => p.id === sel.id)!;
         [x.x, x.y] = mv([x.x, x.y]);
       } else {
-        const o = f.openings!.find((p) => p.id === sel.id)!;
+        const o = sel.kind === 'wall' ? f.walls!.find((p) => p.id === sel.id)! : f.openings!.find((p) => p.id === sel.id)!;
         o.a = mv(o.a);
         o.b = mv(o.b);
       }
@@ -2009,6 +2088,7 @@ export class FloorplanEditorUI extends LitElement {
       if (sel.kind === 'device') f.devices = f.devices.filter((r) => r.id !== sel.id);
       if (sel.kind === 'opening') f.openings = f.openings?.filter((r) => r.id !== sel.id);
       if (sel.kind === 'furniture') f.furniture = f.furniture?.filter((r) => r.id !== sel.id);
+      if (sel.kind === 'wall') f.walls = f.walls?.filter((r) => r.id !== sel.id);
     });
     this.select(null);
   };
@@ -2119,7 +2199,11 @@ export class FloorplanEditorUI extends LitElement {
       else if (this._entEdit) this._entEdit = undefined;
       else if (this._yaml) this._yaml = false;
       else if (this._drawing.length) this.cancelDrawing();
-      else if (this._tool !== 'select') this._tool = 'select';
+      else if (this._tool === 'wall') finishWall(this);
+      else if (this._tool !== 'select') {
+        resetSplit(this);
+        this._tool = 'select';
+      }
       else if (this._sel) this.select(null);
     } else if (this._tool === 'draw' && !typing && !control && (e.key.startsWith('Arrow') || (e.key === 'Enter' && this.kbCursor))) {
       // drawing by keyboard: arrows move a cross on the grid (Shift: 5 steps), Enter sets a corner; Enter on the
@@ -2440,6 +2524,8 @@ export class FloorplanEditorUI extends LitElement {
         aria-pressed=${this._tool === id ? 'true' : 'false'}
         data-tool=${id}
         @click=${() => {
+          resetSplit(this);
+          resetWall(this);
           this._tool = id;
           this._drawing = [];
           if (id !== 'select') {
@@ -2471,7 +2557,8 @@ export class FloorplanEditorUI extends LitElement {
     return html`<nav class="tools">
       ${tool('select', 'mdi:cursor-default-outline', t('editor.select'))} ${tool('draw', 'mdi:vector-square-edit', t('editor.draw'))}
       ${tool('door', 'mdi:door', t('editor.door'))} ${tool('window', 'mdi:window-closed-variant', t('editor.window'))}
-      ${tool('garage', 'mdi:garage', t('editor.garage_door'))} ${tool('stairs', 'mdi:stairs', t('editor.stairs_tool'))}
+      ${tool('garage', 'mdi:garage', t('editor.garage_door'))} ${tool('passage', 'mdi:arrow-expand-horizontal', t('editor.passage_tool'))}
+      ${tool('stairs', 'mdi:stairs', t('editor.stairs_tool'))} ${tool('split', 'mdi:call-split', t('split.tool'))} ${tool('wall', 'mdi:wall', t('wall.tool'))}
       <span class="sep"></span>
       ${panel('furniture', 'mdi:sofa-outline', t('editor.furniture'))}
       ${panel('settings', 'mdi:tune-variant', t('editor.settings'))} ${panel('trace', 'mdi:image-outline', t('trace.title'))}
@@ -2520,7 +2607,10 @@ export class FloorplanEditorUI extends LitElement {
           : nothing}
       </div>`;
     if (this._tool === 'door' || this._tool === 'window' || this._tool === 'garage') return html`<div class="hint"><span>${t('editor.opening_hint')}</span></div>`;
+    if (this._tool === 'passage') return html`<div class="hint"><span>${t('editor.passage_hint')}</span></div>`;
     if (this._tool === 'stairs') return stairsHint(this);
+    if (this._tool === 'split') return splitHint(this);
+    if (this._tool === 'wall') return wallHint(this);
     // an empty plan: say where to start
     if (this._tool === 'select' && !this._panel && !this.floor.rooms.length)
       return html`<div class="hint empty-hint">
@@ -2547,6 +2637,11 @@ export class FloorplanEditorUI extends LitElement {
     if (sel?.kind === 'room') {
       const r = this.findSel(sel) as RoomConfig | undefined;
       if (r) parts.push(svg`<path class="ed-sel" d=${pointsToPath(r.points)}></path>`);
+    }
+    parts.push(...splitOverlay(this), ...wallOverlay(this));
+    if (sel?.kind === 'wall') {
+      const fw = this.findSel(sel) as FreeWallConfig | undefined;
+      if (fw) parts.push(svg`<line class="ed-sel" x1=${fw.a[0]} y1=${fw.a[1]} x2=${fw.b[0]} y2=${fw.b[1]}></line>`);
     }
     const pts = this._drawing;
     if (pts.length) {
@@ -2823,6 +2918,11 @@ export class FloorplanEditorUI extends LitElement {
       this._drawing.forEach((p, i) =>
         out.push(html`<div class="h vertex small ${i === 0 && this._drawing.length >= 3 ? 'first' : ''}" data-handle=${`d:${i}`} style=${`left:${p[0]}px;top:${p[1]}px`}></div>`),
       );
+    for (const p of [...splitPoints(this), ...wallPoints(this)]) out.push(html`<div class="h snap vertex" style=${`left:${p[0]}px;top:${p[1]}px`}></div>`);
+    if (this._sel?.kind === 'wall' && this._tool === 'select') {
+      const fw = this.findSel(this._sel) as FreeWallConfig | undefined;
+      if (fw) for (const [hk, p] of [['wa', fw.a], ['wb', fw.b]] as const) out.push(html`<div class="h vertex" data-handle=${hk} style=${`left:${p[0]}px;top:${p[1]}px`}></div>`);
+    }
     if (this._hover?.point && this._tool === 'draw' && (!this.drag || this.drag.type === 'point'))
       out.push(html`<div class="h snap ${this._hover.kind}" style=${`left:${this._hover.point[0]}px;top:${this._hover.point[1]}px`}></div>`);
     if (this._hover?.point && this.drag?.type === 'vertex' && this._hover.kind !== 'grid' && this._hover.kind !== 'none')
@@ -2846,7 +2946,9 @@ export class FloorplanEditorUI extends LitElement {
                 ? t('editor.device')
                 : this._sel?.kind === 'opening'
                   ? t('editor.opening')
-                  : t('editor.furniture_item');
+                  : this._sel?.kind === 'wall'
+                    ? t('wall.title')
+                    : t('editor.furniture_item');
     return html`<div class="panel-head">
         <div class="panel-title">${title}</div>
         <button class="icon-btn pressable close" aria-label=${t('common.close')} @click=${() => (this._panel === 'inspect' ? this.select(null) : (this._panel = null))}>
@@ -3306,6 +3408,21 @@ export class FloorplanEditorUI extends LitElement {
       .empty-hint {
         padding-left: var(--fp-space-4);
         border-radius: var(--fp-radius-l);
+      }
+      /* "Raum teilen": with or without a wall */
+      .split-hint {
+        flex-wrap: wrap;
+        justify-content: center;
+        padding-left: var(--fp-space-4);
+        border-radius: var(--fp-radius-l);
+      }
+      .split-hint .split-kinds {
+        display: inline-flex;
+        gap: 4px;
+      }
+      .split-hint .chip {
+        min-height: 36px;
+        white-space: nowrap;
       }
       /* "Treppe setzen": question, kind of stairs, a room to put them in */
       .stairs-hint {

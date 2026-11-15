@@ -393,7 +393,7 @@ export function wayToDoor(floor: FloorConfig, from: Point, door: OpeningConfig):
   const target: Point = [fd.mid[0] + fd.n[0] * 42 * k, fd.mid[1] + fd.n[1] * 42 * k];
   const start = rooms.find((r) => pointInPolygon(from, r.points));
   // breadth-first search over rooms joined by doors
-  const links = (floor.openings ?? []).filter((o) => o.type === 'door' && o !== door).map((o) => ({ o, ...sides(o, rooms) })).filter((l) => l.a && l.b);
+  const links = (floor.openings ?? []).filter((o) => (o.type === 'door' || o.type === 'passage') && o !== door).map((o) => ({ o, ...sides(o, rooms) })).filter((l) => l.a && l.b);
   const prev = new Map<RoomConfig, { room: RoomConfig; link: (typeof links)[number] } | null>();
   if (start) {
     prev.set(start, null);

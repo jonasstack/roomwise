@@ -20,8 +20,11 @@ it fires. Only users set up as automations (Node-RED …), the minutes right aft
 forbids are put back right away. Several rules for one light: never-on/keep-on win, then the more specific
 "while" rule (more conditions), then the last "when" rule that fired.
 
-What the plan sends is sent once and given time (fade, late radios) before it is sent again, at most MAX_SENDS
-times: a lamp that reports its colour or brightness its own way is not spammed. A lamp that is off and gets a
+What the plan sends is sent once and given time (fade, late radios) before it is sent again – and only again when the
+lamp did not react at all (the call got lost), at most MAX_SENDS times: a lamp that reports its colour or brightness
+its own way is not sent the same thing again (lamps flicker from repeated calls). Never two calls to a lamp within
+MIN_GAP; wishes that see-saw (A → B → A) wait FLAP_WINDOW; a brightness change of a lamp already in the right colour
+leaves the colour out (send_gate, lightspec.same_colour). A lamp that is off and gets a
 colour powers up in that colour (actions.call_together, lightspec.power_up).
 """
 
@@ -62,6 +65,73 @@ SETTLE = 3.0
 RESEND_WAIT = 2.5
 # … and send the same setting at most this often: a lamp that reports it differently is left alone, not spammed
 MAX_SENDS = 3
+# a lamp gets nothing new sooner than this after the last call (two wishes in quick succession: one call, not two)
+MIN_GAP = 1.5
+# a setting that comes back within this time after another one was sent (A → B → A): the wishes see-saw – wait
+# the rest of this time before switching back, so the lamp does not jump to and fro with every evaluation
+FLAP_WINDOW = 8.0
+
+
+def _key(d: dict[str, Any]) -> str:
+    return repr(sorted((k, v) for k, v in d.items() if k in ("mode", "brightness", "bri", "color", "effect", "transition", "flash")))
+
+
+def _stamp(st: Any) -> float:
+    t = getattr(st, "last_updated", None) or getattr(st, "last_changed", None)
+    try:
+        return float(t.timestamp())
+    except AttributeError:
+        return 0.0
+
+
+def consume_once(events: dict[str, tuple[dict[str, Any], str]], e: str, applied: dict[str, Any] | None = None) -> bool:
+    """A one-off result (a while rule's "afterwards": off / as before) is done once its lamp got there – `applied` is
+    the result just found reached – or once the lamp is held by hand: it is no lasting target that would switch the
+    lamp again hours later. A "when" rule's result (no "once") stays the latest result for its lamps."""
+    res = (events.get(e) or (None,))[0]
+    if not res or not res.get("once") or (applied is not None and res is not applied):
+        return False
+    events.pop(e, None)
+    return True
+
+
+def send_gate(sent: dict[str, dict[str, Any]], e: str, d: dict[str, Any], st: Any, now: float, fade: float = 0.0) -> tuple[bool, float | None]:
+    """Send setting d to lamp e now? → (send, re-check in s). Records the send in `sent`.
+
+    Lamps flicker when they get commands in quick succession, so a setting the lamp does not report exactly (it
+    rounds the brightness, reports another colour mode, is still in the middle of a fade) is not sent again:
+      * the same setting again only after its report had time (RESEND_WAIT plus the fade) and only when the lamp
+        did not react at all since the last call (its state was not updated: the call got lost) – at most MAX_SENDS;
+        a lamp that reacted but reports the setting its own way is left as it is
+      * nothing new within MIN_GAP of the last call
+      * a setting that comes straight back after another one (A → B → A within FLAP_WINDOW): the wishes see-saw –
+        back to it only when the window is over
+    """
+    key = _key(d)
+    last = sent.get(e)
+    stamp = _stamp(st)
+    if last and last["key"] == key:
+        if now < last["until"]:
+            return False, last["until"] - now
+        if last.get("done") or last["n"] >= MAX_SENDS:
+            # given up for this setting (or the lamp reacted) – until something else switches it on or off
+            if last.setdefault("seen", getattr(st, "last_changed", None)) == getattr(st, "last_changed", None):
+                return False, None
+            last = None
+        elif stamp > last.get("at", 0) + 0.05 and lightspec.roughly(getattr(st, "state", None), getattr(st, "attributes", None), d):
+            # it reacted to the call and got about there, only reports it a little differently: as far as this lamp goes
+            last["done"] = True
+            last["seen"] = getattr(st, "last_changed", None)
+            return False, None
+    if last and d.get("mode") != "off":
+        if now - last.get("at", 0) < MIN_GAP:
+            return False, MIN_GAP - (now - last.get("at", 0))
+        prev = last.get("prev")
+        if prev and prev[0] == key and now - prev[1] < FLAP_WINDOW and last["key"] != key:
+            return False, FLAP_WINDOW - (now - prev[1])
+    n = last["n"] + 1 if last and last["key"] == key else 1
+    sent[e] = {"key": key, "n": n, "at": now, "until": now + RESEND_WAIT + float(fade), "prev": (last["key"], last["at"]) if last and last["key"] != key and "at" in last else (last or {}).get("prev")}
+    return True, None
 
 
 def default_plan() -> dict[str, Any]:
@@ -730,6 +800,7 @@ class LightPlanner:
             left_since = not occupied and self.core.room_tracker.changed_at(rid) > t
             if (p["manual"] == "room_empty" and not (empty and left_since)) or (p["manual"] == "30m" and now - t < 1800):
                 held.append(e)
+                consume_once(rt["events"], e)  # a rule's "afterwards" while the lamp is set by hand: by hand wins
             else:
                 rt["manual"].pop(e, None)
 
@@ -753,23 +824,15 @@ class LightPlanner:
             rt.get("scene_done", {}).pop(e, None)
             if (not is_on[e]) if d["mode"] == "off" else lightspec.matches(st.state, st.attributes, self.core.lightcal.adjust(e, d)):
                 sent.pop(e, None)
+                consume_once(rt["events"], e, d)  # a rule's "afterwards" reached: done, no lasting target
                 continue
-            # not yet like this: the same setting again only after its report had time (a fade reports steps, radios
-            # report late), and only a few times – a lamp that reports a colour or brightness its own way stays as it is
-            key = repr(sorted((k, v) for k, v in d.items() if k in ("mode", "brightness", "bri", "color", "effect", "transition", "flash")))
-            last = sent.get(e)
-            if last and last["key"] == key:
-                if now < last["until"]:
-                    self.schedule(rid, last["until"] - now + 0.1)
-                    continue
-                if last["n"] >= MAX_SENDS:
-                    if last.setdefault("seen", st.last_changed) == st.last_changed:
-                        continue  # given up for this setting – until something else switches the lamp on or off
-                    last = None
-            n = last["n"] + 1 if last and last["key"] == key else 1
-            fade = d.get("transition") if isinstance(d.get("transition"), (int, float)) else 0
-            sent[e] = {"key": key, "n": n, "until": now + RESEND_WAIT + float(fade)}
-            changes.append((e, d))
+            # not yet like this: send it – unless that would make the lamp flicker (send_gate)
+            fade = d.get("transition") if isinstance(d.get("transition"), (int, float)) else (self._fade.get(e, 0) if d["mode"] == "off" or "bri" in d else 0)
+            ok, wait = send_gate(sent, e, d, st, now, float(fade))
+            if wait is not None:
+                self.schedule(rid, wait + 0.1)
+            if ok:
+                changes.append((e, d))
         if changes:
             for e, d in changes:
                 (owned.add if d.get("smart") and d["mode"] == "on" else owned.discard)(e)
@@ -797,13 +860,15 @@ class LightPlanner:
         for e in self._lights_of(rid, r):
             if e not in desired:
                 continue
+            # "once": done as soon as the lamp got there (or was set by hand) – not a lasting target that switches a
+            # lamp off again hours later after it was switched on by hand
             if r["after"] == "off":
-                rt["events"][e] = ({"mode": "off", "why": f"{r['name']} vorbei"}, r["id"])
+                rt["events"][e] = ({"mode": "off", "why": f"{r['name']} vorbei", "once": True}, r["id"])
             elif r["after"] == "restore" and e in snap:
                 s = snap[e]
                 # exactly as before: brightness, colour (in the lamp's own colour mode) and effect
                 was = s.get("s") or {"mode": "on" if s["on"] else "off", "brightness": round((s["b"] or 255) / 2.55), "color": "none"}
-                rt["events"][e] = ({**was, "why": f"{r['name']} vorbei: wie vorher"}, r["id"])
+                rt["events"][e] = ({**was, "why": f"{r['name']} vorbei: wie vorher", "once": True}, r["id"])
             elif r["after"] == "nothing":
                 rt["events"][e] = ({"mode": "keep", "why": f"{r['name']} vorbei"}, r["id"])
             else:
@@ -856,7 +921,11 @@ class LightPlanner:
             else:
                 st: State | None = self.hass.states.get(e)
                 # what this lamp understands: its colour mode, its effects, 0-255 or % (lightspec.py)
-                data: dict[str, Any] = lightspec.service_data(st.attributes if st else None, self.core.lightcal.adjust(e, d))
+                adj = self.core.lightcal.adjust(e, d)
+                data: dict[str, Any] = lightspec.service_data(st.attributes if st else None, adj)
+                if st and lightspec.same_colour(st.state, st.attributes, adj):
+                    # on already in this colour: only the brightness (some lamps flash when a colour is re-applied)
+                    data = {k: v for k, v in data.items() if k not in lightspec.COLOR_KEYS}
                 if "bri" in d:
                     # dimmed down ("niemand mehr da", a while rule ending): as slowly as it came on
                     data = {**fade(e, d), **data}

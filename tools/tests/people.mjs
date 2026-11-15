@@ -69,7 +69,7 @@ const iso = (min) => new Date(Date.now() + min * 60000).toISOString();
 const hrPersons = [
   { entity_id: 'person.alex', name: 'Alex', state: 'zone', place: 'home', line: 'Zuhause · seit 8:00' },
   { entity_id: 'person.sam', name: 'Sam', state: 'moving', line: 'Unterwegs · wahrscheinlich nach Hause · ca. 12 Min.', since: iso(-14), speed_kmh: 46, mode: 'car', mode_confidence: 0.9, updated: iso(-1), prediction: { destination: 'home', name: 'Zuhause', probability: 0.8, eta_min: 12, distance_km: 7.4 } },
-  { entity_id: 'person.kim', name: 'Kim', state: 'moving', line: 'Unterwegs seit 9:10', since: iso(-5), speed_kmh: 4, mode: 'walk', mode_confidence: 0.5, updated: iso(0), prediction: { destination: 'lp_1', name: 'Sportplatz', probability: 0.7, eta_min: 9, distance_km: 0.8 } },
+  { entity_id: 'person.kim', name: 'Kim', state: 'moving', line: 'Unterwegs seit 9:10', since: iso(-5), speed_kmh: 4, mode: 'walk', mode_confidence: 0.5, updated: iso(0), prediction: { destination: 'lp_1', name: 'Sportplatz', probability: 0.7, eta_min: 9, distance_km: 0.8, road_km: 1, rough: true } },
   { entity_id: 'person.lou', name: 'Lou', state: 'moving', line: 'Unterwegs', since: iso(-2), mode: null, updated: iso(0), prediction: null },
 ];
 const hr = {
@@ -107,6 +107,15 @@ await m.page.screenshot({ path: `${out}/people-trips-${scheme}.png` });
 await m.page.click('floorplan-card .pp-trips .pp-line >> nth=0');
 await wait(200);
 ok((await m.card('!card.shadowRoot.querySelector(".pp-more")')) === true, 'nochmal tippen: Details zu');
+// a rough estimate: the way by road (estimated) and the clock rounded to 5 minutes (Kim fresh again)
+await stale(9 * 60 + 7, 30);
+await m.page.click('floorplan-card .pp-trips .pp-line >> nth=1');
+await wait(300);
+const kim = await m.card('Object.fromEntries([...card.shadowRoot.querySelectorAll(".pp-more dt")].map((d) => [d.textContent, d.nextElementSibling.textContent]))');
+const kimMin = Number((kim.Ankunft ?? '').match(/:(\d{2})/)?.[1]);
+ok(kim['Noch ca. (Straße, geschätzt)'] === '1,0 km' && !kim['Noch (Luftlinie)'] && kimMin % 5 === 0, `grobe Schätzung: Weg auf der Straße, Uhrzeit auf 5 Min. gerundet: ${JSON.stringify(kim)}`);
+await m.page.click('floorplan-card .pp-trips .pp-line >> nth=1');
+await wait(200);
 // the menu covers the panel while it is open
 await m.page.evaluate(`document.querySelector('floorplan-card').shadowRoot.querySelector('.hr-chip.people').click()`);
 await wait(300);

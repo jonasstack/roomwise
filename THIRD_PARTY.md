@@ -62,5 +62,5 @@ Neither integration installs Python packages of its own (`requirements` is empty
 
 Only when an administrator sets them up in Hausregeln: the chosen AI provider (a local Ollama, or Google Gemini,
 OpenAI, Anthropic, Mistral or an OpenAI-compatible service), CallMeBot for Telegram and Signal alarm messages,
-your own SMTP server for alarm e-mails, and – only when switched on, off by default – OpenStreetMap Nominatim for
+your own SMTP server for alarm e-mails, and – on by default, can be switched off – OpenStreetMap Nominatim for
 place names (data © OpenStreetMap contributors, ODbL; usage policy: at most one request per second, cached). Their terms apply to your use of them; nothing of theirs is bundled.

@@ -6,6 +6,82 @@ All notable changes to roomwise are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0-beta.11] - 2026-11-15
+
+### Added
+
+- Editor: **"Raum teilen"** – a line right through a room cuts it into two rooms, open without a wall (an open
+  kitchen: a passage on the cut) or with a wall; L-shapes and slanted walls too. The larger part keeps the room's
+  area, lights and thermostat, furniture stays where it is. **"Mit … zusammenlegen"** joins two neighbouring rooms.
+- Editor: **"Wand ziehen"** – walls standing on their own without a room (partition, counter, room divider): a
+  polyline of straight pieces, thickness, full or half height and colour in the inspector. 2D and 3D like any wall,
+  the dog walks around them, doors and windows can go on them; plan files keep them (`floor.walls`).
+
+### Fixed
+
+- Plan files: garage doors and passages ("Wand weg") were refused when loading a plan file.
+
+### Changed
+
+- Card with several floors: **scrolling moves the floor focus** – one wheel notch is one floor (wheel up = the floor
+  above, a fast spin is one step), Ctrl/⌘ + wheel or pinching zooms; on a tablet two fingers swiping up/down change
+  the floor. One floor, the editor, or "Scrolling changes the floor" off (`scroll_floors: false`): the wheel zooms.
+- House rules "Wo ist wer": looking up place names at OpenStreetMap is **on by default** (only for phones without a
+  place name of their own; an admin can switch it off, a choice made by hand is kept). PRIVACY.md updated.
+
+### Fixed
+
+- House rules "Wo ist wer": the arrival time is no longer the straight line at the speed of the moment – the way by
+  road (straight line × detour per way of travel) at a typical speed (a car in town is slow; a fast stretch raises it by
+  a quarter at most), plus the end of the trip (parking; stops and the walk for bus and train); a trip the person
+  has made before counts first. The card shows the way left "by road, estimated" and rounds a rough arrival to
+  5 minutes.
+- House rules "Raum einstellen": buttons and boxes did not redraw after a click since 0.1.0-beta.9 (saved, but the
+  window kept the old value until it was opened again).
+- Light plan: dimming down with an inherited fade no longer sends again in the middle of the fade (lamps flickered).
+- House rules light plan: lamps no longer flicker when Hausregeln changes the brightness – a lamp that reacted but
+  reports the setting a little differently (rounded brightness, another colour mode, still fading) is not sent the
+  same call again (only a lost call is repeated), no two calls to a lamp within 1.5 s, see-sawing wishes wait 8 s,
+  and a brightness change of a lamp already in the right colour leaves the colour out.
+- House rules light plan: a while rule's "afterwards" (off / as before) is done once the lamp got there or while it
+  is set by hand – it no longer stays a lasting target that could switch a lamp off again later.
+
+### Added
+
+- Card editor: **passages – walls that are not there** ("Durchgang (Wand weg)"): the tool opens the wall a tap hits
+  between two rooms over its whole length, a room's settings remove the wall to a neighbouring room and put it
+  back; no wall, frame or lintel in 2D or 3D, only a faint line on the floor; the dog walks through. From the robot
+  vacuum's map, a wide open contact between two rooms (1.5 m or more) becomes a passage.
+
+### Added
+
+- Card: **the floors lie stacked** – the shown floor in full, the one above and the one below faint and apart (3D:
+  floors and low walls in the scene; 2D: offset outlines). Changing the floor only moves the focus: the stack glides
+  until the new floor sits where the old one was, nothing sinks away or fades.
+- Card: **news from other floors** – a washer done in the basement, water, a window open, the dog wanting out … on
+  another floor: that floor in the stack a little clearer with a label at the spot ("Waschmaschine fertig · Keller");
+  further away or out of sight, a small view of that floor at the bottom. A tap goes there and opens the thing.
+  Editor: Darstellung → "Meldungen anderer Etagen einblenden" (on by default).
+
+### Changed
+
+- Card: outdoor things (garden, driveway, car, wallbox, mower …) show on every floor, not only on the floor they are on.
+
+### Added
+
+- Robot map preview and "Etage drehen": mirror **left ↔ right** and **top ↔ bottom**, both as seen on the screen
+  (before, the one mirror flipped the map's own axis – after a quarter turn it looked upside down).
+- Card 3D: a TV (or cabinet, wall light) on the wall shows whole as soon as the walls stand high enough to hold it
+  – before it was cut off at the wall's top edge.
+- Card: **cork** as a floor (fine warm grain, faint tile seams; natural, light, dark, grey, white).
+
+### Changed
+
+- Card: the floor picker rests as a slim strip on the right edge (a dot per floor) and opens over the plan only
+  while it is touched, dragged, hovered or used with the keyboard – the plan gets the space and is shown larger.
+- Card editor: "Beim Öffnen zeigen" (the floor the card opens on) is right under "Darstellung" and per floor as a
+  switch; a person's own start floor now also wins on opening, not only after the idle time.
+
 ## [0.1.0-beta.10] - 2026-11-15
 
 ### Added
@@ -423,7 +499,8 @@ The first public alpha. roomwise has been in daily use in one home before this r
 - Pause for motion sensors while a robot vacuum cleans.
 - Setup assistant and per-feature switches; after installation only the automatic house mode runs.
 
-[Unreleased]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.10...HEAD
+[Unreleased]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.11...HEAD
+[0.1.0-beta.11]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.10...v0.1.0-beta.11
 [0.1.0-beta.10]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.9...v0.1.0-beta.10
 [0.1.0-beta.9]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.8...v0.1.0-beta.9
 [0.1.0-beta.8]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.7...v0.1.0-beta.8

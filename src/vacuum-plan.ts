@@ -5,6 +5,7 @@ import { t } from './i18n';
 import type { VacuumMapEntry } from './entry-server';
 import { floorNameFor, haFloorsSorted, skeletonFloors, type HomeKind } from './home-floors';
 import { turnFloor, type FloorTurn } from './floor-turn';
+import { sharedWalls } from './walls';
 
 /**
  * A floor plan from a robot vacuum's own map (first steps "from the vacuum's map").
@@ -18,6 +19,7 @@ import { turnFloor, type FloorTurn } from './floor-turn';
  *   3. each room's outline, simplified (staircases straightened, near-right angles snapped, tiny jogs dropped) and
  *      walls of all rooms that lie on one line put onto exactly that line — no gaps, no overlaps;
  *   4. doors where two rooms' floors touch with wall on both sides of the gap (a doorway), only when clearly so;
+ *      a wide open contact (1.5 m or more) becomes a passage – no wall there (open-plan kitchen and the like);
  *   5. the vacuum and its dock as pieces, the vacuum already aligned (the same transform), so the live view works
  *      without "lay the map onto the plan".
  * Plan units are cm. Nothing is saved here — the editor opens with the result as an unsaved draft.
@@ -762,6 +764,34 @@ function doors(W: number, H: number, raw: Int16Array, wall: Uint8Array, ox: numb
       const to = along[e - 1];
       s = e;
       const len = (to - from + 1) * cell;
+      // a wide open contact (open-plan kitchen, a room split only in the robot's app): no wall there at all
+      if (len >= 150) {
+        const ida = idOf.get(Number(la));
+        const idb = idOf.get(Number(lb));
+        const ra = ida ? rooms.find((r) => r.id === ida) : undefined;
+        const rb = idb ? rooms.find((r) => r.id === idb) : undefined;
+        if (!ra || !rb || byPair.has(`open|${ida}|${idb}`)) continue;
+        const mid = ((from + to) / 2) * cell + (o === 'v' ? oy : ox);
+        const at = (line + 0.5) * cell + (o === 'v' ? ox : oy);
+        const c = sharedLine(ra.points, rb.points, o, at, mid, cell * 2.5);
+        if (c === undefined) continue;
+        const w = Math.round(len / 5) * 5;
+        let s0 = Math.round(mid - w / 2);
+        let s1 = Math.round(mid + w / 2);
+        // never past the wall the two rooms share (an outer wall in line with it stays whole)
+        const run = sharedWalls({ id: 'tmp', name: '', rooms, devices: [] } as FloorConfig, ida!, idb!).find(([p, q]) => (o === 'v' ? Math.abs(p[0] - c) < 2 && Math.abs(q[0] - c) < 2 : Math.abs(p[1] - c) < 2 && Math.abs(q[1] - c) < 2));
+        if (!run) continue;
+        const r0 = Math.min(o === 'v' ? run[0][1] : run[0][0], o === 'v' ? run[1][1] : run[1][0]);
+        const r1 = Math.max(o === 'v' ? run[0][1] : run[0][0], o === 'v' ? run[1][1] : run[1][0]);
+        s0 = Math.max(s0, r0);
+        s1 = Math.min(s1, r1);
+        if (s1 - s0 < 100) continue;
+        const a: Point = o === 'v' ? [c, s0] : [s0, c];
+        const b: Point = o === 'v' ? [c, s1] : [s1, c];
+        byPair.set(`open|${ida}|${idb}`, 1);
+        out.push({ id: `vac_open_${out.length + 1}`, type: 'passage', a, b });
+        continue;
+      }
       if (len < 55 || len > 130) continue;
       // wall on both ends of the gap (within two cells beyond it), on either side of the line
       const wallNear = (q: number, dir: number) => {

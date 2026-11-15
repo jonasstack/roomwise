@@ -27,6 +27,10 @@ const rubber = (x: number) => (0.5 * x) / (1 + x);
  *    from the shown floor, for the plan to follow a little
  *  - `floor-select` { id }: the floor it is going to rest on (sent once, when the target is known)
  *  - `floor-size` { width }: its width changed (the plan keeps the building clear of it)
+ *
+ * At rest it is only a slim strip on the edge (a dot per floor, the shown one marked), so the plan can use the space:
+ * touching, dragging or hovering the strip (or focusing the picker with the keyboard) opens the wheel over the plan;
+ * it folds back away shortly after the finger lets go. Only the strip counts for `floor-size`.
  */
 export class FpFloorSlider extends LitElement {
   static override properties = {
@@ -34,6 +38,7 @@ export class FpFloorSlider extends LitElement {
     value: { type: String },
     compact: { type: Boolean, reflect: true },
     rows: { type: Number },
+    open: { type: Boolean, reflect: true },
   };
 
   declare floors: SliderFloor[];
@@ -41,6 +46,13 @@ export class FpFloorSlider extends LitElement {
   declare compact: boolean;
   /** visible rows (3 or 5) */
   declare rows: number;
+  /** the wheel is out (else only the slim strip shows) */
+  declare open: boolean;
+  private foldTimer?: number;
+  private hovered = false;
+  private focused = false;
+  /** the wheel was folded when this gesture began: a plain tap only opens it */
+  private openedByDown = false;
 
   /** wheel position in rows (0 = top floor); fractional while moving */
   private pos = 0;
@@ -59,6 +71,21 @@ export class FpFloorSlider extends LitElement {
     this.floors = [];
     this.compact = false;
     this.rows = 3;
+    this.open = false;
+  }
+
+  /** out now; folds back later unless a finger, the pointer or the keyboard is still on it */
+  private unfold() {
+    clearTimeout(this.foldTimer);
+    this.open = true;
+  }
+
+  private foldLater(ms = 1500) {
+    clearTimeout(this.foldTimer);
+    this.foldTimer = window.setTimeout(() => {
+      if (this.drag || this.raf || this.hovered || this.focused) return this.foldLater(ms);
+      this.open = false;
+    }, ms);
   }
 
   private get row() {
@@ -87,6 +114,7 @@ export class FpFloorSlider extends LitElement {
     cancelAnimationFrame(this.raf);
     this.raf = 0;
     clearTimeout(this.wheelTimer);
+    clearTimeout(this.foldTimer);
   }
 
   override firstUpdated() {
@@ -94,6 +122,7 @@ export class FpFloorSlider extends LitElement {
     this.paint();
     // wheel needs a non-passive listener (the page must not scroll or zoom underneath)
     this.renderRoot.querySelector('.pill')?.addEventListener('wheel', this.onWheel as EventListener, { passive: false });
+    this.renderRoot.querySelector('.hit')?.addEventListener('wheel', this.onWheel as EventListener, { passive: false });
   }
 
   override updated(changed: PropertyValues) {
@@ -151,6 +180,7 @@ export class FpFloorSlider extends LitElement {
     this.raf = 0;
     this.target = undefined;
     this.renderRoot.querySelector('.pill')?.classList.remove('moving');
+    if (this.open) this.foldLater();
   }
 
   /** Rows straight to the DOM: transform + opacity only */
@@ -170,7 +200,9 @@ export class FpFloorSlider extends LitElement {
       if (sel[i]) sel[i].style.transform = `translateY(${y.toFixed(2)}px)`;
     }
     const pill = root.querySelector('.pill');
-    pill?.setAttribute('aria-valuenow', String(Math.round(clamp(this.pos, 0, this.floors.length - 1))));
+    const at = Math.round(clamp(this.pos, 0, this.floors.length - 1));
+    pill?.setAttribute('aria-valuenow', String(at));
+    root.querySelectorAll<HTMLElement>('.strip .tick').forEach((el, i) => el.classList.toggle('on', i === at));
     this.dispatchEvent(new CustomEvent('floor-preview', { detail: { offset: this.pos - this.index }, bubbles: true, composed: true }));
   }
 
@@ -178,6 +210,8 @@ export class FpFloorSlider extends LitElement {
 
   private onDown = (e: PointerEvent) => {
     if (e.button > 0 || this.floors.length < 2) return;
+    this.openedByDown = !this.open;
+    this.unfold();
     const pill = e.currentTarget as HTMLElement;
     pill.setPointerCapture?.(e.pointerId);
     cancelAnimationFrame(this.raf);
@@ -213,6 +247,11 @@ export class FpFloorSlider extends LitElement {
     if (!d || e.pointerId !== d.id) return;
     this.drag = undefined;
     if (!d.moved) {
+      // a tap on the strip only opens the wheel (to read the floors); it folds back a little later
+      if (this.openedByDown || (e.currentTarget as HTMLElement).classList.contains('hit')) {
+        this.foldLater(2500);
+        return;
+      }
       // tap: the row under the finger
       const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
       const i = Math.round(this.pos + (e.clientY - (r.top + r.height / 2)) / this.row);
@@ -240,6 +279,8 @@ export class FpFloorSlider extends LitElement {
     if (this.floors.length < 2) return;
     e.preventDefault();
     e.stopPropagation();
+    this.unfold();
+    this.foldLater();
     const px = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
     if (!px) return;
     const notch = e.deltaMode !== 0 || (Math.abs(px) >= 50 && Number.isInteger(px));
@@ -280,6 +321,23 @@ export class FpFloorSlider extends LitElement {
     const floors = this.floors;
     const cur = floors[this.index];
     return html`<div
+      class="strip"
+      @mouseenter=${() => ((this.hovered = true), this.unfold())}
+      @mouseleave=${() => ((this.hovered = false), this.foldLater(700))}
+    >
+      ${floors.map((f, i) => html`<span class="tick ${i === this.index ? 'on' : ''} ${f.dot ?? ''}" aria-hidden="true"></span>`)}
+      <div
+        class="hit"
+        aria-hidden="true"
+        @pointerdown=${this.onDown}
+        @pointermove=${this.onMove}
+        @pointerup=${this.onUp}
+        @pointercancel=${this.onCancel}
+        @lostpointercapture=${this.onCancel}
+        @contextmenu=${(e: Event) => e.preventDefault()}
+      ></div>
+    </div>
+    <div
       class="pill"
       role="slider"
       tabindex="0"
@@ -295,6 +353,15 @@ export class FpFloorSlider extends LitElement {
       @pointercancel=${this.onCancel}
       @lostpointercapture=${this.onCancel}
       @keydown=${this.onKey}
+      @focus=${(e: FocusEvent) => {
+        // only keyboard focus keeps it open (a tap also focuses, but then it folds back as usual)
+        if (!(e.currentTarget as HTMLElement).matches(':focus-visible')) return;
+        this.focused = true;
+        this.unfold();
+      }}
+      @blur=${() => ((this.focused = false), this.foldLater(700))}
+      @mouseenter=${() => ((this.hovered = true), this.unfold())}
+      @mouseleave=${() => ((this.hovered = false), this.foldLater(700))}
       @contextmenu=${(e: Event) => e.preventDefault()}
     >
       <div class="sizer" aria-hidden="true">${floors.map((f) => html`<span>${this.compact ? f.short : f.name}<i></i></span>`)}</div>
@@ -309,12 +376,67 @@ export class FpFloorSlider extends LitElement {
     css`
       :host {
         display: block;
+        position: relative;
         user-select: none;
         -webkit-user-select: none;
         -webkit-touch-callout: none;
       }
-      .pill {
+      /* at rest: a slim strip on the edge, a dot per floor (top floor first), the shown one marked */
+      .strip {
         position: relative;
+        width: 8px;
+        padding: 6px 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        border-radius: 4px;
+        background: color-mix(in srgb, var(--fp-surface) 70%, transparent);
+        -webkit-backdrop-filter: blur(12px);
+        backdrop-filter: blur(12px);
+        box-shadow: var(--fp-shadow-1), inset 0 0 0 0.5px color-mix(in srgb, var(--fp-label) 10%, transparent);
+        transition: opacity 0.16s ease;
+      }
+      :host([open]) .strip {
+        opacity: 0;
+      }
+      .tick {
+        width: 4px;
+        height: 4px;
+        border-radius: 2px;
+        background: color-mix(in srgb, var(--fp-label) 35%, transparent);
+        transition: height 0.16s ease, background-color 0.16s ease;
+      }
+      .tick.on {
+        height: 12px;
+        background: var(--fp-label);
+      }
+      .tick.alert {
+        background: var(--fp-red);
+      }
+      .tick.pet {
+        background: var(--fp-orange);
+      }
+      /* the finger needs more than 8 px: an invisible, wider touch area over the strip */
+      .hit {
+        position: absolute;
+        right: -12px;
+        width: 40px;
+        top: 50%;
+        height: max(100%, 120px);
+        transform: translateY(-50%);
+        touch-action: none;
+        cursor: grab;
+      }
+      .pill {
+        position: absolute;
+        right: 14px;
+        top: 50%;
+        transform: translate(10px, -50%) scale(0.96);
+        transform-origin: right center;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.16s ease, transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.1);
         height: calc(var(--row) * var(--rows) + 8px);
         min-width: 64px;
         max-width: 156px;
@@ -328,6 +450,18 @@ export class FpFloorSlider extends LitElement {
         backdrop-filter: blur(18px) saturate(1.5);
         box-shadow: var(--fp-shadow-2), inset 0 0 0 0.5px color-mix(in srgb, var(--fp-label) 8%, transparent);
         isolation: isolate;
+      }
+      /* out: over the plan, next to the strip (the plan does not move for it) */
+      :host([open]) .pill {
+        opacity: 1;
+        pointer-events: auto;
+        transform: translate(0, -50%) scale(1);
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .pill,
+        .strip {
+          transition: none;
+        }
       }
       .pill.moving {
         cursor: grabbing;

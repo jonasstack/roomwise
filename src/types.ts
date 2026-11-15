@@ -208,7 +208,7 @@ export interface ManualEntityConfig {
   name?: string;
 }
 
-export type FloorType = 'none' | 'color' | 'planks' | 'herringbone' | 'tiles' | 'hex' | 'checker' | 'carpet' | 'concrete' | 'grass' | 'paving' | 'gravel' | 'decking' | 'soil' | 'water';
+export type FloorType = 'none' | 'color' | 'planks' | 'herringbone' | 'tiles' | 'hex' | 'checker' | 'carpet' | 'cork' | 'concrete' | 'grass' | 'paving' | 'gravel' | 'decking' | 'soil' | 'water';
 
 export interface FloorMaterial {
   type: FloorType;
@@ -272,10 +272,24 @@ export interface DeviceConfig extends ActionSet {
   media?: MediaControlsConfig;
 }
 
-export type OpeningType = 'door' | 'window' | 'garage';
+/** passage: no wall there at all – an open way between two rooms ("Wand weg") */
+export type OpeningType = 'door' | 'window' | 'garage' | 'passage';
 
 /** How a garage door opens: sectional (panels slide up under the ceiling), up-and-over (one tilting panel), roller */
 export type GarageVariant = 'sectional' | 'up_over' | 'roller';
+
+/** A wall standing on its own (not a room's edge): drawn with "Wand ziehen", one record per straight piece */
+export interface FreeWallConfig {
+  id: string;
+  a: Point;
+  b: Point;
+  /** cm, default: the plan's wall thickness */
+  thickness?: number;
+  /** cm above the floor; none = full height (cut like every other wall in 3D) */
+  height?: number;
+  /** paint (see paint()) */
+  color?: string;
+}
 
 export interface OpeningConfig extends ActionSet {
   id: string;
@@ -468,6 +482,8 @@ export interface FloorConfig {
   grid_snap?: boolean;
   rooms: RoomConfig[];
   devices: DeviceConfig[];
+  /** Walls standing on their own, not a room's edge: a partition, a half-height wall, a room divider ("Wand ziehen") */
+  walls?: FreeWallConfig[];
   openings?: OpeningConfig[];
   furniture?: FurnitureConfig[];
   /** A picture of the floor plan (photo, scan) under the plan in the editor, to draw the rooms on */
@@ -561,6 +577,12 @@ export interface FloorplanCardConfig {
   users?: Record<string, { name?: string; orientation?: number; view_mode?: 'auto' | '2d' | '3d'; weather?: WeatherQuality; performance?: PerfProfile; floor?: string }>;
   /** Floor (id) the card starts on and returns to after the idle time (per user: `users[id].floor`); default: the first floor */
   default_floor?: string;
+  /** Something worth telling on another floor (a washer done, a leak …): that floor faintly below the shown one, with
+   * a label at the spot ("Etagen-Blick"). Default on; false switches it off. */
+  floor_peek?: boolean;
+  /** Several floors: the wheel / a two-finger swipe up or down moves the floor focus; zoom with Ctrl/⌘ + wheel or
+   * pinching (default on; false = the wheel zooms as with one floor) */
+  scroll_floors?: boolean;
   /** Upper floors: the floor below shows as a faint outline for context (2D and 3D); default on, false = off */
   floor_below?: boolean;
   /** 3D quality: 'high' (full) or 'eco' (lower resolution, simple shadows, no looping animations); per user in `users`.

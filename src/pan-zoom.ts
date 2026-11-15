@@ -26,6 +26,11 @@ export interface GestureHandlers {
   onOrbit?(phase: 'start' | 'move' | 'end', dx: number, dy: number): void;
   /** Whether the right mouse button orbits right now (3D); otherwise it pans the view */
   canOrbit?(): boolean;
+  /** Scrolling moves the floor focus (several floors, not editing): the wheel and a two-finger swipe up/down step
+   * floors; Ctrl/⌘ + wheel and pinching zoom */
+  floorScroll?(): boolean;
+  /** One floor up (+1) or down (−1); false when there is none in that direction */
+  onFloorStep?(dir: 1 | -1): boolean;
 }
 
 interface Ptr {
@@ -65,7 +70,18 @@ export class PanZoom {
   private holdFired = false;
   private tapTimer?: number;
   private lastTap?: { time: number; x: number; y: number; target: HitTarget };
-  private pinch?: { d0: number; c0: Point; v0: ViewTransform; a0: number; rotating: boolean; at: Point };
+  private pinch?: {
+    d0: number;
+    c0: Point;
+    v0: ViewTransform;
+    a0: number;
+    rotating: boolean;
+    at: Point;
+    /** where both fingers started: a parallel swipe up/down steps floors (floorScroll), anything else zooms */
+    p0: [Point, Point];
+    kind?: 'pinch' | 'floor';
+    stepped?: boolean;
+  };
   /** Allow two-finger rotation (off in the editor) */
   rotatable = true;
   private panStart?: { x: number; y: number; v0: ViewTransform };
@@ -78,6 +94,8 @@ export class PanZoom {
   insetRight = 0;
   /** px at the top kept clear of the building (a panel over the plan, e.g. who is on the way) */
   insetTop = 0;
+  /** px at the bottom kept clear of the building (the "Etagen-Blick": another floor shown faintly below) */
+  insetBottom = 0;
   enabled = true;
 
   constructor(
@@ -128,6 +146,12 @@ export class PanZoom {
   setInsetTop(px: number) {
     if (Math.abs(px - this.insetTop) < 1) return;
     this.insetTop = px;
+    this.measure(false);
+  }
+
+  setInsetBottom(px: number) {
+    if (Math.abs(px - this.insetBottom) < 1) return;
+    this.insetBottom = px;
     this.measure(false);
   }
 
@@ -304,6 +328,17 @@ export class PanZoom {
       }
       const free = h - bh * s;
       top = Math.max(pad, Math.min(Math.max(free / 2, insT), free - pad));
+    }
+    // a panel at the bottom (another floor peeking in): the same, upwards
+    const insB = Math.min(this.insetBottom, h / 3);
+    if (insB > pad && top + bh * s > h - insB) {
+      const topMin = insT > pad ? insT : pad;
+      const s2 = Math.min(s, (h - insB - topMin) / bh);
+      if (s2 < s) {
+        s = s2;
+        left = this.insetRight > pad ? left : (w - bw * s) / 2;
+      }
+      top = Math.max(topMin, Math.min((h - bh * s) / 2, h - insB - bh * s));
     }
     this.fit = { s, tx: left - b.minX * s, ty: top - b.minY * s };
   }
@@ -487,6 +522,11 @@ export class PanZoom {
         a0: Math.atan2(b.y - a.y, b.x - a.x),
         rotating: false,
         at: this.zoomAt(c0[0], c0[1], this.view, this.view.s).at,
+        p0: [
+          [a.x, a.y],
+          [b.x, b.y],
+        ],
+        kind: this.h.floorScroll?.() ? undefined : 'pinch',
       };
       this.active(true);
     }
@@ -506,6 +546,30 @@ export class PanZoom {
     if (this.mode === 'pinch' && this.pinch && this.ptrs.size >= 2) {
       const [a, b] = [...this.ptrs.values()];
       const d = Math.hypot(a.x - b.x, a.y - b.y);
+      if (this.pinch.kind !== 'pinch') {
+        // several floors: decide early whether the two fingers swipe together up/down (floor) or pinch/turn (zoom)
+        const [[ax, ay], [bx, by]] = this.pinch.p0;
+        const da: Point = [a.x - ax, a.y - ay];
+        const db: Point = [b.x - bx, b.y - by];
+        const la = Math.hypot(...da);
+        const lb = Math.hypot(...db);
+        const dy = (da[1] + db[1]) / 2;
+        const dx = (da[0] + db[0]) / 2;
+        if (!this.pinch.kind) {
+          if ((la + lb) / 2 < 14) return;
+          const parallel = la > 4 && lb > 4 && (da[0] * db[0] + da[1] * db[1]) / (la * lb) > 0.8;
+          const turn = Math.abs((((Math.atan2(b.y - a.y, b.x - a.x) - this.pinch.a0) * 180) / Math.PI + 540) % 360 - 180);
+          this.pinch.kind = parallel && Math.abs(dy) > 1.5 * Math.abs(dx) && Math.abs(d / this.pinch.d0 - 1) < 0.15 && turn < 10 ? 'floor' : 'pinch';
+        }
+        if (this.pinch.kind === 'floor') {
+          // fingers down pull the stack down: the floor above comes into focus (one step per swipe)
+          if (!this.pinch.stepped && Math.abs(dy) >= 60) {
+            this.pinch.stepped = true;
+            this.h.onFloorStep?.(dy > 0 ? 1 : -1);
+          }
+          return;
+        }
+      }
       const c: Point = [(a.x + b.x) / 2, (a.y + b.y) / 2];
       const { d0, v0 } = this.pinch;
       const s = this.clampScale(v0.s * (d / d0));
@@ -708,10 +772,53 @@ export class PanZoom {
     this.applySoon(this.clampPan(this.zoomAt(g.x, g.y, this.view, s, g.at).view));
   };
 
+  /** Wheel → floor steps: what a swing has gathered, the time a step locks the next, and whether this swing stepped */
+  private floorAcc = 0;
+  private floorLockUntil = 0;
+  private floorSwing = false;
+  private floorQuiet?: number;
+
+  /**
+   * Scrolling over the plan with several floors moves the floor focus: one notch (or about 120 px of a trackpad swing)
+   * is one floor, wheel up = the floor above. A swing (trackpad momentum, a fast spin) is one step, not all floors.
+   * A trackpad's sideways swipe still moves the view.
+   */
+  private floorWheel(e: WheelEvent) {
+    const dy = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? this.size.h : 1);
+    const trackpad = this.isTrackpad(e);
+    if (trackpad && Math.abs(e.deltaX) > Math.abs(dy)) {
+      this.stopGlide();
+      this.userMoved = true;
+      this.active(true);
+      this.applySoon(this.clampPan({ s: this.view.s, tx: this.view.tx - e.deltaX, ty: this.view.ty }));
+      this.active(false);
+      return;
+    }
+    clearTimeout(this.floorQuiet);
+    this.floorQuiet = window.setTimeout(() => {
+      this.floorAcc = 0;
+      this.floorSwing = false;
+    }, 220);
+    const now = performance.now();
+    if (now < this.floorLockUntil || this.floorSwing) return;
+    this.floorAcc += dy;
+    if (Math.abs(this.floorAcc) < (trackpad ? 120 : 40)) return;
+    const dir: 1 | -1 = this.floorAcc < 0 ? 1 : -1;
+    this.floorAcc = 0;
+    this.floorLockUntil = now + 450;
+    if (trackpad) this.floorSwing = true;
+    this.h.onFloorStep?.(dir);
+  }
+
   private wheel = (e: WheelEvent) => {
     if (!this.enabled) return;
     e.preventDefault();
     this.lastWheel = performance.now();
+    // several floors: scrolling steps floors, Ctrl/⌘ + wheel (and a trackpad pinch, sent as ctrl + wheel) zooms
+    if (!e.ctrlKey && !e.metaKey && !e.shiftKey && this.h.floorScroll?.()) {
+      this.floorWheel(e);
+      return;
+    }
     if (e.shiftKey && this.rotatable && this.h.onRotate) {
       // Shift + wheel rotates
       if (!this.wheelRotTimer) {
@@ -729,7 +836,7 @@ export class PanZoom {
       return;
     }
     // trackpad: two fingers move the view, pinching (sent as ctrl + wheel) zooms. A mouse wheel zooms.
-    if (!e.ctrlKey && this.isTrackpad(e)) {
+    if (!e.ctrlKey && !e.metaKey && this.isTrackpad(e)) {
       this.stopGlide();
       this.pinchAt = undefined;
       this.userMoved = true;

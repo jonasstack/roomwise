@@ -35,7 +35,7 @@ reinstall picks up where you left off. Delete those files while Home Assistant i
   - **CallMeBot** for alarm calls and messages via Telegram or Signal: the alarm text and your Telegram user name
     or Signal number.
   - **your own SMTP server** for alarm e-mails.
-  - **OpenStreetMap Nominatim** (off by default, switch "Look up place names online" in Hausregeln → Zuhause →
+  - **OpenStreetMap Nominatim** (on by default, can be switched off; switch "Look up place names online" in Hausregeln → Zuhause →
     Orte): only for phones that give no place name themselves – when somebody stops at an unknown spot, the
     position rounded to about 10 m goes to nominatim.openstreetmap.org to get the name of the place (at most once
     per second, answers are cached locally, a neutral User-Agent without personal data).
@@ -113,11 +113,11 @@ Tablet öffnen darf, sieht den QR-Code ohnehin). Ein QR-Code, der im Editor aus 
 Browser entschlüsselt; das Bild wird weder hochgeladen noch gespeichert. Beim Löschen der Integration wird die
 Datei mit entfernt.
 
-### Ortsnamen von OpenStreetMap (Hausregeln, freiwillig, standardmäßig aus)
+### Ortsnamen von OpenStreetMap (Hausregeln, standardmäßig an, abschaltbar)
 
-„Wo ist wer“ nennt Orte so, wie das Handy (Home-Assistant-App, Adress-Sensor) sie nennt – das bleibt lokal. Nur
-wenn ein Administrator „Ortsnamen im Internet nachschlagen (OpenStreetMap)“ einschaltet, fragt Home Assistant für
-Handys ohne eigenen Ortsnamen bei nominatim.openstreetmap.org nach: Hält jemand an einem unbekannten Ort an, geht
+„Wo ist wer“ nennt Orte so, wie das Handy (Home-Assistant-App, Adress-Sensor) sie nennt – das bleibt lokal. Für
+Handys ohne eigenen Ortsnamen fragt Home Assistant bei nominatim.openstreetmap.org nach („Ortsnamen im Internet
+nachschlagen (OpenStreetMap)“, standardmäßig an; ein Administrator kann es ausschalten): Hält jemand an einem unbekannten Ort an, geht
 die auf etwa 10 m gerundete Position dorthin (höchstens einmal pro Sekunde, Antworten werden lokal gemerkt, ein
 neutraler User-Agent ohne persönliche Daten). Ausschalten beendet das sofort.
 

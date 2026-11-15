@@ -165,7 +165,7 @@ const pill = async (page) => page.locator('floorplan-card fp-floor-slider .pill'
   ok(s.shown === 'fl_og', `per-user default floor (${s.shown})`);
   await c(`(() => { const r = card.rawConfig; const uid = card._hass.user.id; const u = { ...(r.users ?? {}) }; const me = { ...(u[uid] ?? {}) }; delete me.floor; u[uid] = me; card.setConfig({ ...r, users: u }); return true; })()`);
 
-  // 2D: short slide + cross-fade
+  // 2D: the stack glides (offset outlines), no fading
   await page.locator('floorplan-card .chrome .icon-btn .vm').click();
   await page.waitForTimeout(1200);
   const is2d = await c(`!plan.is3d`);

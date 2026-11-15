@@ -131,6 +131,22 @@ interface KbSpot {
   y: number;
 }
 
+/** A floor of the house stacked above or below the shown one (see FpPlan.stack) */
+export interface StackFloor {
+  floor: FloorConfig;
+  /** cm above (+) or below (−) the shown floor */
+  dz: number;
+  bright?: boolean;
+  severe?: boolean;
+  mark?: Point;
+  /** the label at the mark ("Waschmaschine fertig"), and the piece it is about – a tap there goes to that floor */
+  text?: string;
+  piece?: string;
+}
+
+/** Floors between (1 for a neighbour, at most 2) from a stack lift */
+const stackSteps = (dz: number) => Math.sign(dz) * Math.min(2, Math.max(1, Math.round(Math.abs(dz) / 400)));
+
 export class FpPlan extends LitElement {
   static override properties = {
     hass: { attribute: false },
@@ -139,6 +155,9 @@ export class FpPlan extends LitElement {
     belowMode: { type: String },
     insetRight: { type: Number },
     insetTop: { type: Number },
+    insetBottom: { type: Number },
+    stack: { attribute: false },
+    stackPlain: { type: Boolean },
     frameBounds: { attribute: false },
     stairs: { attribute: false },
     stairsBelow: { attribute: false },
@@ -209,6 +228,13 @@ export class FpPlan extends LitElement {
   declare insetRight?: number;
   /** px at the top kept clear of the building (a panel over the plan) */
   declare insetTop?: number;
+  /** px at the bottom kept clear of the building (another floor peeking in below) */
+  declare insetBottom?: number;
+  /** The other floors stacked above (dz > 0) and below (dz < 0) the shown one: faint, floors and walls only (3D in the
+   * scene, 2D as offset outlines). `bright`: something worth telling there, with a mark at `mark`. */
+  declare stack?: StackFloor[];
+  /** the stack in 3D with plates only (eco) */
+  declare stackPlain?: boolean;
   /** Framed together with the floor's building (several floors: all of them, so every floor sits at the same
    * place and size and the floors stack exactly when switching) */
   declare frameBounds?: Bounds;
@@ -682,6 +708,8 @@ export class FpPlan extends LitElement {
       this.glWallsKey = wallsKey;
       gl.buildWalls(pg.floor, build);
     }
+    // the other floors of the stack (not while editing or zoomed onto a room)
+    gl.setStack(this.editing || o.focus ? [] : (this.stack ?? []), { wall: o.wall, height: o.height, plain: !!this.stackPlain });
     // furniture: one cached scene per view; live states update single pieces
     const fxSig = this.furnSig(pg.floor);
     const furnKey = this.furnKeyFor(o.height, o.focus?.id);
@@ -1359,6 +1387,9 @@ export class FpPlan extends LitElement {
         if (!this.editing) this.resetSpin();
       },
       canOrbit: () => this.is3d,
+      // scrolling moves the floor focus (the card knows the floors); never while editing – there the wheel zooms
+      floorScroll: () => !this.editing && !!this.handlers?.floorScroll?.(),
+      onFloorStep: (dir) => (!this.editing && this.handlers?.onFloorStep?.(dir)) || false,
       onOrbit: (phase, dx, dy) => {
         if (!this.is3d) return;
         if (phase === 'start') {
@@ -1404,6 +1435,7 @@ export class FpPlan extends LitElement {
     this.panZoom.zoomAnchor = this.zoomAnchor;
     this.panZoom.insetRight = this.insetRight ?? 0;
     this.panZoom.insetTop = this.insetTop ?? 0;
+    this.panZoom.insetBottom = this.insetBottom ?? 0;
     this.panZoom.setBounds(this.fitBoundsFor(this.is3d), true);
     this.sizeObserver = new ResizeObserver(() => {
       const h = this.getBoundingClientRect().height;
@@ -1490,6 +1522,7 @@ export class FpPlan extends LitElement {
     if (!this.panZoom) return;
     if (changed.has('insetRight')) this.panZoom.setInsetRight(this.insetRight ?? 0);
     if (changed.has('insetTop')) this.panZoom.setInsetTop(this.insetTop ?? 0);
+    if (changed.has('insetBottom')) this.panZoom.setInsetBottom(this.insetBottom ?? 0);
     if (changed.has('threeD')) this.panZoom.rotatable = !this.editing || this.threeD;
     this.panZoom.scaleVarsOnWorld = !!this.editing || !this.useGl;
     if (changed.has('threeD') && !this.threeD && this.editing) {
@@ -1729,6 +1762,8 @@ export class FpPlan extends LitElement {
       if (ds.pet && !this.editing) return { kind: 'furniture', id: ds.pet };
       // stairs to another floor: the chip above them (it leads there, whatever the stairs themselves do)
       if (ds.stairs && !this.editing) return { kind: 'furniture', id: ds.stairs, to: ds.stairsTo || undefined };
+      // the label of a stacked floor with something to tell: goes there (the card opens the thing)
+      if (ds.stackFloor && !this.editing) return { kind: 'furniture', id: ds.stackPiece || '', to: ds.stackFloor };
       // washer / dryer / dishwasher "fertig": a tap opens it (with "Gesehen")
       if (ds.appliance && !this.editing) return { kind: 'furniture', id: ds.appliance };
       if (ds.device) return { kind: 'device', id: ds.device };
@@ -1936,6 +1971,7 @@ export class FpPlan extends LitElement {
             ${this.showGrid ? svg`<rect x=${vb.x} y=${vb.y} width=${vb.w} height=${vb.h} fill="url(#fp-grid-major)"></rect>` : nothing}
             ${sunLayer?.shadow ?? nothing}
             ${this.below && this.belowMode === 'outline' ? this.renderBelow(this.below, 'below') : nothing}
+            ${this.stack?.length && !this.is3d && !this.editing && !this._focusId ? this.renderStack(this.stack) : nothing}
             ${this.trace && !this.editing ? this.renderTrace(this.trace) : nothing}
             <g class="rooms">
               ${repeat(rooms, (r) => r.id, (r) => svg`<path class="room ${r.outdoor ? 'outdoor' : ''} ${r.kind === 'plot' ? 'plot' : ''}" data-room=${r.id} d=${pointsToPath(r.points)} style=${r.kind === 'plot' && !this.editing ? 'pointer-events:none' : ''}></path>`)}
@@ -1990,6 +2026,10 @@ export class FpPlan extends LitElement {
             </g>
             <g class="walls" mask="url(#fp-wall-mask)" style=${`stroke-width:${this.wallWidth}${this.wallColor ? `;--wall-paint:${paint(this.wallColor)}` : ''}`}>
               ${repeat(rooms.filter((r) => !r.outdoor), (r) => r.id, (r) => svg`<path class="wall" d=${pointsToPath(r.points)}></path>`)}
+              ${(floor?.walls ?? []).map(
+                (w) =>
+                  svg`<line class="wall free ${w.height ? 'half' : ''} ${this.isSelected('wall', w.id) ? 'sel' : ''}" data-free-wall=${w.id} x1=${w.a[0]} y1=${w.a[1]} x2=${w.b[0]} y2=${w.b[1]} style=${`stroke-width:${w.thickness ?? this.wallWidth}${w.color ? `;stroke:${paint(w.color)}` : ''}`}></line>`,
+              )}
               ${painted.map(
                 (r) =>
                   svg`<path class="wall painted" d=${pointsToPath(r.points)} clip-path=${`url(#fp-clip-${r.id})`} style=${`stroke:${paint(r.wall_color!)}`}></path>`,
@@ -2066,7 +2106,7 @@ export class FpPlan extends LitElement {
           <div class=${stageCls} style=${stageStyle}>
           <div class="labels" aria-hidden="true">${this.hideLabels ? nothing : repeat(rooms, (r) => r.id, (r) => this.renderLabel(r))}</div>
           ${floor ? this.renderKb(floor) : nothing}
-          <div class="devices" aria-hidden="true">${repeat(floor?.devices ?? [], (d) => d.id, (d) => this.renderDevice(d))}${this.renderWindowAlerts()}${this.renderPetChips()}${this.renderInfoChips()}${this.renderStairChips()}</div>
+          <div class="devices" aria-hidden="true">${repeat(floor?.devices ?? [], (d) => d.id, (d) => this.renderDevice(d))}${this.renderWindowAlerts()}${this.renderPetChips()}${this.renderInfoChips()}${this.renderStairChips()}${this.renderStackChips()}</div>
           ${this.overlayHtml ?? nothing}
           </div>
         </div>
@@ -2433,6 +2473,61 @@ export class FpPlan extends LitElement {
     return svg`<g class="trace" transform=${`rotate(${tr.rotation ?? 0} ${cx} ${cy})`} style=${`opacity:${Math.max(0.05, Math.min(1, tr.opacity ?? 0.5))}`}>
       <image href=${href} x=${tr.x} y=${tr.y} width=${tr.w} height=${h} preserveAspectRatio="none"></image>
     </g>`;
+  }
+
+  /** 2D: the other floors of the stack as faint outlines, offset like sheets lying on top of each other (above: up
+   *  and right, below: down and left), the one with something to tell a little clearer, with its mark */
+  private renderStack(stack: StackFloor[]) {
+    const k = this.stackOffset();
+    return svg`<g class="stack" aria-hidden="true">${stack.map((it) => {
+      const rooms = it.floor.rooms.filter((r) => r.points.length >= 3 && !r.outdoor);
+      if (!rooms.length) return nothing;
+      const s = stackSteps(it.dz);
+      return svg`<g class="stack-floor ${it.bright ? 'bright' : ''} ${it.severe ? 'severe' : ''}" transform=${`translate(${round(s * k)} ${round(-s * k)})`}>
+        <path d=${rooms.map((r) => pointsToPath(r.points)).join(' ')}></path>
+        ${it.mark ? svg`<circle class="stack-mark" cx=${it.mark[0]} cy=${it.mark[1]} r=${round(k * 0.45)}></circle>` : nothing}
+      </g>`;
+    })}</g>`;
+  }
+
+  /** The label at the mark of a stacked floor with something to tell: at its height in 3D, on its offset sheet in 2D */
+  private renderStackChips() {
+    if (this.editing || this._focusId || !this.stack?.length) return nothing;
+    const k = this.stackOffset();
+    const show3d = this.is3d;
+    return this.stack
+      .filter((it) => it.mark && it.text && (show3d ? this.gl : true))
+      .map((it) => {
+        const s = show3d ? 0 : stackSteps(it.dz);
+        const x = it.mark![0] + s * k;
+        const y = it.mark![1] - s * k;
+        return html`<div class="marker-wrap pet-wrap" style=${`left:${round(x)}px;top:${round(y)}px;--bz:${show3d ? Math.round(it.dz + 20) : 0}px`}>
+          <div class="pet-chip stack-chip ${it.severe ? 'severe' : ''}" data-stack-piece=${it.piece ?? ''} data-stack-floor=${it.floor.id}><span class="stack-dot"></span>${it.text}<span class="stack-name">${it.floor.name}</span></div>
+        </div>`;
+      });
+  }
+
+  /** How far a neighbouring floor is offset in 2D (plan units) */
+  private stackOffset() {
+    const b = this.currentBounds();
+    return Math.max(18, Math.max(b.maxX - b.minX, b.maxY - b.minY) * 0.045);
+  }
+
+  /** On screen (px): where a floor lifted by dz in the stack lies relative to the shown one – for the glide when the
+   *  focus moves to it (3D: its projected height, 2D: the sheet offset) */
+  stackShift(dz: number): { x: number; y: number } {
+    const pz = this.panZoom;
+    if (!pz || !dz) return { x: 0, y: 0 };
+    if (!this.is3d) {
+      const k = this.stackOffset() * stackSteps(dz) * pz.view.s;
+      return { x: k, y: -k };
+    }
+    const m = this.viewMatrix(pz.view);
+    const [cx, cy] = this.glCenter;
+    const a = m.transformPoint(new DOMPoint(cx, cy, 0, 1));
+    const b = m.transformPoint(new DOMPoint(cx, cy, dz, 1));
+    if (a.w <= 1e-6 || b.w <= 1e-6) return { x: 0, y: 0 };
+    return { x: b.x / b.w - a.x / a.w, y: b.y / b.w - a.y / a.w };
   }
 
   private renderBelow(below: FloorConfig, cls: 'below' | 'below-ghost') {
@@ -3349,6 +3444,20 @@ export class FpPlan extends LitElement {
         opacity: 0;
         transition: opacity var(--fp-dur-slow) var(--fp-ease);
       }
+      /* a passage ("Wand weg"): only a faint line where the rooms meet; marked while selected in the editor */
+      .opening.passage .threshold {
+        stroke: var(--fp-label-3, rgba(60, 60, 67, 0.3));
+        stroke-width: 1.2;
+        stroke-dasharray: 6 6;
+        opacity: 0.45;
+        fill: none;
+        pointer-events: none;
+      }
+      .opening.passage.selected .threshold {
+        stroke: var(--fp-accent);
+        stroke-width: 3;
+        opacity: 1;
+      }
       /* closed door: the architect's dashed swing, so it never reads as a window */
       .opening.door.closed .arc {
         opacity: 0.45;
@@ -3464,6 +3573,13 @@ export class FpPlan extends LitElement {
         stroke-linejoin: round;
         stroke-linecap: round;
         pointer-events: none;
+      }
+      /* a wall standing on its own ("Wand ziehen"); a half-height one a little lighter from above */
+      .wall.free {
+        stroke-linecap: square;
+      }
+      .wall.free.half {
+        opacity: 0.6;
       }
 
       /* Labels: constant on-screen size, shrink in small rooms */
@@ -3730,6 +3846,51 @@ export class FpPlan extends LitElement {
       .below-ghost {
         pointer-events: none;
       }
+      /* the other floors of the stack (2D): faint offset outlines, never in the way */
+      .stack {
+        pointer-events: none;
+      }
+      .stack-floor > path {
+        fill: var(--fp-label);
+        fill-opacity: 0.03;
+        stroke: var(--fp-label);
+        stroke-opacity: 0.18;
+        stroke-width: 1.5;
+        vector-effect: non-scaling-stroke;
+        stroke-linejoin: round;
+      }
+      .stack-floor.bright > path {
+        fill-opacity: 0.06;
+        stroke-opacity: 0.34;
+      }
+      .stack-mark {
+        fill: var(--fp-orange);
+      }
+      .pet-chip.stack-chip {
+        gap: 6px;
+        pointer-events: auto;
+        cursor: pointer;
+      }
+      .stack-chip .stack-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--fp-orange);
+        flex: none;
+      }
+      .stack-chip.severe .stack-dot {
+        background: var(--fp-red);
+      }
+      .stack-chip .stack-name {
+        color: var(--fp-label-2);
+        font-weight: 500;
+      }
+      .stack-chip .stack-name::before {
+        content: '· ';
+      }
+      .stack-floor.severe .stack-mark {
+        fill: var(--fp-red);
+      }
       .below-ghost > path {
         fill: none;
         stroke: var(--fp-accent);
@@ -3950,6 +4111,15 @@ export class FpPlan extends LitElement {
       .ed-draw-fill {
         fill: var(--fp-accent);
         fill-opacity: 0.08;
+        pointer-events: none;
+      }
+      /* editor: "Raum teilen" – the cut being drawn */
+      .ed-split {
+        stroke: var(--fp-accent);
+        stroke-width: 2.5;
+        stroke-dasharray: 8 5;
+        stroke-linecap: round;
+        vector-effect: non-scaling-stroke;
         pointer-events: none;
       }
       /* editor: the trace image's outline and the calibration */

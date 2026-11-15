@@ -122,6 +122,9 @@ export function drawOpening(
   const cls = `opening ${o.type} ${state} ${selected ? 'selected' : ''} ${preview ? 'preview' : ''} ${live?.moving ? 'moving' : ''}`;
   const hit = svg`<line class="hit" data-opening=${o.id} x1=${o.a[0]} y1=${o.a[1]} x2=${o.b[0]} y2=${o.b[1]} style=${`stroke-width:${Math.max(36, wall * 4)}`}></line>`;
   const T = Math.max(4, wall);
+  // a passage: no wall – only a faint threshold line on the floor; selectable in the editor only
+  if (o.type === 'passage')
+    return svg`<g class=${cls}>${preview || selected ? hit : nothing}<line class="threshold" x1=${o.a[0]} y1=${o.a[1]} x2=${o.b[0]} y2=${o.b[1]}></line></g>`;
   if (o.type === 'garage') return drawGarage(o, T, cls, hit, live ?? { open: state === 'open' ? 1 : 0, state }, inward, preview);
   if (o.type === 'door') {
     const g = openingGeometry(o);
@@ -210,5 +213,17 @@ function drawGarage(o: OpeningConfig, T: number, cls: string, hit: SVGTemplateRe
 
 /** Black strokes for the wall mask: walls are cut out where doors and windows are. */
 export function openingMaskLines(openings: OpeningConfig[], wall: number) {
-  return openings.map((o) => svg`<line x1=${o.a[0]} y1=${o.a[1]} x2=${o.b[0]} y2=${o.b[1]} stroke="black" stroke-width=${wall + 2}></line>`);
+  return openings.map((o) => {
+    // a passage often runs from wall to wall: stop half a wall short at each end, so the walls it meets keep
+    // their full thickness (no notch); the piece left over lies inside those walls
+    let [a, b] = [o.a, o.b];
+    if (o.type === 'passage') {
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+      const k = Math.min(0.45, wall / 2 / len);
+      const dx = b[0] - a[0];
+      const dy = b[1] - a[1];
+      [a, b] = [[a[0] + dx * k, a[1] + dy * k], [b[0] - dx * k, b[1] - dy * k]];
+    }
+    return svg`<line x1=${a[0]} y1=${a[1]} x2=${b[0]} y2=${b[1]} stroke="black" stroke-width=${wall + 2}></line>`;
+  });
 }

@@ -371,7 +371,8 @@ export class FpVacuumStart extends LitElement {
       <div class="vp-buttons">
         <button class="btn pressable" data-turn="-1" aria-label=${t('vacplan.turn_left')} title=${t('vacplan.turn_left')} @click=${() => this.turn(key, (x) => ({ ...x, q: x.q - 1 }))}><ha-icon icon="mdi:rotate-left"></ha-icon>90°</button>
         <button class="btn pressable" data-turn="1" aria-label=${t('vacplan.turn_right')} title=${t('vacplan.turn_right')} @click=${() => this.turn(key, (x) => ({ ...x, q: x.q + 1 }))}><ha-icon icon="mdi:rotate-right"></ha-icon>90°</button>
-        <button class="btn pressable ${tr.mirror ? 'accent' : ''}" data-mirror aria-pressed=${tr.mirror} @click=${() => this.turn(key, (x) => ({ ...x, mirror: !x.mirror }))}><ha-icon icon="mdi:flip-horizontal"></ha-icon>${t('vacplan.mirror')}</button>
+        <button class="btn pressable" data-mirror aria-label=${t('vacplan.mirror_h')} title=${t('vacplan.mirror_h')} @click=${() => this.turn(key, (x) => ({ q: -x.q, fine: -x.fine, mirror: !x.mirror }))}><ha-icon icon="mdi:flip-horizontal"></ha-icon>${t('vacplan.mirror_h_short')}</button>
+        <button class="btn pressable" data-mirror-v aria-label=${t('vacplan.mirror_v')} title=${t('vacplan.mirror_v')} @click=${() => this.turn(key, (x) => ({ q: 2 - x.q, fine: -x.fine, mirror: !x.mirror }))}><ha-icon icon="mdi:flip-vertical"></ha-icon>${t('vacplan.mirror_v_short')}</button>
       </div>
       <label class="vp-fine">
         <span>${t('vacplan.fine')}</span>

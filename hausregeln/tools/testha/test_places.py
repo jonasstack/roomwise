@@ -364,7 +364,7 @@ def places_with(learner, geo_state, tasks):
     pl.tracks = {}
     pl._geo = {"pat": "sensor.phone_geocoded_location" if geo_state else None}
     pl._street = {}
-    pl.data = {"settings": {"learn": True, "nominatim": False}, "geocache": {}}
+    pl.data = {"settings": {"learn": True, "nominatim": False, "nominatim_chosen": True}, "geocache": {}}
     states = {"sensor.phone_geocoded_location": geo_state} if geo_state else {}
     pl.hass = SimpleNamespace(states=SimpleNamespace(get=states.get), async_create_background_task=lambda *a, **k: tasks.append(a))
     return pl
@@ -424,6 +424,35 @@ withgeo = places_with(L2, FakeState("x", ios_poi, s6.t), tasks)
 withgeo.data["settings"]["nominatim"] = True
 withgeo._stopped("pat", s7.tr)
 ok(len(tasks) == 1, "Handy liefert Ortsnamen: OpenStreetMap wird nicht gefragt")
+fresh = places_with(L2, None, tasks)
+fresh.data["settings"] = {"learn": True, "nominatim": False}
+ok(fresh.settings["nominatim"] is True, "OpenStreetMap ist an, solange niemand es von Hand ausgeschaltet hat")
+fresh.data["settings"].update({"nominatim": False, "nominatim_chosen": True})
+ok(fresh.settings["nominatim"] is False, "von Hand ausgeschaltet bleibt aus")
+
+# --- arrival time: by road at a typical speed, not the straight line at the speed of the moment (invented numbers)
+print("Ankunftszeit realistisch")
+km8 = 8000
+car_fast = P.eta_formula(km8, "car", [100 / 3.6])  # a short stretch at 100 km/h
+car_town = P.eta_formula(km8, "car", [])
+ok(car_town >= 17, f"Auto, 8 km Luftlinie in der Stadt: realistisch ({car_town:.0f} Min.), nicht 8 Min.", car_town)
+ok(car_fast >= 0.75 * car_town and car_fast >= 14, f"ein schneller Abschnitt (100 km/h) macht es kaum kürzer ({car_fast:.0f} Min.)", (car_fast, car_town))
+naive = km8 / (100 / 3.6) / 60
+ok(car_fast > 2.5 * naive, f"viel länger als Luftlinie ÷ Tempo des Moments ({naive:.0f} Min.)", (car_fast, naive))
+train = P.eta_formula(km8, "transit", [])
+ok(train >= car_town - 1 and train >= 20, f"Bahn/Bus 8 km: mit Halten und Weg von der Haltestelle ({train:.0f} Min.)", train)
+walk = P.eta_formula(1500, "walk", [])
+ok(20 <= walk <= 30, f"zu Fuß 1,5 km Luftlinie: ca. 22 Min. ({walk:.0f})", walk)
+bike = P.eta_formula(3000, "bike", [30 / 3.6])
+ok(12 <= bike <= 16, f"Rad 3 km, auch nach schnellem Abschnitt: ca. 14 Min. ({bike:.0f})", bike)
+# learned trips first: a person who always needs 40 min for the way gets 40, whatever the formula says
+lw = P.Learner({}, ZONES, TZ)
+e_learned = lw._eta(WORK[0], WORK[1], HOME, ([(40.0, 1.0, None), (38.0, 1.0, None), (44.0, 1.0, None)], WORK), None, 0, "car", [])
+e_formula = lw._eta(WORK[0], WORK[1], HOME, None, None, 0, "car", [])
+ok(38 <= e_learned <= 44, f"gelernte Fahrzeit hat Vorrang ({e_learned} Min. statt Formel {e_formula})", (e_learned, e_formula))
+d_wh = P.dist(WORK[0], WORK[1], HOME[0], HOME[1])
+e_floor = lw._eta(WORK[0], WORK[1], HOME, ([(1.0, 1.0, None)], WORK), None, 0, "car", [])
+ok(e_floor >= d_wh / P.TOP["car"] / 60, f"nie kürzer als Luftlinie ÷ Höchsttempo ({e_floor} Min.)", (e_floor, d_wh))
 
 print(f"\n{len(FAIL)} Fehler" if FAIL else "\nalles ok")
 sys.exit(1 if FAIL else 0)

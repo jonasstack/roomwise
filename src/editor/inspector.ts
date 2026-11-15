@@ -1,6 +1,7 @@
 import { html, nothing, svg, type TemplateResult } from 'lit';
-import type { ActionConfig, DeviceConfig, EntryAlertConfig, EntryAlertMode, FurnitureConfig, FurnitureContentConfig, OpeningConfig, RoomConfig } from '../types';
+import type { ActionConfig, DeviceConfig, EntryAlertConfig, EntryAlertMode, FreeWallConfig, FurnitureConfig, FurnitureContentConfig, OpeningConfig, RoomConfig } from '../types';
 import { ENTRY_DEFAULTS, defaultTexts, ttsLanguages, windowsOf } from '../entry-alert';
+import { mergeCandidates, mergeRooms, startSplit } from './split-tool';
 import type { FloorplanEditorUI } from './editor-ui';
 import type { EntityFilter } from './entity-list';
 import { entityName, formatState, navigate, stateIcon, suggestForArea } from '../ha';
@@ -12,6 +13,7 @@ import { pointInPolygon, round } from '../geometry';
 import { areasOnFloor, floorLevel, floorShort, orderedFloors, stairsTarget } from '../levels';
 import type { FloorConfig } from '../types';
 import { turnFloor, type FloorTurn } from '../floor-turn';
+import { passagesBetween, sharedWalls } from '../walls';
 import { normalizeTime, petLook } from '../pets';
 import { dogPicture } from '../gl/dog-studio';
 import { until } from 'lit/directives/until.js';
@@ -124,7 +126,7 @@ function textField(label: string, value: string | undefined, set: (v: string) =>
   </label>`;
 }
 
-function patchItem<T>(ed: Ed, kind: 'rooms' | 'devices' | 'openings' | 'furniture', id: string, fn: (x: T) => void) {
+function patchItem<T>(ed: Ed, kind: 'rooms' | 'devices' | 'openings' | 'furniture' | 'walls', id: string, fn: (x: T) => void) {
   ed.mutate((_d, f) => {
     const list = (f as any)[kind] as any[];
     const it = list?.find((x) => x.id === id);
@@ -482,6 +484,7 @@ function roomInspector(ed: Ed, r: RoomConfig): TemplateResult {
         <div class="hint-s">${t('editor.points_hint')}</div>`,
       { icon: 'mdi:texture-box' },
     )}
+    ${openWallsSection(ed, r)} ${splitSection(ed, r)}
     ${actions(ed, r, 'room', (k, v) => set((x) => ((x as any)[k] = v)))}
     ${ed._vertex != null
       ? html`<button class="btn block pressable gap" ?disabled=${r.points.length <= 3} @click=${() => ed.deleteVertex()}>
@@ -805,6 +808,81 @@ function deviceInspector(ed: Ed, d: DeviceConfig): TemplateResult {
   `;
 }
 
+/** A wall standing on its own ("Wand ziehen"): length, thickness, height (full or half), paint */
+function freeWallInspector(ed: Ed, w: FreeWallConfig): TemplateResult {
+  const set = (fn: (x: FreeWallConfig) => void) => patchItem<FreeWallConfig>(ed, 'walls', w.id, fn);
+  const len = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]);
+  const setLen = (l: number) =>
+    set((x) => {
+      const cur = Math.hypot(x.b[0] - x.a[0], x.b[1] - x.a[1]) || 1;
+      const nl = Math.max(10, Math.min(5000, l));
+      x.b = [round(x.a[0] + ((x.b[0] - x.a[0]) / cur) * nl), round(x.a[1] + ((x.b[1] - x.a[1]) / cur) * nl)];
+    });
+  const thick = w.thickness ?? ed._draft.wall_width ?? 8;
+  return html`<div class="section-title">${t('wall.title')}</div>
+    <div class="group">
+      ${stepper(t('wall.length'), Math.round(len), 10, setLen, ' cm')}
+      ${stepper(t('wall.thickness'), thick, 1, (v) => set((x) => (x.thickness = Math.max(2, Math.min(60, v)))), ' cm')}
+    </div>
+    <div class="section-title">${t('wall.height')}</div>
+    <fp-segmented
+      data-wall-height
+      .options=${[
+        { value: 'full', label: t('wall.full') },
+        { value: 'half', label: t('wall.half') },
+      ]}
+      .value=${w.height ? 'half' : 'full'}
+      @value-change=${(e: CustomEvent) => set((x) => (x.height = e.detail.value === 'half' ? (x.height ?? 110) : undefined))}
+    ></fp-segmented>
+    ${w.height ? html`<div class="group">${stepper(t('wall.height'), w.height, 10, (v) => set((x) => (x.height = Math.max(20, Math.min(400, v)))), ' cm')}</div>` : nothing}
+    <div class="hint-s">${t('wall.height_hint')}</div>
+    <div class="section-title">${t('wall.color')}</div>
+    ${paintPicker(w.color, (c) => set((x) => (x.color = c)))}
+    <button class="btn danger block pressable gap" data-wall-delete @click=${ed.deleteSelection}><ha-icon icon="mdi:trash-can-outline"></ha-icon>${t('wall.delete')}</button>`;
+}
+
+/** "Raum teilen" (an open kitchen in the living room: with or without a wall) and "zusammenlegen" with a neighbour */
+function splitSection(ed: Ed, r: RoomConfig): TemplateResult | typeof nothing {
+  if (r.points.length < 3 || r.kind === 'plot') return nothing;
+  const merge = mergeCandidates(ed, r);
+  return html`<div class="section-title">${t('split.section')}</div>
+    <div class="group">
+      <button class="row" data-split-room @click=${() => startSplit(ed, r.id)}>
+        <ha-icon icon="mdi:call-split" style="color:var(--fp-accent)"></ha-icon><span class="title accent">${t('split.start')}</span>
+      </button>
+      ${merge.map(
+        ({ room }) => html`<button class="row" data-merge-room=${room.id} @click=${() => mergeRooms(ed, r.id, room.id)}>
+          <ha-icon icon="mdi:call-merge" style="color:var(--fp-accent)"></ha-icon><span class="title accent">${t('split.merge_with', { room: room.name || '' })}</span>
+        </button>`,
+      )}
+    </div>
+    <div class="hint-s">${t('split.section_hint')}</div>`;
+}
+
+/** "Wände zu Nachbarräumen": remove the wall to a room next door (an open way) or put it back */
+function openWallsSection(ed: Ed, r: RoomConfig): TemplateResult | typeof nothing {
+  if (r.outdoor || r.points.length < 3) return nothing;
+  const f = ed.floor;
+  const near = f.rooms
+    .filter((o) => o.id !== r.id && !o.outdoor && o.points.length >= 3)
+    .map((o) => ({ o, runs: sharedWalls(f, r.id, o.id), open: passagesBetween(f, r.id, o.id) }))
+    .filter((x) => x.runs.length);
+  if (!near.length) return nothing;
+  return html`<div class="section-title">${t('editor.open_walls')}</div>
+    <div class="group">
+      ${near.map(({ o, runs, open }) =>
+        open.length
+          ? html`<button class="row" data-wall-back=${o.id} @click=${() => ed.closeWalls(r.id, o.id)}>
+              <ha-icon icon="mdi:wall" style="color:var(--fp-accent)"></ha-icon><span class="title accent">${t('editor.wall_back_to', { room: o.name || '' })}</span>
+            </button>`
+          : html`<button class="row" data-wall-remove=${o.id} @click=${() => runs.forEach((run) => ed.openWall(run))}>
+              <ha-icon icon="mdi:arrow-expand-horizontal" style="color:var(--fp-accent)"></ha-icon><span class="title accent">${t('editor.wall_remove_to', { room: o.name || '' })}</span>
+            </button>`,
+      )}
+    </div>
+    <div class="hint-s">${t('editor.open_walls_hint')}</div>`;
+}
+
 function openingInspector(ed: Ed, o: OpeningConfig): TemplateResult {
   const set = (fn: (x: OpeningConfig) => void) => patchItem<OpeningConfig>(ed, 'openings', o.id, fn);
   const width = Math.hypot(o.b[0] - o.a[0], o.b[1] - o.a[1]);
@@ -815,16 +893,16 @@ function openingInspector(ed: Ed, o: OpeningConfig): TemplateResult {
       const len = Math.hypot(x.b[0] - x.a[0], x.b[1] - x.a[1]) || 1;
       const dx = (x.b[0] - x.a[0]) / len;
       const dy = (x.b[1] - x.a[1]) / len;
-      const nw = Math.max(30, Math.min(x.type === 'garage' ? 700 : 400, w));
+      const nw = Math.max(30, Math.min(x.type === 'garage' || x.type === 'passage' ? 2000 : 400, w));
       x.a = [round(cx - (dx * nw) / 2), round(cy - (dy * nw) / 2)];
       x.b = [round(cx + (dx * nw) / 2), round(cy + (dy * nw) / 2)];
     });
-  return html`
-    <fp-segmented
+  const kindPick = html`<fp-segmented
       .options=${[
         { value: 'door', label: t('editor.door'), icon: 'mdi:door' },
         { value: 'window', label: t('editor.window'), icon: 'mdi:window-closed-variant' },
         { value: 'garage', label: t('editor.garage_door'), icon: 'mdi:garage' },
+        { value: 'passage', label: t('editor.passage'), icon: 'mdi:arrow-expand-horizontal' },
       ]}
       .value=${o.type}
       @value-change=${(e: CustomEvent) =>
@@ -832,7 +910,16 @@ function openingInspector(ed: Ed, o: OpeningConfig): TemplateResult {
           x.type = e.detail.value;
           if (x.type !== 'garage') delete x.variant;
         })}
-    ></fp-segmented>
+    ></fp-segmented>`;
+  // a passage has no wall, no leaf, no sensor: just how wide it is and the way back to a wall
+  if (o.type === 'passage')
+    return html`${kindPick}
+      <div class="hint-s">${t('editor.passage_sub')}</div>
+      <div class="section-title">${t('editor.geometry')}</div>
+      <div class="group">${stepper(t('editor.width'), width, 5, setWidth, ' cm')}</div>
+      <button class="btn block pressable gap" data-wall-back-sel @click=${ed.deleteSelection}><ha-icon icon="mdi:wall"></ha-icon>${t('editor.wall_back')}</button>`;
+  return html`
+    ${kindPick}
     ${o.type === 'garage'
       ? html`<fp-segmented
           style="margin-top:var(--fp-space-3)"
@@ -2374,22 +2461,22 @@ function floorsSection(ed: Ed) {
       </div>
       <div class="hint-s">${t('editor.floor_level_hint')} ${haFloors.length ? t('editor.floor_ha_hint') : ''}</div>
       <div class="section-title">${t('editor.floor_turn')}</div>
-      <div class="btn-row floor-turn" style="grid-template-columns:1fr 1fr 1fr;margin-top:0">
+      <div class="btn-row floor-turn" style="grid-template-columns:1fr 1fr 1fr 1fr;margin-top:0">
         <button class="btn pressable gap" data-floor-turn="-90" @click=${() => turnThisFloor(ed, floor.id, { deg: -90 })}><ha-icon icon="mdi:rotate-left"></ha-icon>90°</button>
         <button class="btn pressable gap" data-floor-turn="90" @click=${() => turnThisFloor(ed, floor.id, { deg: 90 })}><ha-icon icon="mdi:rotate-right"></ha-icon>90°</button>
-        <button class="btn pressable gap" data-floor-mirror @click=${() => turnThisFloor(ed, floor.id, { deg: 0, mirror: true })}><ha-icon icon="mdi:flip-horizontal"></ha-icon>${t('vacplan.mirror')}</button>
+        <button class="btn pressable gap" data-floor-mirror title=${t('vacplan.mirror_h')} @click=${() => turnThisFloor(ed, floor.id, { deg: 0, mirror: true })}><ha-icon icon="mdi:flip-horizontal"></ha-icon>${t('vacplan.mirror_h_short')}</button>
+        <button class="btn pressable gap" data-floor-mirror-v title=${t('vacplan.mirror_v')} @click=${() => turnThisFloor(ed, floor.id, { deg: 180, mirror: true })}><ha-icon icon="mdi:flip-vertical"></ha-icon>${t('vacplan.mirror_v_short')}</button>
       </div>
       <div class="hint-s">${t('editor.floor_turn_hint')}</div>
       ${multi
         ? html`<div class="group" style="margin-top:var(--fp-space-3)">
               ${switchRow(t('editor.floor_below'), d.floor_below !== false, () => ed.mutate((x) => (x.floor_below = x.floor_below === false ? undefined : false)), t('editor.floor_below_sub'))}
-              <label class="row field-row">
-                <span class="subtitle">${t('editor.default_floor')}</span>
-                <select class="field inline" data-default-floor @change=${(e: any) => ed.mutate((x) => (x.default_floor = e.target.value || undefined))}>
-                  <option value="" ?selected=${!d.default_floor}>${t('editor.first_floor_auto', { x: d.floors[0]?.name ?? '' })}</option>
-                  ${top.map((f) => html`<option value=${f.id} ?selected=${f.id === d.default_floor}>${f.name}</option>`)}
-                </select>
-              </label>
+              ${switchRow(
+                t('editor.floor_is_default'),
+                d.default_floor === floor.id,
+                () => ed.mutate((x) => (x.default_floor = x.default_floor === floor.id ? undefined : floor.id)),
+                t('editor.floor_is_default_sub', { x: d.floors.find((f) => f.id === d.default_floor)?.name ?? t('editor.first_floor_auto', { x: d.floors[0]?.name ?? '' }) }),
+              )}
             </div>
             <div class="hint-s">${t('editor.default_floor_hint')}</div>
             <button class="btn danger block pressable gap" data-delete-floor @click=${() => ed.deleteFloor(floor.id)}><ha-icon icon="mdi:layers-remove"></ha-icon>${t('editor.delete_floor')}</button>`
@@ -2451,12 +2538,26 @@ function settingsPanel(ed: Ed): TemplateResult {
       @value-change=${(e: CustomEvent) => setCfg((x) => (x.view_mode = e.detail.value === '2d' ? '2d' : undefined))}
     ></fp-segmented>
     <div class="hint-s">${t(d.view_mode === '2d' ? 'editor.view_2d_hint' : 'editor.view_3d_hint')}</div>
+    ${d.floors.length > 1
+      ? html`<div class="group" style="margin-top:var(--fp-space-3)">
+            <label class="row field-row">
+              <span class="subtitle">${t('editor.default_floor')}</span>
+              <select class="field inline" data-default-floor-view @change=${(e: any) => setCfg((x) => (x.default_floor = e.target.value || undefined))}>
+                <option value="" ?selected=${!d.default_floor || !d.floors.some((f) => f.id === d.default_floor)}>${t('editor.first_floor_auto', { x: d.floors[0]?.name ?? '' })}</option>
+                ${d.floors.map((f) => html`<option value=${f.id} ?selected=${f.id === d.default_floor}>${f.name}</option>`)}
+              </select>
+            </label>
+          </div>
+          <div class="hint-s">${t('editor.default_floor_hint')}</div>`
+      : nothing}
 
     <div class="section-title">${t('editor.values_title')}</div>
     <fp-label-style .value=${values} @value-change=${(e: CustomEvent) => setCfg((x) => setLabelStyle(x, e.detail.value as LabelStyle))}></fp-label-style>
     ${values === 'wall' ? html`<div class="hint-s">${t('editor.values_wall_hint')}</div>` : nothing}
     <div class="group" style="margin-top:var(--fp-space-3)">
       ${switchRow(t('people.set'), d.people !== false, () => setCfg((x) => (x.people = x.people === false ? undefined : false)), t('people.set_sub'))}
+      ${d.floors.length > 1 ? switchRow(t('peek.set'), d.floor_peek !== false, () => setCfg((x) => (x.floor_peek = x.floor_peek === false ? undefined : false)), t('peek.set_sub')) : nothing}
+      ${d.floors.length > 1 ? switchRow(t('floor.scroll_set'), d.scroll_floors !== false, () => setCfg((x) => (x.scroll_floors = x.scroll_floors === false ? undefined : false)), t('floor.scroll_set_sub')) : nothing}
     </div>
 
     <div class="section-title">${t('editor.fx_title')}</div>
@@ -2587,5 +2688,6 @@ export function renderInspector(ed: Ed): TemplateResult {
   if (sel.kind === 'room') return roomInspector(ed, it as RoomConfig);
   if (sel.kind === 'device') return deviceInspector(ed, it as DeviceConfig);
   if (sel.kind === 'opening') return openingInspector(ed, it as OpeningConfig);
+  if (sel.kind === 'wall') return freeWallInspector(ed, it as FreeWallConfig);
   return furnitureInspector(ed, it as FurnitureConfig);
 }

@@ -95,7 +95,7 @@ export interface HrPlacePerson {
   /** ISO: the newest position */
   updated?: string | null;
   /** eta_min: left now; arrive_at / as_of (seconds): the arrival estimated at the last position, and when that was */
-  prediction?: { destination: string; name?: string | null; probability?: number; eta_min?: number | null; arrive_at?: number | null; as_of?: number | null; distance_km?: number | null } | null;
+  prediction?: { destination: string; name?: string | null; probability?: number; eta_min?: number | null; arrive_at?: number | null; as_of?: number | null; distance_km?: number | null; road_km?: number | null; rough?: boolean } | null;
 }
 
 export interface HrState {

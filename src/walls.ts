@@ -1,10 +1,11 @@
-import type { FloorConfig, OpeningConfig, Point, RoomConfig } from './types';
+import type { FloorConfig, FreeWallConfig, OpeningConfig, Point, RoomConfig } from './types';
 import { closestPointOnSegment, pointInPolygon } from './geometry';
 
 export interface WallPiece {
   a: Point;
   b: Point;
   kind: 'wall' | 'window' | 'door' | 'garage';
+  /* a passage ("Wand weg") leaves no piece at all: there is no wall, no frame, no lintel */
   opening?: OpeningConfig;
   /** Unit normal pointing to the outside (no room) if this is an exterior wall, else undefined */
   outward?: Point;
@@ -17,6 +18,8 @@ export interface WallPiece {
    */
   stopA?: boolean;
   stopB?: boolean;
+  /** a wall standing on its own ("Wand ziehen"), not a room's edge: its own thickness, height and paint */
+  free?: FreeWallConfig;
 }
 
 const EPS = 0.5;
@@ -30,7 +33,7 @@ export function wallPieces(floor: FloorConfig): WallPiece[] {
   // outdoor areas (garden, terrace, driveway) have no walls
   const rooms = floor.rooms.filter((r) => r.points.length >= 3 && !r.outdoor);
   const vertices = rooms.flatMap((r) => r.points);
-  const segs = new Map<string, [Point, Point]>();
+  const segs = new Map<string, [Point, Point, FreeWallConfig?]>();
   for (const r of rooms)
     for (let i = 0; i < r.points.length; i++) {
       const a = r.points[i];
@@ -52,10 +55,16 @@ export function wallPieces(floor: FloorConfig): WallPiece[] {
         if (!segs.has(id)) segs.set(id, [p, q]);
       }
     }
+  // walls standing on their own: pieces like any other (doors and windows cut them, the dog walks around them)
+  for (const w of floor.walls ?? []) {
+    if (!w || !Array.isArray(w.a) || !Array.isArray(w.b) || Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]) < EPS) continue;
+    segs.set(`free|${w.id}`, [w.a, w.b, w]);
+  }
 
   const roomAt = (p: Point) => rooms.find((r) => pointInPolygon(p, r.points));
   const out: WallPiece[] = [];
-  for (const [a, b] of segs.values()) {
+  for (const [a, b, fw] of segs.values()) {
+    const free = fw ? { free: fw } : {};
     const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
     const dir: Point = [(b[0] - a[0]) / len, (b[1] - a[1]) / len];
     const n: Point = [-dir[1], dir[0]];
@@ -84,11 +93,11 @@ export function wallPieces(floor: FloorConfig): WallPiece[] {
     let pos = 0;
     const at = (s: number): Point => [a[0] + dir[0] * s, a[1] + dir[1] * s];
     for (const c of cuts) {
-      if (c.s > pos + EPS) out.push({ a: at(pos), b: at(c.s), kind: 'wall', outward, front, back });
-      out.push({ a: at(c.s), b: at(c.e), kind: c.o.type, opening: c.o, outward, front, back });
+      if (c.s > pos + EPS) out.push({ a: at(pos), b: at(c.s), kind: 'wall', outward, front, back, ...free });
+      if (c.o.type !== 'passage') out.push({ a: at(c.s), b: at(c.e), kind: c.o.type, opening: c.o, outward, front, back, ...free });
       pos = Math.max(pos, c.e);
     }
-    if (len > pos + EPS) out.push({ a: at(pos), b: at(len), kind: 'wall', outward, front, back });
+    if (len > pos + EPS) out.push({ a: at(pos), b: at(len), kind: 'wall', outward, front, back, ...free });
   }
   // An opening across a split point of its wall (another room's corner inside it) comes as one piece per wall
   // segment: join them, so frame, leaf and lintel are drawn once over the whole opening (no jambs in the middle)
@@ -151,4 +160,66 @@ export function windowInward(o: OpeningConfig, floor: FloorConfig): Point | unde
   if (a && !b) return n;
   if (b && !a) return [-n[0], -n[1]];
   return undefined;
+}
+
+/** The two rooms on either side of a line on a wall (by its normal), when both are inside rooms */
+export function roomsBeside(floor: FloorConfig, a: Point, b: Point): [RoomConfig, RoomConfig] | undefined {
+  const rooms = floor.rooms.filter((r) => r.points.length >= 3 && !r.outdoor);
+  const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+  const n: Point = [-(b[1] - a[1]) / len, (b[0] - a[0]) / len];
+  const mid: Point = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+  const at = (k: number) => rooms.find((r) => pointInPolygon([mid[0] + n[0] * k, mid[1] + n[1] * k], r.points));
+  const x = at(6);
+  const y = at(-6);
+  return x && y && x !== y ? [x, y] : undefined;
+}
+
+/**
+ * The walls two rooms share, as straight runs (doors and windows on them left out, passages counted as wall so a
+ * run spans them too): where "Wand entfernen" puts its passage, and what "Wand wieder einsetzen" looks at.
+ */
+export function sharedWalls(floor: FloorConfig, roomA: string, roomB: string): [Point, Point][] {
+  const plain = { ...floor, openings: (floor.openings ?? []).filter((o) => o.type !== 'passage') };
+  const pieces = wallPieces(plain).filter((p) => p.kind === 'wall' && p.front && p.back && ((p.front.id === roomA && p.back.id === roomB) || (p.front.id === roomB && p.back.id === roomA)));
+  const runs: [Point, Point][] = [];
+  for (const p of pieces) {
+    const dx = p.b[0] - p.a[0];
+    const dy = p.b[1] - p.a[1];
+    const len = Math.hypot(dx, dy) || 1;
+    const dir: Point = [dx / len, dy / len];
+    // joins a run on the same line that it touches
+    const run = runs.find(([a, b]) => {
+      const rx = b[0] - a[0];
+      const ry = b[1] - a[1];
+      const rl = Math.hypot(rx, ry) || 1;
+      if (Math.abs(rx * dir[1] - ry * dir[0]) / rl > 0.02) return false;
+      const off = Math.abs((p.a[0] - a[0]) * (-ry / rl) + (p.a[1] - a[1]) * (rx / rl));
+      if (off > 1) return false;
+      const along = (q: Point) => ((q[0] - a[0]) * rx + (q[1] - a[1]) * ry) / rl;
+      const s0 = Math.min(along(p.a), along(p.b));
+      const s1 = Math.max(along(p.a), along(p.b));
+      return s0 <= rl + 1 && s1 >= -1;
+    });
+    if (!run) {
+      runs.push([p.a, p.b]);
+      continue;
+    }
+    const [a, b] = run;
+    const rx = b[0] - a[0];
+    const ry = b[1] - a[1];
+    const along = (q: Point) => (q[0] - a[0]) * rx + (q[1] - a[1]) * ry;
+    const pts = [a, b, p.a, p.b].sort((u, v) => along(u) - along(v));
+    run[0] = pts[0];
+    run[1] = pts[3];
+  }
+  return runs.filter(([a, b]) => Math.hypot(b[0] - a[0], b[1] - a[1]) >= 20);
+}
+
+/** Passages ("Wand weg") between two rooms */
+export function passagesBetween(floor: FloorConfig, roomA: string, roomB: string): OpeningConfig[] {
+  return (floor.openings ?? []).filter((o) => {
+    if (o.type !== 'passage') return false;
+    const pair = roomsBeside(floor, o.a, o.b);
+    return !!pair && ((pair[0].id === roomA && pair[1].id === roomB) || (pair[0].id === roomB && pair[1].id === roomA));
+  });
 }

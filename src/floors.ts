@@ -12,7 +12,7 @@ export interface FloorTypeInfo {
   color: string;
   /** default tile size (cm) where applicable */
   size?: number;
-  palette: 'wood' | 'tile' | 'carpet' | 'garden';
+  palette: 'wood' | 'tile' | 'carpet' | 'garden' | 'cork';
   /** Meant for outdoor areas (offered first there) */
   outdoor?: boolean;
 }
@@ -24,6 +24,7 @@ export const FLOOR_TYPES: FloorTypeInfo[] = [
   { type: 'hex', de: 'Sechseck', en: 'Hexagon', color: '#a8b8a0', size: 20, palette: 'tile' },
   { type: 'checker', de: 'Schachbrett', en: 'Checker', color: '#2c2c2e', size: 30, palette: 'tile' },
   { type: 'carpet', de: 'Teppich', en: 'Carpet', color: '#b9b2a6', palette: 'carpet' },
+  { type: 'cork', de: 'Kork', en: 'Cork', color: '#c49a64', size: 30, palette: 'cork' },
   { type: 'color', de: 'Farbe', en: 'Color', color: '#e9e6e0', palette: 'tile' },
   { type: 'concrete', de: 'Beton / Estrich', en: 'Concrete', color: '#b4b2ad', size: 300, palette: 'tile' },
   { type: 'grass', de: 'Rasen', en: 'Lawn', color: '#7fae5f', palette: 'garden', outdoor: true },
@@ -66,6 +67,13 @@ export const PALETTES: Record<string, NamedColor[]> = {
     { name: 'Taubenblau', en: 'Dove blue', color: '#8fa9c0' },
     { name: 'Petrol', en: 'Petrol', color: '#3f6f73' },
     { name: 'Schwarz', en: 'Black', color: '#2a2a2c' },
+  ],
+  cork: [
+    { name: 'Kork natur', en: 'Natural cork', color: '#c49a64' },
+    { name: 'Kork hell', en: 'Light cork', color: '#d9b98a' },
+    { name: 'Kork dunkel', en: 'Dark cork', color: '#8f6a43' },
+    { name: 'Kork grau', en: 'Grey cork', color: '#a59a8c' },
+    { name: 'Kork weiß', en: 'White cork', color: '#e8dccb' },
   ],
   garden: [
     { name: 'Rasen', en: 'Lawn', color: '#7fae5f' },
@@ -132,6 +140,8 @@ export function floorPattern(id: string, m: FloorMaterial | undefined): SVGTempl
         <circle cx="1.5" cy="1.5" r="0.9" fill=${dot}></circle><circle cx="4.5" cy="4.5" r="0.9" fill=${dot}></circle>
       </pattern>`;
     }
+    case 'cork':
+      return cork(id, color, m.size ?? info?.size ?? 30, m.angle ?? 0);
     case 'planks':
       return planks(id, color, m.angle ?? 0);
     case 'herringbone':
@@ -158,6 +168,27 @@ export function floorPattern(id: string, m: FloorMaterial | undefined): SVGTempl
       return water(id, color);
   }
   return undefined;
+}
+
+/** Cork: square tiles with a fine, warm grain of lighter and darker specks (calm, only faint seams) */
+function cork(id: string, color: string, size: number, angle: number) {
+  const S = size * 2;
+  const specks: SVGTemplateResult[] = [];
+  const tones = [shade(color, -0.18), shade(color, -0.1), shade(color, 0.12), shade(color, 0.2)];
+  for (let i = 0; i < 160; i++) {
+    const x = hash(i, 11) * S;
+    const y = hash(i, 12) * S;
+    const r = 0.25 + hash(i, 13) * 0.55;
+    specks.push(svg`<circle cx=${x.toFixed(1)} cy=${y.toFixed(1)} r=${r.toFixed(2)} fill=${tones[Math.floor(hash(i, 14) * tones.length)]} opacity="0.7"></circle>`);
+  }
+  const seam = shade(color, -0.14);
+  return svg`<pattern id=${id} width=${S} height=${S} patternUnits="userSpaceOnUse" patternTransform=${`rotate(${angle})`}>
+    <rect width=${S} height=${S} fill=${color}></rect>
+    <rect width=${size} height=${size} fill=${shade(color, 0.012)}></rect>
+    <rect x=${size} y=${size} width=${size} height=${size} fill=${shade(color, -0.012)}></rect>
+    ${specks}
+    <path d=${`M0 0H${S}M0 ${size}H${S}M0 0V${S}M${size} 0V${S}`} stroke=${seam} stroke-width="0.35" opacity="0.6" fill="none"></path>
+  </pattern>`;
 }
 
 /** Lawn: mowing stripes and fine blades */

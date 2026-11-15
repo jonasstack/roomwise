@@ -5,7 +5,7 @@
  * logic and when it is dark here. Nothing about light or heating (those pages have their own settings).
  * Every change is saved at once (store.saveRoom). Fires "close".
  */
-import { css, html, nothing } from 'lit';
+import { css, html, nothing, type PropertyValues } from 'lit';
 import { mdiCheckboxBlankOutline, mdiCheckboxMarked, mdiChevronRight, mdiMagnify, mdiPlus } from '@mdi/js';
 import { StoreElement } from '../base';
 import { durationStepper } from '../components/duration';
@@ -89,7 +89,9 @@ export class HrRoomSettings extends StoreElement {
   }
 
   /** sensors of the room chosen by hand that the device list does not know: fetch their name and state once */
-  override willUpdate() {
+  override willUpdate(changed: PropertyValues) {
+    // first the store subscription (StoreElement): without it the window never redraws after a change
+    super.willUpdate(changed);
     const r = this.room;
     if (!r) return;
     const missing = [...r.presence, ...r.motion].filter((id) => !this.store.device(id) && !this._known[id] && !this._asked.has(id));

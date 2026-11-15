@@ -107,13 +107,14 @@ await page.keyboard.press('Shift+Tab');
 a = await active();
 ok(a.kb === items[items.length - 1].kb, `Shift+Tab returns to the last focused item (${a.kb})`);
 
-// Enter on a room = tap: toggles its lights
+// Enter on a room = tap: focuses the room (the default tap since 0.1.0-beta.8; the double tap switches its lights)
 await page.keyboard.press('Home');
 await m.clearCalls();
 await page.keyboard.press('Enter');
-await wait(300);
+await wait(600);
 let calls = await m.calls();
-ok(calls.some((c) => c.domain === 'light' && /turn_off|toggle/.test(c.service)), `Enter on a room = tap (lights: ${calls.map((c) => c.domain + '.' + c.service).join(',')})`);
+const focusedRoom = await page.evaluate(`window.__fpCard.shadowRoot.querySelector('fp-plan').focused`);
+ok(focusedRoom && !calls.some((c) => c.domain === 'light'), `Enter on a room = tap (focused: ${focusedRoom}, calls: ${calls.map((c) => c.domain + '.' + c.service).join(',') || 'none'})`);
 
 // Enter on the device = tap: its popup as a dialog, focus inside, trapped, Escape closes, focus back
 await page.keyboard.press('ArrowRight');

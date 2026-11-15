@@ -21,6 +21,7 @@ import { FloorplanLayer } from './layer/floorplan-layer';
 import './components/fp-plan';
 import './components/fp-floor-slider';
 import type { SliderFloor } from './components/fp-floor-slider';
+import type { StackFloor } from './components/fp-plan';
 import { floorBelow, floorOfEntity, floorOfItem, floorShort, orderedFloors, stairsFromBelow, stairsTarget, floorLevel } from './levels';
 import './layer/floorplan-layer';
 import './config-editor';
@@ -30,7 +31,8 @@ import { ENTRY_DEFAULTS, EntryAlertController } from './entry-alert';
 import { PetController } from './pets';
 import { scheduleClientReport } from './client-info';
 import { furnitureContents, furnitureLabel, isWifiContent, isWifiPiece, resolveFurniture, wifiContentTarget } from './furniture';
-import { applianceRoles, isAppliance } from './appliance';
+import { applianceRoles, applianceWatch, isAppliance } from './appliance';
+import { peekEvent, peekKey, type PeekEvent } from './floor-peek';
 import { hasMediaControls } from './media-controls';
 import { formatState, fireEvent, navigate } from './ha';
 import { mergePlan, sharesPlans, watchPlan, type SharedPlan } from './shared-plans';
@@ -49,6 +51,30 @@ const MOVE_ICON: Record<string, string> = { walk: 'mdi:walk', bike: 'mdi:bike', 
 /** Shortest time between two redraws caused by state changes (ms); weak devices draw less often */
 const REDRAW_GAP = 150;
 const REDRAW_GAP_WEAK = 400;
+
+/** The garden, the driveway and what stands outside (cars, wallbox, mower, garage door …) belong to every floor: an upper
+ * floor without outdoor areas of its own shows those of the floor that has them (as they are, never faint).
+ * Kept per floor object, so the plan gets the same object as long as nothing changed. */
+const outdoorCache = new WeakMap<FloorConfig, { src?: FloorConfig; out: FloorConfig }>();
+function withOutdoor(cfg: FloorplanCardConfig, floor: FloorConfig): FloorConfig {
+  if (cfg.floors.length < 2 || floor.rooms.some((r) => r.outdoor)) return floor;
+  const src = cfg.floors.find((x) => x !== floor && x.rooms.some((r) => r.outdoor && r.points.length >= 3));
+  if (!src) return floor;
+  const hit = outdoorCache.get(floor);
+  if (hit && hit.src === src) return hit.out;
+  const outdoor = src.rooms.filter((r) => r.outdoor && r.points.length >= 3);
+  const indoor = src.rooms.filter((r) => !r.outdoor && r.points.length >= 3);
+  const isOut = (p: [number, number]) => outdoor.some((r) => pointInPolygon(p, r.points)) || !indoor.some((r) => pointInPolygon(p, r.points));
+  const mine = new Set([...(floor.furniture ?? []).map((x) => x.id), ...floor.devices.map((x) => x.id)]);
+  const out: FloorConfig = {
+    ...floor,
+    rooms: [...outdoor, ...floor.rooms],
+    furniture: [...(src.furniture ?? []).filter((x) => !mine.has(x.id) && x.kind !== 'stairs' && isOut([x.x, x.y])), ...(floor.furniture ?? [])],
+    devices: [...src.devices.filter((x) => !mine.has(x.id) && isOut([x.x, x.y])), ...floor.devices],
+  };
+  outdoorCache.set(floor, { src, out });
+  return out;
+}
 
 export class FloorplanCard extends LitElement {
   static override properties = {
@@ -72,6 +98,8 @@ export class FloorplanCard extends LitElement {
     _tripNow: { state: true },
     _sliderW: { state: true },
     _tripsInset: { state: true },
+    _peekInset: { state: true },
+    _stackChipOff: { state: true },
     _texts: { state: true },
     _shared: { state: true },
     _planState: { state: true },
@@ -91,6 +119,10 @@ export class FloorplanCard extends LitElement {
   declare _sliderW: number;
   /** px from the top of the plan to below the "on the way" panel (0 = none shown): the building moves down */
   declare _tripsInset: number;
+  /** px the "Etagen-Blick" (another floor peeking in at the bottom) keeps clear of the building */
+  declare _peekInset: number;
+  /** the label of the floor with something to tell lies outside the visible plan (e.g. far below in 3D) */
+  declare _stackChipOff: boolean;
   /** counts up when the texts of a language arrive (English is loaded on demand): draws the card again */
   declare _texts: number;
   /** Hausregeln: live state (undefined: not installed) */
@@ -185,6 +217,8 @@ export class FloorplanCard extends LitElement {
     this._spinDefault = true;
     this._sliderW = 0;
     this._tripsInset = 0;
+    this._peekInset = 0;
+    this._stackChipOff = false;
     this._texts = 0;
   }
 
@@ -221,7 +255,11 @@ export class FloorplanCard extends LitElement {
     this._base = normalizeConfig(shared ? mergePlan(raw, shared.plan) : raw);
     // what Hausregeln assigns to the rooms (lights, thermostat) is shown, the editor works on `_base`
     this._config = withHrRooms(this._base, this._hass);
-    if (!this._config.floors.some((f) => f.id === this._floorId)) this._floorId = this.defaultFloorId;
+    if (!this._config.floors.some((f) => f.id === this._floorId)) {
+      this._floorId = this.defaultFloorId;
+      // chosen before Home Assistant said who is signed in: their own start floor follows with the first hass
+      this.floorBeforeUser = !this._hass?.user;
+    }
     this.computeRelevant();
     this.layer?.setCardConfig(this._config, this._base);
   }
@@ -301,9 +339,17 @@ export class FloorplanCard extends LitElement {
     return this._raw;
   }
 
+  /** the floor was picked before the signed-in user was known (their start floor may differ) */
+  private floorBeforeUser = false;
+
   set hass(hass: HomeAssistant) {
     const old = this._hass;
     this._hass = hass;
+    if (this.floorBeforeUser && hass.user && this._config) {
+      this.floorBeforeUser = false;
+      const want = this.defaultFloorId;
+      if (want && want !== this._floorId) this._floorId = want;
+    }
     setLanguage(hass.locale?.language ?? hass.language);
     this.applyTheme();
     const dropped = this.optimistic.reconcile(hass);
@@ -549,9 +595,13 @@ export class FloorplanCard extends LitElement {
         const open = this._tripOpen === p.entity_id;
         const rows: [string, string][] = [];
         if (pr) rows.push([t('people.d_dest'), home ? t('people.home') : (pr.name ?? '')]);
-        if (fresh && pr?.arrive_at) rows.push([t('people.d_arrive'), t('people.at_clock', { time: formatClock(new Date(pr.arrive_at * 1000)) })]);
-        else if (fresh && pr?.eta_min != null) rows.push([t('people.d_arrive'), t('people.at_clock', { time: formatClock(new Date(Date.now() + pr.eta_min * 60000)) })]);
-        if (pr?.distance_km != null) rows.push([t('people.d_left'), `${formatNumber(pr.distance_km, pr.distance_km < 10 ? 1 : 0)} km`]);
+        // a rough estimate (no trip learned for this way): the clock rounded to 5 minutes, it is no more precise
+        const at = (ms: number) => formatClock(new Date(pr?.rough ? Math.round(ms / 300000) * 300000 : ms));
+        if (fresh && pr?.arrive_at) rows.push([t('people.d_arrive'), t('people.at_clock', { time: at(pr.arrive_at * 1000) })]);
+        else if (fresh && pr?.eta_min != null) rows.push([t('people.d_arrive'), t('people.at_clock', { time: at(Date.now() + pr.eta_min * 60000) })]);
+        // the way left: by road as the arrival time reckons it (estimated), else the straight line
+        if (pr?.road_km != null) rows.push([t('people.d_left_road'), `${formatNumber(pr.road_km, pr.road_km < 10 ? 1 : 0)} km`]);
+        else if (pr?.distance_km != null) rows.push([t('people.d_left'), `${formatNumber(pr.distance_km, pr.distance_km < 10 ? 1 : 0)} km`]);
         if (p.since) rows.push([t('people.d_since'), clock(p.since)]);
         if (p.speed_kmh != null) rows.push([t('people.d_speed'), `${formatNumber(p.speed_kmh, 0)} km/h`]);
         if (p.mode) rows.push([t('people.d_mode'), t(`people.mode_${p.mode}` as never)]);
@@ -609,7 +659,14 @@ export class FloorplanCard extends LitElement {
     // the scene may just have (re)built a vacuum: give it the latest position
     this.vacuums.pump(this._hass);
     this.measureTrips();
+    // the stack's label is drawn by the plan a moment later (and moves with the view): look again shortly after
+    if (this.peekVal && this.stackVal) {
+      clearTimeout(this.chipTimer);
+      this.chipTimer = window.setTimeout(() => this.measureTrips(), 350);
+    }
   }
+  private chipTimer?: number;
+  private chipOffKey = '';
 
   private offLang?: () => void;
   /** the texts of the language just arrived: the card, the plan and every open popup draw again */
@@ -641,8 +698,123 @@ export class FloorplanCard extends LitElement {
       this.tripsObserver.observe(panel);
     } else this.tripsObserver?.disconnect();
     if (Math.abs(inset - this._tripsInset) > 1) this._tripsInset = inset;
+    // the "Etagen-Blick" at the bottom: the building moves up above it (only as far as needed)
+    const peek = this.renderRoot.querySelector('fp-floor-peek');
+    let below = 0;
+    if (peek && plan) {
+      const top = peek.getBoundingClientRect().top;
+      if (top > 0) below = Math.max(0, Math.round(plan.getBoundingClientRect().bottom - top + 8));
+      // it draws itself a moment later (its own chunk, its own update): measure again when its size settles
+      if (this.peekObserved !== peek) {
+        this.peekObserver ??= new ResizeObserver(() => this.measureTrips());
+        this.peekObserver.disconnect();
+        this.peekObserver.observe(peek);
+        this.peekObserved = peek;
+      }
+    } else if (this.peekObserved) {
+      this.peekObserver?.disconnect();
+      this.peekObserved = undefined;
+    }
+    if (Math.abs(below - this._peekInset) > 1) this._peekInset = below;
+    // the label in the stack out of sight: the small view at the bottom shows it instead
+    const chip = plan?.shadowRoot?.querySelector('.stack-chip');
+    let off = false;
+    if (chip && plan) {
+      const c = chip.getBoundingClientRect();
+      const p = plan.getBoundingClientRect();
+      const cx = (c.left + c.right) / 2;
+      const cy = (c.top + c.bottom) / 2;
+      off = c.width > 0 && (cx < p.left + 8 || cx > p.right - 8 || cy < p.top + 8 || cy > p.bottom - 8);
+    }
+    // once out of sight it stays with the small view for this message on this floor: showing that view moves the
+    // building up, which can bring the label back – without this it would flip back and forth
+    const key = `${this._floorId}|${this.peekKeyVal}`;
+    if (this.chipOffKey !== key) {
+      this.chipOffKey = key;
+      if (this._stackChipOff && !off) this._stackChipOff = false;
+    }
+    if (off && !this._stackChipOff) this._stackChipOff = true;
   }
   private tripsObserver?: ResizeObserver;
+  private peekObserver?: ResizeObserver;
+  private peekObserved?: Element;
+
+  /** Something worth telling on another floor (kept while it stays the same) */
+  private peek(cfg: FloorplanCardConfig): PeekEvent | undefined {
+    if (cfg.floors.length < 2 || cfg.floor_peek === false || !this._hass) return undefined;
+    const hrAlarm = cfg.house_rules?.alarm !== false && (this._hr?.alarm?.state === 'pending' || this._hr?.alarm?.state === 'triggered') ? (this._hr.alarm.cause ?? undefined) : undefined;
+    const ev = peekEvent(cfg, this._floorId, {
+      hass: this._hass,
+      getState: this.getState,
+      alertWindows: this.entryAlert.state.active ? new Set(this.entryAlert.state.windows.map((w) => w.id)) : undefined,
+      dueDogs: new Set([...this.pets.states].filter(([, st]) => st.mode === 'due').map(([id]) => id)),
+      alarmCause: hrAlarm,
+    });
+    const key = peekKey(ev);
+    if (key !== this.peekKeyVal) {
+      this.peekKeyVal = key;
+      this.peekVal = ev;
+      // the view part is its own small chunk: fetched the first time something peeks in
+      if (ev && !customElements.get('fp-floor-peek')) void import('./components/floor-peek').then(() => this.requestUpdate());
+    }
+    return this.peekVal;
+  }
+  private peekKeyVal = '';
+  private peekVal?: PeekEvent;
+
+  /** How far apart the floors of the stack lie (cm): a storey and a good gap, so they never sit on each other */
+  private stackGap(floor: FloorConfig | undefined) {
+    return Math.round(((floor?.height ?? 250) + 30) * 1.6);
+  }
+
+  /**
+   * The floors right above and below the shown one, stacked: faint, the one with something to tell (the "Etagen-Blick")
+   * a little clearer with its label. 3D with effects off: none (the plain view); kept while nothing changes.
+   */
+  private stackFor(cfg: FloorplanCardConfig, floor: FloorConfig | undefined, peek: PeekEvent | undefined, plain3d: boolean): StackFloor[] | undefined {
+    if (cfg.floors.length < 2 || !floor || plain3d) return undefined;
+    const order = orderedFloors(cfg, this._hass);
+    const i = order.findIndex((f) => f.id === floor.id);
+    const gap = this.stackGap(floor);
+    const list: StackFloor[] = [];
+    for (const [nb, dz] of [
+      [order[i - 1], gap],
+      [order[i + 1], -gap],
+    ] as const) {
+      if (!nb || !nb.rooms.some((r) => !r.outdoor && r.points.length >= 3)) continue;
+      const hit = peek?.floor.id === nb.id ? peek : undefined;
+      list.push({ floor: nb, dz, bright: !!hit, severe: hit?.severe, mark: hit?.at, text: hit?.text, piece: hit?.pieceId });
+    }
+    const key = list.map((s) => `${s.floor.id}:${s.dz}:${s.text ?? ''}:${s.mark ?? ''}:${s.severe ? 1 : 0}`).join('|') + `#${order.map((f) => f.id).join(',')}`;
+    if (key !== this.stackKey || list.some((s, n) => s.floor !== this.stackVal?.[n]?.floor)) {
+      this.stackKey = key;
+      this.stackVal = list.length ? list : undefined;
+    }
+    return this.stackVal;
+  }
+  private stackKey = '';
+  private stackVal?: StackFloor[];
+  /** The stack without its label (the small view at the bottom shows the message instead), kept per stack */
+  private stackQuiet(stack: StackFloor[] | undefined) {
+    if (!stack) return stack;
+    if (this.quietOf !== stack) {
+      this.quietOf = stack;
+      this.quietVal = stack.map((s) => (s.text ? { ...s, text: undefined } : s));
+    }
+    return this.quietVal;
+  }
+  private quietOf?: StackFloor[];
+  private quietVal?: StackFloor[];
+  private offAppl?: () => void;
+
+  /** A tap on the "Etagen-Blick": to that floor, onto the thing (an appliance opens its controls) */
+  private openPeek = async () => {
+    const ev = this.peekVal;
+    if (!ev) return;
+    if (ev.floor.id !== this._floorId) await this.goFloor(ev.floor.id);
+    if (ev.kind === 'appliance' && ev.pieceId) return this.gesture({ kind: 'furniture', id: ev.pieceId }, 'tap');
+    if (ev.roomId) (this.renderRoot.querySelector('fp-plan') as FpPlan | null)?.focusRoom(ev.roomId);
+  };
 
   get hass(): HomeAssistant {
     return this._hass!;
@@ -655,6 +827,8 @@ export class FloorplanCard extends LitElement {
     // back on the page (or hass came before it was): follow Hausregeln again
     if (this._hass && !this.offHr) this.watchHouseRules(this._hass);
     this.pets.start();
+    // an appliance seen / done elsewhere: the "Etagen-Blick" follows
+    this.offAppl ??= applianceWatch?.listen(() => this.requestUpdate());
     this.offCompanion = onCompanion(() => this.syncCompanion());
     this.fs.connect();
     // English comes on demand (not in the start bundle): draw everything again once it is there
@@ -685,6 +859,8 @@ export class FloorplanCard extends LitElement {
     super.disconnectedCallback();
     this.pets.stop();
     this.vacuums.stop();
+    this.offAppl?.();
+    this.offAppl = undefined;
     this.offHr?.();
     this.offHrPulse?.();
     this.offHr = this.offHrPulse = undefined;
@@ -862,22 +1038,16 @@ export class FloorplanCard extends LitElement {
       return;
     }
     this.previewOn = true;
-    // offset < 0: towards an upper floor → the building sinks
-    const dist = this.floorDistance(plan) * 0.32;
-    plan.style.transform = `translate3d(0, ${(-off * dist).toFixed(1)}px, 0)`;
-    plan.style.opacity = (1 - Math.abs(off) * 0.28).toFixed(3);
+    // offset < 0: towards an upper floor → the stack slides so that floor comes a little towards the middle
+    const sh = plan.stackShift((off < 0 ? 1 : -1) * this.stackGap(this.floor));
+    const k = Math.abs(off) * 0.35;
+    plan.style.transform = `translate3d(${(-sh.x * k).toFixed(1)}px, ${(-sh.y * k).toFixed(1)}px, 0)`;
   };
 
-  /** How far the building travels when the floor changes (px): further in 3D, a short slide in 2D */
-  private floorDistance(plan: FpPlan) {
-    const h = plan.getBoundingClientRect().height || this._size.h || 600;
-    return h * (plan.is3d ? 0.26 : 0.08);
-  }
-
   /**
-   * Go to another floor. Going up, the shown floor sinks away and the new one comes down from above (down: the
-   * other way round); in 2D only a short slide with a cross-fade. The new floor fades in once it is really drawn.
-   * Short WAAPI animations of the plan element (transform + opacity): nothing keeps running afterwards.
+   * Go to another floor: the floors lie stacked (faint above and below the shown one), so the focus only glides – the
+   * whole stack slides until the new floor sits where the shown one was; nothing sinks away or fades. Without motion
+   * (prefers-reduced-motion) it just switches. A short WAAPI animation of the plan element: nothing keeps running.
    */
   async goFloor(id: string) {
     const cfg = this._config;
@@ -892,40 +1062,28 @@ export class FloorplanCard extends LitElement {
       this.floorAnim = 0;
       return;
     }
-    const up = floorLevel(cfg, to, this._hass) > floorLevel(cfg, from, this._hass);
-    const d3 = plan.is3d;
-    const dist = reduce ? 0 : this.floorDistance(plan);
-    const sign = up ? 1 : -1;
-    const fromT = plan.style.transform || 'translate3d(0, 0, 0)';
-    const fromO = plan.style.opacity || '1';
-    plan.style.transform = '';
-    plan.style.opacity = '';
-    this.previewOn = false;
+    // where the new floor lies in the stack (above +, below −; at most two storeys of glide)
+    const order = orderedFloors(cfg, this._hass);
+    const steps = order.findIndex((f) => f.id === from.id) - order.findIndex((f) => f.id === id);
+    const dz = Math.sign(steps) * Math.min(2, Math.abs(steps)) * this.stackGap(from);
+    const shift = reduce ? { x: 0, y: 0 } : plan.stackShift(dz);
     plan.getAnimations().forEach((a) => a.cancel());
-    const out = plan.animate(
-      [
-        { transform: fromT, opacity: fromO },
-        { transform: `translate3d(0, ${sign * dist}px, 0) scale(${d3 && !reduce ? 0.965 : 1})`, opacity: 0 },
-      ],
-      { duration: reduce ? 120 : d3 ? 170 : 130, easing: 'cubic-bezier(0.4, 0, 1, 1)', fill: 'forwards' },
-    );
-    await done(out);
-    if (token !== this.floorAnim) return;
+    this.previewOn = false;
+    plan.style.opacity = '';
     this._floorId = id;
+    // the new floor starts where it lay in the stack (set before the next paint), then glides into place
+    plan.style.transform = shift.x || shift.y ? `translate3d(${shift.x.toFixed(1)}px, ${shift.y.toFixed(1)}px, 0)` : '';
     await this.updateComplete;
     await plan.floorReady();
     if (token !== this.floorAnim) return;
-    const inn = plan.animate(
-      [
-        { transform: `translate3d(0, ${-sign * dist}px, 0) scale(${d3 && !reduce ? 1.03 : 1})`, opacity: 0 },
-        { transform: 'translate3d(0, 0, 0) scale(1)', opacity: 1 },
-      ],
-      { duration: reduce ? 160 : d3 ? 300 : 220, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: 'forwards' },
-    );
-    out.cancel();
-    await done(inn);
-    if (token !== this.floorAnim) return;
-    inn.cancel();
+    const fromT = plan.style.transform || 'translate3d(0, 0, 0)';
+    plan.style.transform = '';
+    if (fromT !== 'translate3d(0, 0, 0)') {
+      const glide = plan.animate([{ transform: fromT }, { transform: 'translate3d(0, 0, 0)' }], { duration: plan.is3d ? 520 : 380, easing: 'cubic-bezier(0.25, 0.8, 0.25, 1)' });
+      await done(glide);
+      if (token !== this.floorAnim) return;
+      glide.cancel();
+    }
     this.floorAnim = 0;
   }
 
@@ -986,7 +1144,8 @@ export class FloorplanCard extends LitElement {
   // ---------- Gestures ----------
 
   private get floor(): FloorConfig | undefined {
-    return this._config?.floors.find((f) => f.id === this._floorId) ?? this._config?.floors[0];
+    const f = this._config?.floors.find((x) => x.id === this._floorId) ?? this._config?.floors[0];
+    return f && this._config ? withOutdoor(this._config, f) : f;
   }
 
   private item(target: HitTarget): { room?: RoomConfig; device?: DeviceConfig; opening?: OpeningConfig } {
@@ -1033,6 +1192,8 @@ export class FloorplanCard extends LitElement {
   private gesture(target: HitTarget, gesture: Gesture): void {
     // the chip at stairs ("↑ Obergeschoss", "↓ Erdgeschoss" at the stairwell): to that floor
     if (target.to) {
+      // the label of a stacked floor with something to tell: there, onto the thing (an appliance opens)
+      if (gesture === 'tap' && this.peekVal && target.to === this.peekVal.floor.id && (!target.id || target.id === this.peekVal.pieceId)) return void this.openPeek();
       if (gesture === 'tap') void this.goFloor(target.to);
       return;
     }
@@ -1137,7 +1298,29 @@ export class FloorplanCard extends LitElement {
     },
     onDoubleTap: (tg: HitTarget) => this.gesture(tg, 'double_tap'),
     onHold: (tg: HitTarget) => this.gesture(tg, 'hold'),
+    // several floors: the wheel and a two-finger swipe up/down move the floor focus (Ctrl/⌘ + wheel, pinch: zoom)
+    floorScroll: () => !!this._config && this._config.floors.length > 1 && this._config.scroll_floors !== false,
+    onFloorStep: (dir: 1 | -1) => this.stepFloor(dir),
   };
+
+  /** One floor up (+1) or down (−1) in the stack; the first time on this device a short hint how to zoom now */
+  private stepFloor(dir: 1 | -1): boolean {
+    const cfg = this._config;
+    if (!cfg) return false;
+    const order = orderedFloors(cfg, this._hass);
+    const next = order[order.findIndex((f) => f.id === this._floorId) - dir];
+    if (!next) return false;
+    void this.goFloor(next.id);
+    try {
+      if (!localStorage.getItem('fp-scroll-hint')) {
+        localStorage.setItem('fp-scroll-hint', '1');
+        this.ensureLayer().toast(t('floor.scroll_hint'));
+      }
+    } catch {
+      /* no storage: no hint */
+    }
+    return true;
+  }
 
   // ---------- performance overlay (hold the compass for 2 s to toggle it on this device) ----------
   private statsTimer?: number;
@@ -1432,6 +1615,11 @@ export class FloorplanCard extends LitElement {
     const sky = level === 'off' ? undefined : skyPalette(sun, weather, this.hasAttribute('dark'));
     const skyVars = sky ? Object.entries(sky.vars).map(([k, v]) => `;${k}:${v}`).join('') : '';
     const multi = cfg.floors.length > 1;
+    const peek = multi ? this.peek(cfg) : undefined;
+    const stack = multi ? this.stackFor(cfg, floor, peek, is3d && level === 'off') : undefined;
+    // the floor with something to tell lies in the stack (its label is at the spot there): no extra view at the bottom
+    const peekInStack = !!peek && !!stack?.some((s) => s.floor.id === peek.floor.id) && !plan?.focused;
+    const peekShown = peek && (!peekInStack || this._stackChipOff) ? peek : undefined;
     return html`
       <ha-card style=${style + (strip ? `;--strip-h:${strip.height}px` : '') + skyVars} class=${strip ? 'with-strip' : ''}>
         <fp-ambient layer="back" .covered=${!!this._covered} .quality=${defaults.weather} .alarm=${this.entryAlert.state.phase === 'alarm'} .sun=${sun} .weather=${weather} .level=${level} .north=${cfg.north ?? 0} .spin=${this._spin} .tilt=${is3d ? (plan?.tilt ?? 0) : 0} .night=${sky?.night ?? 0}></fp-ambient>
@@ -1468,6 +1656,9 @@ export class FloorplanCard extends LitElement {
           .roomHeight=${floor?.height ?? 250}
           .insetRight=${multi && this._sliderW ? this._sliderW + 24 : 0}
           .insetTop=${this._tripsInset}
+          .insetBottom=${peekShown ? this._peekInset : 0}
+          .stack=${peekShown && peekInStack ? this.stackQuiet(stack) : stack}
+          ?stackPlain=${defaults.performance === 'eco'}
           .frameBounds=${multi ? this.allBuilding(cfg) : undefined}
           .stairs=${multi ? this.stairsMap(cfg, floor) : undefined}
           .stairsBelow=${multi ? this.stairwell(cfg, floor) : undefined}
@@ -1536,6 +1727,20 @@ export class FloorplanCard extends LitElement {
           </div>
         </div>
         ${multi ? this.renderFloorSlider(cfg) : nothing}
+        ${peekShown
+          ? html`<fp-floor-peek
+              class="floor-peek ${this._fsOffer ? 'raised' : ''}"
+              style=${`--peek-h:${Math.round(Math.max(44, Math.min(104, (this._size.h || 600) * 0.16)))}px`}
+              .floor=${peekShown.floor}
+              .at=${peekShown.at}
+              .text=${peekShown.text}
+              ?severe=${peekShown.severe}
+              .tilt=${is3d ? (plan?.tilt ?? 0) : 0}
+              .spin=${this._spin}
+              ?flat=${level === 'off'}
+              @peek-open=${this.openPeek}
+            ></fp-floor-peek>`
+          : nothing}
         ${strip && floor ? this.renderStrip(floor, strip.cols) : nothing}
         ${this._fsOffer
           ? html`<button class="fs-offer pressable" @click=${this.toggleFullscreen}>
@@ -2426,6 +2631,25 @@ export class FloorplanCard extends LitElement {
       }
       .with-strip .floor-slider {
         top: calc((100% - var(--strip-h)) / 2);
+      }
+      /* another floor peeking in at the bottom, between the compass and the view button (never over them) */
+      .floor-peek {
+        position: absolute;
+        left: 50%;
+        bottom: var(--fp-space-3);
+        transform: translateX(-50%);
+        width: min(420px, calc(100% - 2 * (var(--fp-space-4) + 56px)));
+        z-index: 2;
+      }
+      .with-strip .floor-peek {
+        bottom: calc(var(--strip-h) + var(--fp-space-2));
+      }
+      /* the short full-screen offer sits at the bottom centre: the peek waits above it meanwhile */
+      .floor-peek.raised {
+        bottom: calc(var(--fp-space-4) + 56px);
+      }
+      .with-strip .floor-peek.raised {
+        bottom: calc(var(--strip-h) + var(--fp-space-2));
       }
     `,
   ];

@@ -27,6 +27,11 @@ export function normalizeConfig(input: FloorplanCardConfig & { rooms?: RoomConfi
     f.openings = (f.openings ?? []).filter((o) => o && Array.isArray(o.a) && Array.isArray(o.b));
     f.furniture = (f.furniture ?? []).filter((x) => x && x.kind);
     for (const o of f.openings) ensureId(o, 'open');
+    if (f.walls !== undefined) {
+      f.walls = (Array.isArray(f.walls) ? f.walls : []).filter((w) => w && Array.isArray(w.a) && Array.isArray(w.b));
+      for (const w of f.walls) ensureId(w, 'wall');
+      if (!f.walls.length) delete f.walls;
+    }
     for (const x of f.furniture) {
       ensureId(x, 'furn');
       x.x = Number(x.x) || 0;
@@ -190,12 +195,15 @@ export function validateConfig(input: unknown): string[] {
   floors.forEach((f: any, i: number) => {
     const where = typeof f?.name === 'string' && f.name ? f.name : t('editor.new_floor', { n: i + 1 });
     if (!f || typeof f !== 'object') return errors.push(t('plan_io.bad_floor', { floor: where }));
-    for (const key of ['rooms', 'devices', 'openings', 'furniture']) if (f[key] !== undefined && !Array.isArray(f[key])) errors.push(t('plan_io.bad_list', { floor: where, what: key }));
+    for (const key of ['rooms', 'devices', 'openings', 'furniture', 'walls']) if (f[key] !== undefined && !Array.isArray(f[key])) errors.push(t('plan_io.bad_list', { floor: where, what: key }));
     (Array.isArray(f.rooms) ? f.rooms : []).forEach((r: any, j: number) => {
       if (!r || !Array.isArray(r.points) || r.points.filter(isPoint).length < 3) errors.push(t('plan_io.bad_room', { floor: where, room: r?.name || String(j + 1) }));
     });
     (Array.isArray(f.openings) ? f.openings : []).forEach((o: any) => {
-      if (!o || !isPoint(o.a) || !isPoint(o.b) || !['door', 'window'].includes(o.type ?? 'door')) errors.push(t('plan_io.bad_opening', { floor: where }));
+      if (!o || !isPoint(o.a) || !isPoint(o.b) || !['door', 'window', 'garage', 'passage'].includes(o.type ?? 'door')) errors.push(t('plan_io.bad_opening', { floor: where }));
+    });
+    (Array.isArray(f.walls) ? f.walls : []).forEach((w: any) => {
+      if (!w || !isPoint(w.a) || !isPoint(w.b)) errors.push(t('plan_io.bad_wall', { floor: where }));
     });
     (Array.isArray(f.furniture) ? f.furniture : []).forEach((x: any) => {
       if (!x || typeof x.kind !== 'string') errors.push(t('plan_io.bad_furniture', { floor: where }));

@@ -259,6 +259,9 @@ export class GlScene {
   private windTex: { tex: Texture; speed: number }[] = [];
   private windSpeed = 8;
   private furniture = new Group();
+  /** The other floors of the house, stacked above and below the shown one: faint floors and walls only */
+  private stackGroup = new Group();
+  private stackSig = '';
   /** Floor drawn by WebGL (card 3D): static texture, night tint (multiply), dynamic texture */
   private floorGroup = new Group();
   private floorPlanes: Partial<Record<'static' | 'dynamic', Mesh>> = {};
@@ -333,7 +336,7 @@ export class GlScene {
     this.renderer.shadowMap.autoUpdate = false;
     this.root.scale.set(1, -1, 1);
     this.scene.add(this.root);
-    this.root.add(this.floorGroup, this.walls, this.windGroup, this.wallLabelGroup, this.furniture, this.petGroup, this.sunLight, this.sunLight.target, this.hemi);
+    this.root.add(this.floorGroup, this.walls, this.windGroup, this.wallLabelGroup, this.furniture, this.petGroup, this.stackGroup, this.sunLight, this.sunLight.target, this.hemi);
     this.floorGroup.add(this.night);
     this.floorGroup.visible = false;
     this.hemi.position.set(0, 0, 1);
@@ -688,6 +691,60 @@ export class GlScene {
 
   // ---------- walls ----------
 
+  /**
+   * The neighbouring floors in the stack: each a faint plate of its rooms and low faint walls, lifted by `dz` (cm,
+   * above +, below −). `bright`: something worth telling there (a little less faint) with a coloured mark at `mark`.
+   * `plain`: plates only (eco). Rebuilt only when something of it changes.
+   */
+  setStack(items: { floor: FloorConfig; dz: number; bright?: boolean; mark?: Point; severe?: boolean }[], o: { wall: number; height: number; plain?: boolean }) {
+    const sig = JSON.stringify([items.map((i) => [i.floor.id, i.dz, i.bright ? 1 : 0, i.mark ?? '', i.severe ? 1 : 0, i.floor.rooms.length, (i.floor.openings ?? []).length]), o.wall, o.height, o.plain ? 1 : 0]);
+    if (sig === this.stackSig) return;
+    this.stackSig = sig;
+    this.clear(this.stackGroup);
+    const ink = this.color('--fp-label');
+    for (const it of items) {
+      const g = new Group();
+      g.position.z = it.dz;
+      const k = it.bright ? 1.7 : 1;
+      const plateMat = new MeshBasicMaterial({ color: ink, transparent: true, opacity: 0.05 * k, depthWrite: false, side: DoubleSide });
+      const wallMat = new MeshBasicMaterial({ color: ink, transparent: true, opacity: 0.1 * k, depthWrite: false });
+      for (const r of it.floor.rooms) {
+        if (r.outdoor || r.points.length < 3) continue;
+        const shape = new Shape(r.points.map((p) => new Vector2(p[0], p[1])));
+        const m = new Mesh(new ShapeGeometry(shape), plateMat);
+        m.userData.ownGeo = true;
+        m.renderOrder = 3;
+        g.add(m);
+      }
+      if (!o.plain) {
+        const h = Math.max(20, Math.min(o.height, 120));
+        for (const p of wallPieces(it.floor)) {
+          if (p.kind !== 'wall') continue;
+          const dx = p.b[0] - p.a[0];
+          const dy = p.b[1] - p.a[1];
+          const len = Math.hypot(dx, dy);
+          if (len < 1) continue;
+          const m = new Mesh(UNIT_BOX, wallMat);
+          m.scale.set(len, o.wall, h);
+          m.position.set((p.a[0] + p.b[0]) / 2, (p.a[1] + p.b[1]) / 2, 0);
+          m.rotation.z = Math.atan2(dy, dx);
+          m.renderOrder = 3;
+          g.add(m);
+        }
+      }
+      if (it.mark) {
+        const markMat = new MeshBasicMaterial({ color: this.color(it.severe ? '--fp-red' : '--fp-orange'), transparent: true, opacity: 0.9, depthWrite: false });
+        const dot = new Mesh(UNIT_CYL, markMat);
+        dot.scale.set(36, 36, 6);
+        dot.position.set(it.mark[0], it.mark[1], 1);
+        dot.renderOrder = 4;
+        g.add(dot);
+      }
+      this.stackGroup.add(g);
+    }
+    this.requestRender();
+  }
+
   buildWalls(floor: FloorConfig, o: GlBuild) {
     this.clear(this.walls);
     for (const c of [...this.windGroup.children]) {
@@ -738,7 +795,9 @@ export class GlScene {
       if (!touchesFocus && inFront?.(p.a, p.b)) continue;
       const towards = touchesFocus ? false : p.outward ? facing(p.outward) > 0.5 : o.full && Math.abs(facing(segN)) > 0.5;
       const isBack = !!p.outward && facing(p.outward) < -0.3;
-      const H = isBack && o.backHeight && o.backHeight > o.height ? o.backHeight : o.height;
+      // a wall standing on its own ("Wand ziehen"): a half-height one keeps its own height (never above the cut)
+      const H = p.free?.height ? Math.min(p.free.height, o.height) : isBack && o.backHeight && o.backHeight > o.height ? o.backHeight : o.height;
+      const thick = p.free?.thickness ?? o.wall;
       let lowered = false;
       if (touchesFocus) {
         const nIn: Point = p.front === o.focus ? segN : [-segN[0], -segN[1]];
@@ -747,8 +806,9 @@ export class GlScene {
       const other = !!o.focus && !touchesFocus;
       const opacity = towards ? 0.16 : other ? 0.2 : 1;
       const sideColor = (room?: { wall_color?: string }) => (room ? (room.wall_color ? this.color(paint(room.wall_color)) : wallSide) : (ext ?? wallSide));
-      const front = sideColor(p.front);
-      const back = sideColor(p.back);
+      const freePaint = p.free?.color ? this.color(paint(p.free.color)) : undefined;
+      const front = freePaint ?? sideColor(p.front);
+      const back = freePaint ?? sideColor(p.back);
       const g = new Group();
       g.position.set(mid[0], mid[1], 0);
       g.rotation.z = angle;
@@ -766,7 +826,7 @@ export class GlScene {
           this.lambert(c, { opacity: i === 4 && opacity < 1 ? Math.min(1, opacity + 0.3) : opacity }),
         );
         const m = new Mesh(UNIT_BOX, mats);
-        m.scale.set(l, o.wall, Math.max(0.5, h));
+        m.scale.set(l, thick, Math.max(0.5, h));
         m.position.set(x, 0, z);
         m.castShadow = opacity >= 1;
         m.receiveShadow = true;
@@ -775,8 +835,8 @@ export class GlScene {
       };
       this.walls.add(g);
       if (p.kind === 'wall') {
-        const body = wallBody(p, o.wall);
-        slab(body.len, H, 0, (body.mid[0] - mid[0]) * Math.cos(angle) + (body.mid[1] - mid[1]) * Math.sin(angle));
+        const body = wallBody(p, p.free ? 0 : o.wall);
+        slab(body.len + (p.free ? thick : 0), H, 0, (body.mid[0] - mid[0]) * Math.cos(angle) + (body.mid[1] - mid[1]) * Math.sin(angle));
         continue;
       }
       const st = openingState(p.opening?.entity ? o.getState(p.opening.entity) : undefined);
@@ -1252,12 +1312,16 @@ export class GlScene {
   private buildPieceInner(f: FurnitureConfig, o: GlBuild, ctx: { cut: number; supports: FurnitureConfig[]; glassC: Color }): Group | undefined {
     const { cut, supports, glassC } = ctx;
     const r = resolveFurniture(f);
-    const itemCut = cut;
-    // mounted above the cut-away walls (TV, wall cabinet, wall light): only shown in the room view
+    let itemCut = cut;
+    // mounted on a wall (TV, wall cabinet, wall light): shown whole – never cut in half – as soon as the walls stand
+    // high enough to hold it (the room view, higher walls set); below that it is left out
     // (outside the building nothing is cut away: wallbox, garden lights, …)
     const wallMounted = r.elevation > 0 && !r.ceiling;
     const outside = !!o.rooms && !o.rooms.some((rm) => !rm.outdoor && rm.points.length >= 3 && pointInPolygon([f.x, f.y], rm.points));
-    if (wallMounted && r.elevation >= itemCut - 0.5 && !outside) return undefined;
+    if (wallMounted && !outside) {
+      if (r.elevation >= cut - 0.5) return undefined;
+      itemCut = Math.max(cut, r.elevation + r.height);
+    }
     // a dog on its way to the front door may leave its room: always built
     // living dogs are not furniture: they have their own layer (see syncPets)
     if (r.k?.kind === 'dog' && !o.editing) return undefined;

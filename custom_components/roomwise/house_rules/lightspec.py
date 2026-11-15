@@ -474,10 +474,37 @@ def matches(state: str | None, attrs: dict[str, Any] | None, spec: dict[str, Any
     return not (eff and eff in caps.effects and a.get("effect") != eff)
 
 
+def same_colour(state: str | None, attrs: dict[str, Any] | None, spec: dict[str, Any]) -> bool:
+    """The lamp is on and already has the setting's colour (white tone, colour, effect): a call that only changes the
+    brightness then leaves the colour out – some lamps re-apply a colour they are sent in a visible flash."""
+    a = attrs or {}
+    if state != "on" or not spec.get("color") or spec.get("color") == "none":
+        return False
+    cur = a.get("brightness")
+    probe = {**spec, "bri": int(cur) if isinstance(cur, (int, float)) and cur > 0 else _bri255(spec)}
+    probe.pop("brightness", None)
+    return matches(state, a, probe)
+
+
+def roughly(state: str | None, attrs: dict[str, Any] | None, spec: dict[str, Any], tol: int = 26) -> bool:
+    """On/off as wanted and the brightness within about 10 % – a lamp that got there reacted to the call, even if it
+    reports the colour or the exact brightness its own way (then it is not sent again: that only makes it flicker)."""
+    on = state == "on"
+    if spec.get("mode") == "off":
+        return not on
+    if not on:
+        return False
+    a = attrs or {}
+    if Caps(a).dimmable and a.get("brightness") is not None and "white" not in color_data(Caps(a), spec.get("color")):
+        return abs(int(a["brightness"]) - _bri255(spec)) <= tol
+    return True
+
+
 # a lamp that is off and gets a colour: first on at this brightness (0-255) in the new colour without a fade, then
 # up to the wanted brightness with the wanted fade (else many lamps first light up in their last colour)
 POWER_UP_BRI = 13
 _COLOR_KEYS = ("hs_color", "rgb_color", "xy_color", "rgbw_color", "rgbww_color", "color_temp_kelvin")
+COLOR_KEYS = _COLOR_KEYS
 
 
 def power_up(state: str | None, attrs: dict[str, Any] | None, data: dict[str, Any]) -> tuple[dict[str, Any] | None, dict[str, Any]]:

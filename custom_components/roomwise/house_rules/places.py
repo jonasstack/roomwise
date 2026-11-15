@@ -12,7 +12,9 @@ Learning (Learner, pure Python, also runs over the recorder history in an execut
   - every way from one place to another is kept as a short trip summary (origin, destination, start, duration,
     initial heading) for 60 days – never the track itself.
   - while somebody moves: the likely destination from the trips that started at the same place on a similar day,
-    hour and heading, and an arrival time from their duration, adjusted by the distance left and the speed now.
+    hour and heading, and an arrival time: the duration such trips really took (for the part left) first, else the
+    way by road (straight line × detour) at a typical speed for how they travel, nudged by the speed lately, plus
+    the end of the trip (parking, stops) – never the straight line at the speed of the moment.
     `predict(person_id)` returns {destination, name, eta_min, probability} (also used by the heating).
   - how somebody travels (`mode`: walk / bike / car / transit, or None when unsure), in this order: the phone's
     activity sensor from the companion app (Android `*_detected_activity`, iOS `*_activity`), a vehicle tracker that
@@ -25,8 +27,8 @@ companion app's `sensor.*_geocoded_location` on the person's phone (iOS: Name / 
 Android: feature_name / thoroughfare / locality …), see `geo_name`. A learned place takes it over on a visit
 (`auto`; a better kind of name replaces a weaker one), a name given by the user always wins.
 
-Everything stays local. Reverse geocoding by OpenStreetMap Nominatim is off by default; when switched on (admin) it
-is used only for phones without the geocoded sensor, asks at most once per second, only when somebody stops at an
+Everything else stays local. Reverse geocoding by OpenStreetMap Nominatim is on by default (an admin can switch it
+off); it is used only for phones without the geocoded sensor, asks at most once per second, only when somebody stops at an
 unknown spot, rounds the position to about 10 m, caches the answers and sends an own User-Agent.
 """
 
@@ -80,7 +82,15 @@ LEAVE_SPEED = 2.5  # m/s reported by the tracker together with a fix outside: un
 CLOSER_M = 500  # m nearer to home over the recent fixes (and nearer with each of the last two) for "getting closer"
 ETA_FRESH = 600  # s: an arrival time counts down only this long after the last position; then "unterwegs" without time
 APPROACH_M = 50  # m the last fix must be nearer to the destination than the one before (else no arrival time)
-DETOUR = 1.35  # roads are longer than the straight line
+# the arrival time: the way left is the straight line times a detour (roads, paths, the rail network), at a typical
+# speed for how the person travels – the speed of the moment (a stretch on the motorway, a green wave) only nudges it;
+# then a little for the end of the trip (parking, the front door; for bus and train the stops and the walk from the
+# stop). A trip the person has really made before (learned) counts first.
+DETOUR_BY = {"car": 1.35, "bike": 1.25, "walk": 1.2, "transit": 1.4}
+TYPICAL = {"bike": 16 / 3.6, "walk": 4.8 / 3.6}  # m/s; car and transit depend on how far it still is (typical_speed)
+TOP = {"car": 130 / 3.6, "transit": 160 / 3.6, "bike": 30 / 3.6, "walk": 7 / 3.6}  # never faster than this on the way left
+END_MIN = {"car": 2.0, "transit": 2.0, "bike": 1.0, "walk": 0.0}  # minutes for the end of the trip
+TRANSIT_STOPS = 5.0  # minutes for stops / changing, on a way left longer than 3 km
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/reverse"
 LEARN_VERSION = 1
 
@@ -89,7 +99,6 @@ WALK_MAX = 7 / 3.6  # m/s: slower is walking
 BIKE_MAX = 25 / 3.6  # m/s: up to this a bike, faster a car (or train)
 TRAIN_MIN = 160 / 3.6  # m/s: this fast on a straight line is hardly a car
 STRAIGHT = 0.97  # straight line / way travelled over the recent fixes
-MODE_SPEED = {"walk": 1.4, "bike": 4.5, "car": DRIVE, "transit": DRIVE}  # m/s for the arrival time when no speed is known
 MODE_LIMIT = {"walk": 4.5, "bike": 12.5}  # m/s an activity plausibly reaches; faster, the activity is stale
 # the speed profile of a trip (segments between fixes): the average alone says "bike" for a car in town (stops,
 # lights) or a train with stations – the top speed tells motor from muscle
@@ -181,6 +190,33 @@ def speeds(fixes: list[tuple[float, float, float]]) -> list[float]:
         if dt >= SEG_MIN_S and d >= SEG_MIN_M:
             out.append(d / dt)
     return out
+
+
+def typical_speed(mode: str, road_m: float) -> float:
+    """m/s on average for the way left: a car in town is slow, on a long way it gets onto faster roads; buses and
+    trains likewise (local → regional)."""
+    km = road_m / 1000
+    if mode == "car":
+        return min(80.0, 22 + 1.6 * km) / 3.6
+    if mode == "transit":
+        return min(70.0, 20 + 1.6 * km) / 3.6
+    return TYPICAL.get(mode, TYPICAL["walk"])
+
+
+def eta_formula(left_m: float, mode: str, observed: list[float]) -> float:
+    """Minutes for `left_m` metres straight line: by road (detour), at the typical speed, nudged by the observed one
+    (median of the recent segments; a fast stretch can raise it by a quarter at most), plus the end of the trip."""
+    m = mode if mode in DETOUR_BY else "car"
+    road = left_m * DETOUR_BY[m]
+    v_typ = typical_speed(m, road)
+    v = v_typ
+    if observed:
+        obs = sorted(observed)[len(observed) // 2]
+        v = min(v_typ * 1.25, max(v_typ * 0.5, (obs + v_typ) / 2))
+    minutes = road / v / 60 + END_MIN[m]
+    if m == "transit" and road > 3000:
+        minutes += TRANSIT_STOPS
+    return minutes
 
 
 def detect_mode(v: float | None, activity: str | None = None, vehicle: str | None = None, fixes: list[tuple[float, float, float]] | None = None) -> dict[str, Any]:
@@ -611,6 +647,8 @@ class Learner:
             durs.setdefault(trip["d"], []).append((trip["dur"], w if trip["o"] == tr.origin else w * 0.3, trip.get("km")))
             total += w
         v = v_now
+        # how fast the way has gone lately (segments of the last 10 minutes): the arrival time's observed speed
+        recent = speeds([f for f in tr.fixes if fix_t - f[0] <= 600])
         home = self.home()
         if "home" in scores and tr.trend != "closer":
             # "on the way home" only when the person really comes nearer – the time of day alone is no evidence
@@ -623,14 +661,14 @@ class Learner:
             p = 0.55
             if head is not None and angle(head, bearing(lat, lon, home[0], home[1])) < 45:
                 p = 0.7
-            return {"destination": "home", "probability": p, **self._arrival(self._eta(lat, lon, home, None, v, elapsed, mode), fix_t, now, self._nearer(tr, home)), "basis": "direction"}
+            return {"destination": "home", "probability": p, **self._arrival(self._eta(lat, lon, home, None, v, elapsed, mode, recent), fix_t, now, self._nearer(tr, home)), "basis": "direction", "rough": True}
         best = max(scores, key=lambda k: scores[k])
         prob = scores[best] / (total + 0.5)
         if best == "home" and tr.trend == "closer":
             prob = min(0.98, prob + 0.1)
         d_pos = self.pos(best)
         assert d_pos is not None
-        return {"destination": best, "probability": round(prob, 2), **self._arrival(self._eta(lat, lon, d_pos, (durs[best], o_pos), v, elapsed, mode), fix_t, now, self._nearer(tr, d_pos)), "basis": "learned"}
+        return {"destination": best, "probability": round(prob, 2), **self._arrival(self._eta(lat, lon, d_pos, (durs[best], o_pos), v, elapsed, mode, recent), fix_t, now, self._nearer(tr, d_pos)), "basis": "learned", "rough": False}
 
     @staticmethod
     def _nearer(tr: Track, dest: tuple[float, float]) -> bool:
@@ -650,11 +688,16 @@ class Learner:
         at = fix_t + eta_fix * 60
         return {"eta_min": max(1, math.ceil((at - now) / 60)), "arrive_at": round(at), "as_of": round(fix_t)}
 
-    def _eta(self, lat: float, lon: float, dest: tuple[float, float], hist: tuple[list[tuple[float, float, float | None]], tuple[float, float] | None] | None, v: float | None, elapsed: float, mode: str | None = None) -> int:
+    def _eta(self, lat: float, lon: float, dest: tuple[float, float], hist: tuple[list[tuple[float, float, float | None]], tuple[float, float] | None] | None, v: float | None, elapsed: float, mode: str | None = None, recent: list[float] | None = None) -> int:
+        """Minutes from the last position to `dest`: a learned trip first (its usual duration, for the part of the way
+        left), else the way by road at a typical speed (eta_formula); never faster than the straight line at the top
+        speed of how the person travels."""
         left = dist(lat, lon, dest[0], dest[1])
         if left < 150:
             return 1
-        est: list[float] = []
+        m = mode if mode in DETOUR_BY else "car"
+        floor = left / TOP[m] / 60
+        learned: float | None = None
         if hist and hist[0]:
             items = sorted(hist[0], key=lambda x: x[0])
             half = sum(x[1] for x in items) / 2
@@ -669,14 +712,13 @@ class Learner:
             # the whole way: from where this trip started, else as long as such trips usually are
             full = dist(o_pos[0], o_pos[1], dest[0], dest[1]) if o_pos else (km or 0) * 1000
             if full > 300:
-                est.append(median * min(1.2, left / full))
+                learned = median * min(1.2, left / full)
             else:
-                est.append(max(1.0, median - elapsed / 60))
-        if v is not None and v >= 1.5:
-            est.append(left * DETOUR / v / 60)
-        if not est:
-            est.append(left * DETOUR / MODE_SPEED.get(mode or "", DRIVE) / 60)
-        return max(1, round(sum(est) / len(est)))
+                learned = max(1.0, median - elapsed / 60)
+        formula = eta_formula(left, m, recent if recent else ([v] if v is not None and v >= 1.5 else []))
+        # what the person really needed before counts first; the formula only keeps it from being far too short
+        est = max(learned, formula * 0.6) if learned is not None else formula
+        return max(1, math.ceil(max(est, floor)))
 
     def typical(self, p: dict[str, Any]) -> dict[str, Any]:
         """Usual days and arrival hour of a learned place."""
@@ -719,7 +761,10 @@ class Places:
     def settings(self) -> dict[str, Any]:
         s = self.data.setdefault("settings", {})
         s.setdefault("learn", True)
-        s.setdefault("nominatim", False)
+        # street names from OpenStreetMap: on unless switched off by hand (installations that only stored the old
+        # default "off" get it too – nobody chose that)
+        if not s.get("nominatim_chosen"):
+            s["nominatim"] = True
         return s
 
     async def async_load(self) -> None:
@@ -1197,7 +1242,8 @@ class Places:
             "speed_kmh": round(s["speed"] * 3.6) if s.get("speed") is not None else None,
             "trend": s.get("trend"),
             "distance_home_km": round(s["distance_home_m"] / 1000, 1) if s.get("distance_home_m") is not None else None,
-            "prediction": {**pred, "name": self.label(pred["destination"]), "distance_km": left} if pred else None,
+            # distance_km: straight line; road_km: the way by road as the arrival time reckons it (straight × detour)
+            "prediction": {**pred, "name": self.label(pred["destination"]), "distance_km": left, "road_km": round(left * DETOUR_BY.get(mode.get("mode") or "car", DETOUR_BY["car"]), 1) if left is not None else None} if pred else None,
             "mode": mode.get("mode"),
             "mode_confidence": mode.get("confidence", 0.0),
             "mode_basis": mode.get("basis"),
@@ -1310,6 +1356,8 @@ class Places:
         for k in ("learn", "nominatim"):
             if isinstance(raw.get(k), bool):
                 s[k] = raw[k]
+                if k == "nominatim":
+                    s["nominatim_chosen"] = True
         self.learner.learn = bool(s["learn"])
         self.save()
         self._refresh_all()

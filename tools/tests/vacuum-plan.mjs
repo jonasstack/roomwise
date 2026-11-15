@@ -264,6 +264,14 @@ vtf = mirrored.furniture.find((p) => p.kind === 'robot_vacuum')?.vacuum?.transfo
 const wz2 = mirrored.rooms.find((r) => r.name === 'Wohnzimmer');
 ok(vtf && !vtf.mirror && inside(toPlanT(vtf, ...LIVING), wz2.points), 'mirrored: the vacuum\'s mirror flips, its map still fits the rooms', vtf);
 const kz = mirrored.rooms.find((r) => r.name === 'Küche');
+
+// mirror top <-> bottom as well: the vacuum's map still fits the rooms
+await vs('v.querySelector(".vp-turn [data-mirror-v]").click()');
+await wait(300);
+const vflip = JSON.parse(await vs('JSON.stringify(v._res.floors[0])'));
+const vtf2 = vflip.furniture.find((p) => p.kind === 'robot_vacuum')?.vacuum?.transform;
+const wz3 = vflip.rooms.find((r) => r.name === 'Wohnzimmer');
+ok(vtf2 && inside(toPlanT(vtf2, ...LIVING), wz3.points), 'mirrored top ↔ bottom: the vacuum\'s map still fits the rooms', vtf2);
 const kitchenMid = toPlanT(vtf, 6500, 1250);
 ok(inside(kitchenMid, kz.points), 'and the kitchen too');
 await page.evaluate(`${sr('fp-vacuum-start .vp-apply')}.click()`);
