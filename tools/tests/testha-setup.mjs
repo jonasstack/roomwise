@@ -22,6 +22,14 @@ const ws = await wsConnect(tok);
 // the fake devices register a moment after HA answers
 for (let i = 0; i < 60 && (await api('GET', '/api/states/light.sofalicht')).status !== 200; i++) await sleep(1000);
 
+// Hausregeln set up (the card tests expect it, e.g. the house mode chip; robust.mjs turns it off per page with hrOff) –
+// a fresh test HA has no entry until a Hausregeln test added one
+if (!(await ws.call({ type: 'house_rules/info' }).catch(() => null))?.loaded) {
+  const flow = await api('POST', '/api/config/config_entries/flow', { handler: 'roomwise' });
+  if (flow.body?.flow_id) await api('POST', `/api/config/config_entries/flow/${flow.body.flow_id}`, {});
+  for (let i = 0; i < 60 && !(await ws.call({ type: 'house_rules/info' }).catch(() => null))?.loaded; i++) await sleep(1000);
+}
+
 // rooms as HA areas (same names as the Hausregeln tests use), with their devices
 const areas = await ws.call({ type: 'config/area_registry/list' });
 const area = async (name) => (areas.find((a) => a.name === name) ?? (await ws.call({ type: 'config/area_registry/create', name }))).area_id;

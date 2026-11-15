@@ -6,13 +6,23 @@ All notable changes to roomwise are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0-beta.5] - 2026-11-15
+
+### Fixed
+
+- roomwise: the folders of the earlier version (HACS leaves `floorplan_card` behind when updating from 0.1.0-beta.3)
+  no longer leave roomwise silently not starting – adding roomwise, or "Fix" under Settings → Repairs, moves them to
+  `roomwise-alte-ordner/` in the configuration (nothing is deleted) and restarts Home Assistant.
+
+## [0.1.0-beta.4] - 2026-11-15
+
 ### Changed
 
 - **One integration, roomwise** (0.1.0-beta.4): the card's companion integration `floorplan_card` and Hausregeln
   `house_rules` are now one integration in `custom_components/roomwise` – HACS installs everything in one step
   (download, restart, add *roomwise*; nothing to fill in), Hausregeln is in the sidebar right away and its setup
   assistant opens on first use. The release carries one `roomwise.zip` (HACS installs it, `zip_release`).
-- Coming from the two old integrations: install roomwise, delete the folders `custom_components/floorplan_card` and
+- Coming from the two old integrations (beta.4; since beta.5 roomwise moves the old folders itself): install roomwise, delete the folders `custom_components/floorplan_card` and
   `custom_components/house_rules` (not the integrations under Devices & services), restart. roomwise takes over their
   entities with the same entity ids, their device and settings, and removes the old entries; as long as an old folder
   is still there, roomwise does not start and says so under Repairs.
@@ -262,7 +272,9 @@ The first public alpha. roomwise has been in daily use in one home before this r
 - Pause for motion sensors while a robot vacuum cleans.
 - Setup assistant and per-feature switches; after installation only the automatic house mode runs.
 
-[Unreleased]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.3...HEAD
+[Unreleased]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.5...HEAD
+[0.1.0-beta.5]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.4...v0.1.0-beta.5
+[0.1.0-beta.4]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.3...v0.1.0-beta.4
 [0.1.0-beta.3]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.2...v0.1.0-beta.3
 [0.1.0-beta.2]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.1...v0.1.0-beta.2
 [0.1.0-beta.1]: https://github.com/jonasstack/roomwise/compare/v0.1.0-alpha.1...v0.1.0-beta.1

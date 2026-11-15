@@ -98,6 +98,7 @@ const setState = (e, state, attributes = {}) => api('POST', `/api/states/${e}`, 
   const { browser, page, errors } = await openHA({ block: ALL });
   const C = cardOf(page);
   await page.waitForTimeout(2500);
+  ok(!!(await until(() => C(`!!card.shadowRoot.querySelector('.hr-chip')`), 15000, 500)), 'before the restart: the Hausregeln chip is there');
   execSync('docker restart hr-test-ha');
   for (let i = 0; i < 90; i++) {
     const r = await api('GET', '/api/config').catch(() => null);

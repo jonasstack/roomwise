@@ -119,10 +119,10 @@ unpack it so that `manifest.json` lies directly in `<config>/custom_components/r
 After installation only the automatic house mode runs. Everything else (alarm, light plans, heating, vacation,
 AI) stays off until you switch it on in the setup assistant or under Settings → Features in Hausregeln.
 
-**Coming from 0.1.0-beta.2 or earlier** (two integrations, *Grundriss-Karte* `floorplan_card` and *Hausregeln*
-`house_rules`): install roomwise, delete the folders `custom_components/floorplan_card` and
-`custom_components/house_rules` (not the integrations under Devices & services – that would delete their
-settings), restart. roomwise takes over settings, rules and entities with the same entity ids. The actions are now
+**Coming from 0.1.0-beta.3 or earlier** (two integrations, *Grundriss-Karte* `floorplan_card` and *Hausregeln*
+`house_rules`): install roomwise and restart. When you add roomwise (or under Settings → Repairs), it offers to move
+the old folders out of the way (nothing is deleted) and restart – click Submit. Do not delete the old integrations
+under Devices & services, that would delete their settings. roomwise takes over settings, rules and entities with the same entity ids. The actions are now
 called `roomwise.run`, `roomwise.pause` and `roomwise.reset_alarm_pin`.
 
 ## First steps

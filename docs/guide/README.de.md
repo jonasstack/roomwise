@@ -31,9 +31,9 @@ roomwise ist eine Integration: die Karte, was ohne Tablet laufen muss, und der R
    nach dem Wandtablet. Was du nicht brauchst, überspringst du; den Assistenten gibt es jederzeit wieder unter
    Einstellungen → Einrichtung.
 
-Umstieg von den beiden früheren Integrationen (*Grundriss-Karte* und *Hausregeln*, bis 0.1.0-beta.2): ihre Ordner
-`custom_components/floorplan_card` und `custom_components/house_rules` löschen – nicht die Integrationen unter
-Geräte & Dienste – und neu starten. roomwise übernimmt alles mit denselben Entitäts-IDs.
+Umstieg von den beiden früheren Integrationen (*Grundriss-Karte* und *Hausregeln*, bis 0.1.0-beta.3): Beim
+Hinzufügen von roomwise (oder unter Einstellungen → Reparaturen) bietet es an, ihre alten Ordner wegzuräumen (es wird
+nichts gelöscht) und neu zu starten – bestätigen. Die alten Integrationen unter Geräte & Dienste nicht löschen. roomwise übernimmt alles mit denselben Entitäts-IDs.
 
 ## 2. Der erste Grundriss
 

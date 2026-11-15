@@ -124,10 +124,10 @@ Nach der Installation läuft nur der automatische Hausmodus. Alles andere (Alarm
 Urlaub, KI) bleibt aus, bis du es im Einrichtungsassistenten oder in Hausregeln unter Einstellungen → Funktionen
 einschaltest.
 
-**Umstieg von 0.1.0-beta.2 oder älter** (zwei Integrationen, *Grundriss-Karte* `floorplan_card` und *Hausregeln*
-`house_rules`): roomwise installieren, die Ordner `custom_components/floorplan_card` und
-`custom_components/house_rules` löschen (nicht die Integrationen unter Geräte & Dienste – dabei würden ihre
-Einstellungen gelöscht), neu starten. roomwise übernimmt Einstellungen, Regeln und Entitäten mit denselben
+**Umstieg von 0.1.0-beta.3 oder älter** (zwei Integrationen, *Grundriss-Karte* `floorplan_card` und *Hausregeln*
+`house_rules`): roomwise installieren und neu starten. Beim Hinzufügen von roomwise (oder unter Einstellungen →
+Reparaturen) bietet es an, die alten Ordner wegzuräumen (es wird nichts gelöscht) und neu zu starten – einfach
+bestätigen. Die alten Integrationen unter Geräte & Dienste nicht löschen, dabei würden ihre Einstellungen gelöscht. roomwise übernimmt Einstellungen, Regeln und Entitäten mit denselben
 Entitäts-IDs. Die Aktionen heißen jetzt `roomwise.run`, `roomwise.pause` und `roomwise.reset_alarm_pin`.
 
 ## Erste Schritte

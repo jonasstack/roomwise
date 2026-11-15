@@ -4,10 +4,20 @@
       "user": {
         "title": "roomwise",
         "description": "Richtet roomwise ein: die Grundriss-Karte steht danach auf jedem Dashboard bereit, und in der Seitenleiste erscheint „Hausregeln“. Es gibt nichts auszufüllen. Beim ersten Öffnen von Hausregeln führt die Ersteinrichtung durch alles; bis dahin läuft nur die Hausmodus-Automatik.\n\nWaren die früheren Integrationen „Grundriss-Karte“ und „Hausregeln“ installiert, übernimmt roomwise deren Einstellungen und Entitäten."
+      },
+      "old_folders": {
+        "title": "Frühere roomwise-Version gefunden",
+        "description": "Die Ordner der früheren Version sind noch da: {folders}. Solange sie da sind, würde roomwise nicht starten, damit nichts doppelt schaltet.\n\nroomwise kann das jetzt beheben: Es verschiebt die alten Ordner in den Ordner `roomwise-alte-ordner` in deiner Konfiguration (es wird nichts gelöscht) und startet Home Assistant danach neu. Einstellungen, Regeln und Entitäten werden nach dem Neustart übernommen, mit denselben Entitäts-IDs.",
+        "data": {
+          "restart": "Home Assistant gleich neu starten"
+        }
       }
     },
     "abort": {
       "single_instance_allowed": "roomwise ist bereits eingerichtet."
+    },
+    "error": {
+      "move_failed": "Die alten Ordner ließen sich nicht verschieben (keine Schreibrechte?). Lösche sie bitte selbst – über HACS „Entfernen“, den File Editor, Samba oder das Terminal: `rm -rf /config/custom_components/floorplan_card /config/custom_components/house_rules` – und starte Home Assistant neu. Die alten Integrationen unter Geräte & Dienste nicht löschen, dabei würden ihre Einstellungen gelöscht."
     }
   },
   "services": {
@@ -108,8 +118,34 @@
       "description": "Ein Dashboard zeigt die Grundriss-Karte (custom:floorplan-card), aber nichts lädt sie: Der Kartenteil von roomwise läuft nicht und es gibt keine Dashboard-Ressource dafür. Das Dashboard zeigt deshalb einen Fehler statt des Grundrisses.\n\nPrüfe unter Einstellungen → Reparaturen und im Protokoll, warum roomwise nicht vollständig startet (z. B. weil die alten Integrationen noch installiert sind), und starte Home Assistant danach neu."
     },
     "old_integrations": {
-      "title": "roomwise: alte Integrationen noch installiert",
-      "description": "roomwise ersetzt die früheren Integrationen „Grundriss-Karte“ (`floorplan_card`) und „Hausregeln“ (`house_rules`). Solange deren Ordner noch da sind, startet roomwise nicht, damit nichts doppelt schaltet.\n\nSo geht es weiter:\n1. Lösche die Ordner {folders} (über HACS „Entfernen“, den File Editor, Samba oder das Terminal). Nicht die Integration unter Geräte & Dienste löschen – dabei würden ihre Einstellungen gelöscht.\n2. Starte Home Assistant neu.\n\nroomwise übernimmt dann Einstellungen, Regeln und Entitäten (mit denselben Entitäts-IDs, deine Automationen laufen weiter)."
+      "title": "roomwise: frühere Version noch installiert",
+      "description": "roomwise ersetzt die früheren Integrationen „Grundriss-Karte“ (`floorplan_card`) und „Hausregeln“ (`house_rules`). Deren Ordner sind noch da ({folders}), deshalb startet roomwise nicht – damit nichts doppelt schaltet.\n\nKlicke auf „Absenden“ bzw. „Beheben“: roomwise verschiebt die alten Ordner in `roomwise-alte-ordner` in deiner Konfiguration (es wird nichts gelöscht) und startet Home Assistant neu. Danach übernimmt es Einstellungen, Regeln und Entitäten mit denselben Entitäts-IDs – deine Automationen laufen weiter.",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Alte Ordner wegräumen",
+            "description": "roomwise verschiebt {folders} in den Ordner `roomwise-alte-ordner` in deiner Konfiguration – es wird nichts gelöscht – und startet Home Assistant danach neu. Anschließend übernimmt es Einstellungen, Regeln und Entitäten mit denselben Entitäts-IDs.",
+            "data": {
+              "restart": "Home Assistant gleich neu starten"
+            }
+          }
+        },
+        "error": {
+          "move_failed": "Die alten Ordner ließen sich nicht verschieben (keine Schreibrechte?). Lösche sie bitte selbst – über HACS „Entfernen“, den File Editor, Samba oder das Terminal: `rm -rf /config/custom_components/floorplan_card /config/custom_components/house_rules` – und starte Home Assistant neu. Die alten Integrationen unter Geräte & Dienste nicht löschen, dabei würden ihre Einstellungen gelöscht."
+        }
+      }
+    },
+    "restart_needed": {
+      "title": "roomwise: Neustart nötig",
+      "description": "Die alten Ordner sind weg. Starte Home Assistant einmal neu, dann startet roomwise und übernimmt Einstellungen, Regeln und Entitäten.",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Home Assistant neu starten",
+            "description": "Startet Home Assistant jetzt neu. Danach startet roomwise."
+          }
+        }
+      }
     }
   }
 }

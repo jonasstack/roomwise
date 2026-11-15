@@ -31,9 +31,9 @@ roomwise is one integration: the card, what must work without a tablet, and the 
    functions you want (alarm, window warning, light, heating, vacation, robot vacuum, AI) and then only about those,
    and the wall tablet. Skip whatever you don't need; you can run it again under Settings → Setup.
 
-Coming from the two earlier integrations (*Grundriss-Karte* and *Hausregeln*, up to 0.1.0-beta.2): delete their
-folders `custom_components/floorplan_card` and `custom_components/house_rules` – not the integrations under Devices
-& services – and restart. roomwise takes over everything with the same entity ids.
+Coming from the two earlier integrations (*Grundriss-Karte* and *Hausregeln*, up to 0.1.0-beta.3): when you add
+roomwise (or under Settings → Repairs) it offers to move their old folders away (nothing is deleted) and restart –
+confirm it. Do not delete the old integrations under Devices & services. roomwise takes over everything with the same entity ids.
 
 ## 2. Your first floor plan
 

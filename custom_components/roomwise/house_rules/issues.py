@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 # hints of roomwise that are not Hausregeln's (the card part, migrate.py): never cleared here
-OTHER_ISSUES = ("frontend_missing", "old_integrations")
+OTHER_ISSUES = ("frontend_missing", "old_integrations", "restart_needed")
 
 UNAVAILABLE_HOURS = 24
 CHECK_EVERY = 30 * 60

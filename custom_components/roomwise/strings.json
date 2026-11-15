@@ -4,10 +4,20 @@
       "user": {
         "title": "roomwise",
         "description": "Sets up roomwise: the floor plan card is then available on every dashboard, and \"Hausregeln\" (house rules) appears in the sidebar. There is nothing to fill in. The first time you open Hausregeln, the setup wizard leads you through everything; until then only the automatic house mode runs.\n\nIf the earlier integrations \"Floorplan card\" and \"Hausregeln\" were installed, roomwise takes over their settings and entities."
+      },
+      "old_folders": {
+        "title": "Earlier roomwise version found",
+        "description": "The folders of the earlier version are still there: {folders}. As long as they are, roomwise would not start, so nothing switches twice.\n\nroomwise can fix this now: it moves the old folders into the folder `roomwise-alte-ordner` in your configuration (nothing is deleted) and then restarts Home Assistant. Settings, rules and entities are taken over after the restart, with the same entity ids.",
+        "data": {
+          "restart": "Restart Home Assistant right away"
+        }
       }
     },
     "abort": {
       "single_instance_allowed": "roomwise is already set up."
+    },
+    "error": {
+      "move_failed": "The old folders could not be moved (no write permission?). Please delete them yourself – with HACS \"Remove\", the File editor, Samba or the terminal: `rm -rf /config/custom_components/floorplan_card /config/custom_components/house_rules` – and restart Home Assistant. Do not delete the old integrations under Devices & services, that would delete their settings."
     }
   },
   "services": {
@@ -108,8 +118,34 @@
       "description": "A dashboard shows the floor plan card (custom:floorplan-card), but nothing loads it: the card part of roomwise is not running and there is no dashboard resource for it. The dashboard therefore shows an error instead of the floor plan.\n\nCheck Settings → Repairs and the log for why roomwise does not start completely (for example because the old integrations are still installed), then restart Home Assistant."
     },
     "old_integrations": {
-      "title": "roomwise: the old integrations are still installed",
-      "description": "roomwise replaces the earlier integrations \"Floorplan card\" (`floorplan_card`) and \"Hausregeln\" (`house_rules`). As long as their folders are still there, roomwise does not start, so nothing switches twice.\n\nWhat to do:\n1. Delete the folders {folders} (with HACS \"Remove\", the File editor, Samba or the terminal). Do not delete the integration under Devices & services – that would delete its settings.\n2. Restart Home Assistant.\n\nroomwise then takes over settings, rules and entities (with the same entity ids, your automations keep working)."
+      "title": "roomwise: the earlier version is still installed",
+      "description": "roomwise replaces the earlier integrations \"Floorplan card\" (`floorplan_card`) and \"Hausregeln\" (`house_rules`). Their folders are still there ({folders}), so roomwise does not start – nothing should switch twice.\n\nClick \"Submit\" (or \"Fix\"): roomwise moves the old folders into `roomwise-alte-ordner` in your configuration (nothing is deleted) and restarts Home Assistant. Then it takes over settings, rules and entities with the same entity ids – your automations keep working.",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Move the old folders",
+            "description": "roomwise moves {folders} into the folder `roomwise-alte-ordner` in your configuration – nothing is deleted – and then restarts Home Assistant. Afterwards it takes over settings, rules and entities with the same entity ids.",
+            "data": {
+              "restart": "Restart Home Assistant right away"
+            }
+          }
+        },
+        "error": {
+          "move_failed": "The old folders could not be moved (no write permission?). Please delete them yourself – with HACS \"Remove\", the File editor, Samba or the terminal: `rm -rf /config/custom_components/floorplan_card /config/custom_components/house_rules` – and restart Home Assistant. Do not delete the old integrations under Devices & services, that would delete their settings."
+        }
+      }
+    },
+    "restart_needed": {
+      "title": "roomwise: restart needed",
+      "description": "The old folders are gone. Restart Home Assistant once, then roomwise starts and takes over settings, rules and entities.",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Restart Home Assistant",
+            "description": "Restarts Home Assistant now. Afterwards roomwise starts."
+          }
+        }
+      }
     }
   }
 }
