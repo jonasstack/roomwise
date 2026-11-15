@@ -113,10 +113,9 @@ zusammengelegt sind.
 
 1. HACS → ⋮ (oben rechts) → **Benutzerdefinierte Repositories** → URL `https://github.com/jonasstack/roomwise`, Typ
    **Integration** → **Hinzufügen**.
-2. *Grundriss-Karte (Floorplan card)* in HACS öffnen → **Herunterladen**. Solange roomwise in der Beta ist,
-   bietet HACS Vorabversionen nur an, wenn du für dieses Repository *Beta-Versionen anzeigen* einschaltest.
+2. *roomwise* in HACS öffnen → **Herunterladen**.
 3. Home Assistant neu starten.
-4. Einstellungen → Geräte & Dienste → **Integration hinzufügen** → *Grundriss-Karte (Floorplan card)*. Es gibt
+4. Einstellungen → Geräte & Dienste → **Integration hinzufügen** → *roomwise*. Es gibt
    nichts auszufüllen.
 5. Browser neu laden (auf dem Tablet die Kiosk-App neu laden). Die Karte steht jetzt auf jedem Dashboard bereit,
    eine Ressource musst du nicht eintragen.

@@ -1,12 +1,13 @@
 # Pushing a tag like v0.1.0-beta.2 builds everything fresh and publishes a GitHub release with:
 #   floorplan_card.zip  the contents of custom_components/floorplan_card (manifest.json at the zip's root, the card in
-#                       frontend/, the 3D models in frontend/models/) – what HACS installs (hacs.json: zip_release)
+#                       frontend/, the 3D models in frontend/models/) – for a manual install; HACS takes the same folder
+#                       straight from the repository at the release's tag (the built card is committed there)
 #   house_rules.zip     the Hausregeln integration with its panel, for a manual install into custom_components/house_rules
 #   floorplan-card.js   the bare card, for people who want it without the integration
 # Publishing a release by hand in the GitHub UI works too: the same files are attached to it.
 #
-# Once both integrations are merged into `roomwise`: build one roomwise.zip from custom_components/roomwise, set
-# "filename": "roomwise.zip" in hacs.json and drop house_rules.zip.
+# Once both integrations are merged into `roomwise`: build one roomwise.zip from custom_components/roomwise and drop
+# house_rules.zip.
 name: Release
 
 on:
@@ -66,7 +67,8 @@ jobs:
           tag="${{ github.event.release.tag_name || github.ref_name }}"
           if ! gh release view "$tag" >/dev/null 2>&1; then
             pre=""
-            case "$tag" in *-alpha*|*-beta*|*-rc*) pre="--prerelease" ;; esac
+            # betas are regular releases (HACS offers them without "show beta versions"); only alphas are pre-releases
+            case "$tag" in *-alpha*) pre="--prerelease" ;; esac
             gh release create "$tag" $pre --title "$tag" --notes "See [CHANGELOG.md](CHANGELOG.md) for what changed."
           fi
           # the bare card (manual install without the integration): one self-contained file, not the entry with chunks

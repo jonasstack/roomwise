@@ -26,8 +26,7 @@ rules integration *Hausregeln*. Both will become one integration later; your set
 **Card and companion integration**
 
 1. In HACS: ⋮ → **Custom repositories** → `https://github.com/jonasstack/roomwise`, type **Integration**.
-2. Open *Grundriss-Karte (Floorplan card)* → **Download**. During the beta, switch on *Show beta versions* for the
-   repository, otherwise HACS hides the pre-releases.
+2. Open *roomwise* → **Download**.
 3. Restart Home Assistant.
 4. Settings → Devices & services → **Add integration** → *Grundriss-Karte*. Nothing to fill in.
 5. Reload the browser. The card is now available on every dashboard.

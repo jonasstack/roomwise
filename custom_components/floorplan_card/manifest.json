@@ -1,6 +1,6 @@
 {
   "domain": "floorplan_card",
-  "name": "Grundriss-Karte (Floorplan card)",
+  "name": "roomwise",
   "after_dependencies": [
     "mobile_app",
     "recorder"
@@ -18,5 +18,5 @@
   "issue_tracker": "https://github.com/jonasstack/roomwise/issues",
   "requirements": [],
   "single_config_entry": true,
-  "version": "0.1.0-beta.1"
+  "version": "0.1.0-beta.2"
 }

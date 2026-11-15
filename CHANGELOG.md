@@ -6,6 +6,17 @@ All notable changes to roomwise are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0-beta.2] - 2026-11-15
+
+### Fixed
+
+- HACS: the download failed (it looked for a release zip on a plain commit) – HACS now installs the integration folder
+  straight from the repository; betas are regular releases, no "show beta versions" needed.
+
+### Changed
+
+- The companion integration and its HACS entry are called "roomwise".
+
 ## [0.1.0-beta.1] - 2026-11-15
 
 First public beta.
@@ -223,6 +234,7 @@ The first public alpha. roomwise has been in daily use in one home before this r
 - Pause for motion sensors while a robot vacuum cleans.
 - Setup assistant and per-feature switches; after installation only the automatic house mode runs.
 
-[Unreleased]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.1...HEAD
+[Unreleased]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.2...HEAD
+[0.1.0-beta.2]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.1...v0.1.0-beta.2
 [0.1.0-beta.1]: https://github.com/jonasstack/roomwise/compare/v0.1.0-alpha.1...v0.1.0-beta.1
 [0.1.0-alpha.1]: https://github.com/jonasstack/roomwise/releases/tag/v0.1.0-alpha.1

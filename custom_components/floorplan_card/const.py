@@ -1,7 +1,7 @@
 """Constants of the floorplan card companion."""
 
 DOMAIN = "floorplan_card"
-VERSION = "0.1.0-beta.1"
+VERSION = "0.1.0-beta.2"
 STORAGE_KEY = "floorplan_card"
 STORAGE_VERSION = 1
 
