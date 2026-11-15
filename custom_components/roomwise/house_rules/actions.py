@@ -57,6 +57,18 @@ class StopRun(Exception):
     """A step decided that the rest of the rule should not run (e.g. "Nein" on a question)."""
 
 
+def as_switch(domain: str, service: str, entity_id: str, data: dict[str, Any]) -> tuple[str, str, dict[str, Any]]:
+    """A light call for a lamp that is a switch (switch.* / input_boolean.*, lightspec.SWITCH_LIGHT): its own domain,
+    only on / off / toggle – a brightness of 0 means off, colour and fades are left out. Lamps stay as they are."""
+    own = entity_id.split(".", 1)[0]
+    if domain != "light" or own == "light" or own not in ("switch", "input_boolean"):
+        return domain, service, data
+    if service == "turn_on":
+        bri = data.get("brightness_pct", data.get("brightness"))
+        return own, ("turn_off" if isinstance(bri, (int, float)) and bri <= 0 else "turn_on"), {}
+    return own, (service if service in ("turn_off", "toggle") else "turn_on"), {}
+
+
 async def call_together(hass: HomeAssistant, calls: list[tuple[str, str, str, dict[str, Any]]], ctx: Context | None) -> list[tuple[list[str], BaseException | None]]:
     """Switches devices at the same time instead of one after another: calls (domain, service, entity, data) with the
     same service and the same settings become ONE service call for all their entities (Zigbee/Hue groups and the
@@ -68,6 +80,7 @@ async def call_together(hass: HomeAssistant, calls: list[tuple[str, str, str, di
     second: list[tuple[str, str, str, dict[str, Any]]] = []
     before: dict[str, str] = {}  # the lamps' context before the first step (who set them last)
     for domain, service, entity_id, data in calls:
+        domain, service, data = as_switch(domain, service, entity_id, data)
         if domain == "light" and service == "turn_on":
             st = hass.states.get(entity_id)
             pre, data = power_up(st.state if st else None, st.attributes if st else None, data)
@@ -194,6 +207,13 @@ class Executor:
         await asyncio.gather(*(self.restore(e, s, ctx) for e, s in snaps.items() if not e.startswith("light.")))
 
     async def _call(self, domain: str, service: str, entity_id: str | list[str], data: dict[str, Any], ctx: Context) -> None:
+        ids = [entity_id] if isinstance(entity_id, str) else list(entity_id)
+        if domain == "light" and any(not e.startswith("light.") for e in ids):
+            # lamps that are a switch go by their own domain (as_switch), all at the same time
+            errors = [err for _ids, err in await call_together(self.hass, [(domain, service, e, data) for e in ids], ctx) if err]
+            if errors:
+                raise errors[0]
+            return
         await self.hass.services.async_call(domain, service, {ATTR_ENTITY_ID: entity_id, **data}, blocking=True, context=ctx)
 
     # ------------------------------------------------------------------ targets

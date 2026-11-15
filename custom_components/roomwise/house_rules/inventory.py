@@ -109,6 +109,20 @@ def norm_name(s: str) -> str:
 
 
 ICON_RE = re.compile(r"^mdi:[a-z0-9-]{1,60}$")
+# a switch (relay, smart switch) or helper that switches a lamp: named after a light (on the name with "_" as a space)
+LIGHT_WORDS = re.compile(
+    r"licht|lampe|leuchte|beleuchtung|strahler|lichterkette|(?<![a-z])(led|spots?|light|lights|lamp|lamps)(?![a-z])|lighting|lightstrip"
+)  # fmt: skip
+# … but not a mode or a timer about a light ("Licht Automatik", "Flurlicht Timer")
+LIGHT_NOT = re.compile(r"automat|automation|(?<![a-z])auto(?![a-z])|modus|mode(?![a-z])|sperre|timer|aktiv|enable|sensor|schranke|wecker|alarm")
+
+
+def is_light_switch(entity_id: str, name: str) -> bool:
+    """switch.* / input_boolean.* that switches a light (see LIGHT_WORDS) – it counts as a lamp without dimming."""
+    if not entity_id.startswith(("switch.", "input_boolean.")):
+        return False
+    text = f"{name} {entity_id.split('.', 1)[1]}".lower().replace("_", " ")
+    return bool(LIGHT_WORDS.search(text)) and not LIGHT_NOT.search(text)
 
 
 def classify(entity_id: str, state: State | None, name: str) -> tuple[str | None, str | None]:
@@ -117,6 +131,9 @@ def classify(entity_id: str, state: State | None, name: str) -> tuple[str | None
     dc = (state.attributes.get("device_class") if state else None) or ""
     low = name.lower()
     if domain == "light":
+        return "light", None
+    if domain in ("switch", "input_boolean") and is_light_switch(entity_id, name):
+        # a light switch (relay behind a lamp, smart wall switch): a lamp that only goes on and off
         return "light", None
     if domain == "switch":
         return ("outlet" if dc == "outlet" or "steckdose" in low or "plug" in low else "switch"), None

@@ -104,6 +104,8 @@ class LightPlanner:
         self._pending: dict[str, CALLBACK_TYPE] = {}
         self._pending_at: dict[str, float] = {}
         self._ours: dict[str, float] = {}  # context ids of our own calls
+        # per lamp: the fade (s) a light rule last switched it on with – going off or dimming down later fades as slowly
+        self._fade: dict[str, float] = {}
         self._rt: dict[str, dict[str, Any]] = {}  # room → runtime state
         self._on_src: dict[str, tuple[str, float]] = {}  # light → who switched it on last (manual / rule:<id> / automation / ours)
         self._gone: dict[str, dict[str, Any]] = {}  # light → its setting right before it became unreachable
@@ -169,7 +171,7 @@ class LightPlanner:
             return [c for c in (sanitize(x) for x in (v or [])[:10]) if c]
 
         def lights(v: Any) -> list[str]:
-            return [e for e in (v or []) if isinstance(e, str) and e.startswith("light.")][:40]
+            return [e for e in (v or []) if lightspec.is_lightlike(e)][:40]
 
         def action(a: Any) -> dict[str, Any]:
             # on/off/scene, brightness, colour (any colour mode), effect, fade, flash, each lamp its own (lightspec.py)
@@ -227,7 +229,7 @@ class LightPlanner:
             cur = p["vacation"]
             p["vacation"] = {
                 "on": bool(v.get("on", cur["on"])),
-                "lights": [x for x in (v.get("lights", cur["lights"]) or []) if isinstance(x, str) and x.startswith("light.")][:40],
+                "lights": [x for x in (v.get("lights", cur["lights"]) or []) if lightspec.is_lightlike(x)][:40],
                 "start": v.get("start") if v.get("start") in ("sunset", "time") else cur["start"],
                 "offset": int(_num(v.get("offset", cur["offset"]), 15, -120, 240)),
                 "time": str(v.get("time") or cur["time"])[:5],
@@ -395,10 +397,10 @@ class LightPlanner:
         eid = event.data["entity_id"]
         new = event.data["new_state"]
         old = event.data["old_state"]
-        if eid.startswith("light.") and new is not None and old is not None and new.state in ("unavailable", "unknown"):
+        if lightspec.is_lightlike(eid) and new is not None and old is not None and new.state in ("unavailable", "unknown"):
             if old.state not in ("unavailable", "unknown"):
                 self._gone[eid] = lightspec.snapshot(old.state, old.attributes)
-        elif eid.startswith("light.") and new is not None and old is not None:
+        elif lightspec.is_lightlike(eid) and new is not None and old is not None:
             ctx = new.context
             # a live preview of the panel (lightpreview.py) counts like the plan's own change: no person, no rule
             preview = self.core.lightpreview.is_preview(ctx)
@@ -836,9 +838,14 @@ class LightPlanner:
         # all lamps at the same time: the same settings in one call, the rest side by side (actions.call_together)
         calls: list[tuple[str, str, str, dict[str, Any]]] = []
         said: dict[str, str] = {}
+        def fade(e: str, d: dict[str, Any]) -> dict[str, Any]:
+            """going off / dimming down: its own fade, else the one the lamp was switched on with"""
+            t = d.get("transition") if isinstance(d.get("transition"), (int, float)) else self._fade.get(e)
+            return {"transition": t} if t else {}
+
         for e, d in changes:
             if d["mode"] == "off":
-                calls.append(("light", "turn_off", e, {}))
+                calls.append(("light", "turn_off", e, fade(e, d)))
                 said[e] = f"{self._name(e)} aus"
             elif d["mode"] == "scene":
                 if d["scene"] in said:
@@ -850,6 +857,16 @@ class LightPlanner:
                 st: State | None = self.hass.states.get(e)
                 # what this lamp understands: its colour mode, its effects, 0-255 or % (lightspec.py)
                 data: dict[str, Any] = lightspec.service_data(st.attributes if st else None, self.core.lightcal.adjust(e, d))
+                if "bri" in d:
+                    # dimmed down ("niemand mehr da", a while rule ending): as slowly as it came on
+                    data = {**fade(e, d), **data}
+                else:
+                    # switched on by a rule: remember its fade for later (none set: none later either)
+                    t = d.get("transition")
+                    if isinstance(t, (int, float)) and t > 0:
+                        self._fade[e] = float(t)
+                    else:
+                        self._fade.pop(e, None)
                 calls.append(("light", "turn_on", e, data))
                 pct = data.get("brightness_pct") or (round(data["brightness"] / 2.55) if data.get("brightness") else None)
                 said[e] = f"{self._name(e)} {pct} %" if pct else f"{self._name(e)} an"

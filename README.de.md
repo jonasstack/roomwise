@@ -8,7 +8,7 @@
 
 roomwise zeigt dein Zuhause als Grundriss in Home Assistant und macht ihn zur Fernbedienung. Du zeichnest die
 Räume einmal, stellst Lampen, Heizkörper, Fenster und den Saugroboter dorthin, wo sie wirklich sind, und ab dann
-bedienst du das Haus über den Plan: Raum antippen und das Licht geht an, Heizkörper antippen und die Temperatur
+bedienst du das Haus über den Plan: Raum antippen und er rückt heran, doppelt tippen und das Licht geht an, Heizkörper antippen und die Temperatur
 ändern, auf einen Blick sehen, welches Fenster noch offen ist. Gedacht ist es für das Tablet, das den ganzen Tag an
 der Wand hängt.
 

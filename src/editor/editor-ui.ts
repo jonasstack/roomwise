@@ -893,6 +893,17 @@ export class FloorplanEditorUI extends LitElement {
     this.refit();
   }
 
+  /** Settings → "Grundriss zurücksetzen": start over with one empty floor; the card's own settings stay. Undoable until
+   * saved – after "Sichern" the card shows its first steps again (robot vacuum's map, areas, draw it yourself). */
+  async resetPlan() {
+    const d = this._draft;
+    const rooms = d.floors.reduce((n, fl) => n + fl.rooms.length, 0);
+    if (!(await this.layer.confirm(t('plan_reset.confirm', { f: d.floors.length, r: rooms })))) return false;
+    this.replaceDraft({ ...d, floors: [{ id: 'floor_1', name: t('home.floor_ground'), level: 0, rooms: [], devices: [], openings: [], furniture: [] }] });
+    this.layer.toast(t('plan_reset.done'));
+    return true;
+  }
+
   /** Settings → floor plan as a file: download the draft as JSON (without this card's id) */
   exportPlan() {
     const file = planFile(this._draft);

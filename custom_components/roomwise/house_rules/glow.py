@@ -20,7 +20,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from .lightspec import color_ok
+from .lightspec import color_ok, is_lightlike
 
 RULE_ID = "glowauto"
 KEEP_ID = "glowautok"
@@ -104,11 +104,11 @@ def clean_glow(raw: Any, cur: dict[str, Any] | None, rooms: set[str]) -> dict[st
             srcs.append({"room": s["room"], "by": s.get("by") if s.get("by") in BY else "occupied", "door": door, "door_state": "closed" if s.get("door_state") == "closed" else "open"})
         out["sources"] = srcs
     if isinstance(raw.get("lights"), list):
-        out["lights"] = [e for e in raw["lights"] if isinstance(e, str) and e.startswith("light.")][:20]
+        out["lights"] = [e for e in raw["lights"] if is_lightlike(e)][:20]
     if "brightness" in raw:
         out["brightness"] = _int(raw["brightness"], 5, 1, 100)
     if isinstance(raw.get("per_light"), dict):
-        out["per_light"] = {e: _int(b, out["brightness"], 1, 100) for e, b in list(raw["per_light"].items())[:20] if isinstance(e, str) and e.startswith("light.")}
+        out["per_light"] = {e: _int(b, out["brightness"], 1, 100) for e, b in list(raw["per_light"].items())[:20] if is_lightlike(e)}
     if raw.get("color") == "rules" or color_ok(raw.get("color")):
         out["color"] = str(raw["color"]).lower()
     if raw.get("dark") in DARK:

@@ -34,9 +34,10 @@ export interface ActionHost {
 export function defaultAction(kind: ItemKind, gesture: Gesture): ActionConfig {
   if (kind === 'opening') return gesture === 'double_tap' ? { action: 'none' } : { action: 'more-info' };
   if (kind === 'room') {
-    if (gesture === 'tap') return { action: 'toggle-lights' };
-    if (gesture === 'hold') return { action: 'popup' };
-    return { action: 'none' };
+    // a tap focuses the room (zoom in, its label on top), a double tap switches its lights, holding opens its panel
+    if (gesture === 'tap') return { action: 'zoom' };
+    if (gesture === 'double_tap') return { action: 'toggle-lights' };
+    return { action: 'popup' };
   }
   if (gesture === 'tap') return { action: 'popup' };
   if (gesture === 'hold') return { action: 'more-info' };
@@ -187,7 +188,14 @@ export async function toggleLights(host: ActionHost, lights: string[], forceOn?:
   if (!targets.length) return;
   for (const id of targets) optimistic.set(hass, id, turnOn ? 'on' : 'off');
   try {
-    await hass.callService('light', turnOn ? 'turn_on' : 'turn_off', {}, { entity_id: targets });
+    // lamps by light.*, light switches (switch.*, input_boolean.*) by their own domain – all at the same time
+    const byDomain = new Map<string, string[]>();
+    for (const id of targets) {
+      const d = domainOf(id);
+      const dom = d === 'switch' || d === 'input_boolean' ? d : 'light';
+      byDomain.set(dom, [...(byDomain.get(dom) ?? []), id]);
+    }
+    await Promise.all([...byDomain].map(([dom, ids]) => hass.callService(dom, turnOn ? 'turn_on' : 'turn_off', {}, { entity_id: ids })));
   } catch (err) {
     optimistic.clear(targets);
     throw err;

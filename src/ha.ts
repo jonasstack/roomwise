@@ -194,9 +194,22 @@ export function suggestForArea(hass: HomeAssistant, areaId: string, exclude: str
   return { lights: lamps, temperature: pick('temperature'), humidity: pick('humidity'), climate: climates[0], sensors };
 }
 
-/** The lights among these entities; real lamps rather than light groups when both exist */
+// a switch or helper that switches a lamp (a relay behind it, a smart wall switch): named after a light – the same
+// rule as Hausregeln (inventory.is_light_switch); not a mode or timer about a light
+const LIGHT_WORDS = /licht|lampe|leuchte|beleuchtung|strahler|lichterkette|(?<![a-z])(led|spots?|light|lights|lamp|lamps)(?![a-z])|lighting|lightstrip/;
+const LIGHT_NOT = /automat|automation|(?<![a-z])auto(?![a-z])|modus|mode(?![a-z])|sperre|timer|aktiv|enable|sensor|schranke|wecker|alarm/;
+
+/** switch.* / input_boolean.* that switches a light: a lamp that only goes on and off */
+export function isLightSwitch(hass: HomeAssistant, id: string): boolean {
+  const d = domainOf(id);
+  if (d !== 'switch' && d !== 'input_boolean') return false;
+  const text = `${hass.states[id]?.attributes.friendly_name ?? ''} ${id.split('.')[1]}`.toLowerCase().replace(/_/g, ' ');
+  return LIGHT_WORDS.test(text) && !LIGHT_NOT.test(text);
+}
+
+/** The lights among these entities (lamps and light switches); real lamps rather than light groups when both exist */
 function lampsOf(hass: HomeAssistant, ids: string[]): string[] {
-  const lights = ids.filter((id) => domainOf(id) === 'light');
+  const lights = ids.filter((id) => domainOf(id) === 'light' || isLightSwitch(hass, id));
   const members = new Set(lights.flatMap((id) => (hass.states[id]?.attributes.entity_id as string[] | undefined) ?? []));
   return lights.filter((id) => !hass.states[id]?.attributes.entity_id || !lights.some((l) => members.has(l)));
 }

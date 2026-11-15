@@ -322,7 +322,7 @@ class WakeUp:
         lights = 0
         for eid, (t, _who) in list(self.core.history.manual.items()):
             st = self.hass.states.get(eid)
-            if t >= empty_since and eid.startswith("light.") and st and st.state == STATE_ON and self.core.inventory.room_of(eid) in ids:
+            if t >= empty_since and (eid.startswith("light.") or self.core.inventory.devices.get(eid, {}).get("kind") == "light") and st and st.state == STATE_ON and self.core.inventory.room_of(eid) in ids:
                 lights += 1
         doors = 0
         # after a restart every state "changed" at the start: that is no door opened

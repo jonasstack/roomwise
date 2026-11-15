@@ -263,7 +263,66 @@ p0 = w.predict(s5.tr, s5.t, "walk")
 p5 = w.predict(s5.tr, s5.t + 300, "walk")
 ok(p0 and p5 and p5["arrive_at"] == p0["arrive_at"] and p5["eta_min"] == p0["eta_min"] - 5 and p5["as_of"] == round(s5.t), "5 Min. ohne neue Position: Ankunft gleich, Restzeit 5 Min. weniger", (p0, p5))
 pl = w.predict(s5.tr, s5.t + 3 * 3600, "walk")
-ok(pl and pl["eta_min"] == 1, "Ankunftszeit vorbei, noch unterwegs: 1 Min. (gleich da)", pl)
+ok(pl and pl["eta_min"] is None and pl["arrive_at"] is None, "3 Std. ohne neue Position: keine Ankunftszeit mehr (kein „gleich da“ ins Blaue)", pl)
+p11 = w.predict(s5.tr, s5.t + P.ETA_FRESH + 60, "walk")
+ok(p11 and p11["eta_min"] is None, "nach 11 Min. ohne neue Position stoppt der Countdown", p11)
+
+# ---------------------------------------------------------------- standing still is not "on the way home"
+print("Stillstand an einem Ort (GPS-Zittern drinnen) ist kein Heimweg")
+import copy  # noqa: E402
+
+hall = P.Learner(copy.deepcopy(learner.data), ZONES, TZ)
+s6 = Sim(hall, "alex")
+s6.t = at(24, 17, 20)  # Thursday, the usual sport evening; home usually around 18:50
+s6.pos = SPORT
+jr = random.Random(11)
+bad = []
+for i in range(23):  # 90 minutes, a fix every 4 minutes
+    if i % 5 == 4:
+        # indoors now and then a fix 250–400 m off – with a good accuracy value
+        ang = jr.uniform(0, 6.28)
+        off = jr.uniform(250, 400) / 111320
+        lat, lon = SPORT[0] + off * P.math.sin(ang), SPORT[1] + off * P.math.cos(ang) / 0.61
+    else:
+        lat, lon = SPORT[0] + jr.uniform(-60, 60) / 111320, SPORT[1] + jr.uniform(-60, 60) / 111320 / 0.61
+    hall.feed(s6.tr, s6.t, lat, lon, jr.uniform(30, 80), None)
+    hall.tick(s6.tr, s6.t)
+    st6 = hall.status(s6.tr, s6.t)
+    pr6 = hall.predict(s6.tr, s6.t)
+    if s6.t - at(24, 17, 20) >= 600 and (st6["kind"] == "moving" or pr6 is not None):
+        bad.append((i, st6["kind"], pr6))
+    s6.t += 240
+    hall.tick(s6.tr, s6.t)
+ok(not bad, "90 Min. in der Halle mit Ausreißern: immer „dort“, nie unterwegs, keine Ankunftszeit", bad[:3])
+ok(hall.status(s6.tr, s6.t)["kind"] in ("place", "stay"), "nach 90 Min.: noch dort", hall.status(s6.tr, s6.t))
+# then really home: recognised after a few fixes, with an arrival time
+s6.pos = SPORT
+s6.drive(HOME, 15, until=6)
+p6 = hall.predict(s6.tr, s6.t)
+ok(p6 and p6["destination"] == "home" and p6["eta_min"] is not None and 4 <= p6["eta_min"] <= 14, "danach wirklich heim: nach 6 Min. erkannt, mit Ankunftszeit", (p6, s6.tr.trend))
+
+# on the way home, then a stop for shopping: there, not "gleich da"
+shop = P.Learner(copy.deepcopy(learner.data), ZONES, TZ)
+s7 = Sim(shop, "alex")
+s7.t = at(25, 17, 0)
+s7.pos = WORK
+shop.feed(s7.tr, s7.t - 4 * 3600, WORK[0], WORK[1], 15, "arbeit")
+shop.tick(s7.tr, s7.t)
+shop.feed(s7.tr, s7.t, WORK[0], WORK[1], 15, "arbeit")
+mid = (WORK[0] + (HOME[0] - WORK[0]) * 0.5, WORK[1] + (HOME[1] - WORK[1]) * 0.5)
+s7.drive(mid, 12)
+p7a = shop.predict(s7.tr, s7.t)
+ok(p7a and p7a["destination"] == "home" and p7a["eta_min"] is not None, "Feierabend: auf dem Heimweg erkannt", p7a)
+bad = []
+for i in range(10):  # 40 minutes in a shop
+    s7.t += 240
+    shop.feed(s7.tr, s7.t, mid[0] + jr.uniform(-50, 50) / 111320, mid[1] + jr.uniform(-50, 50) / 111320 / 0.61, 40.0, None)
+    shop.tick(s7.tr, s7.t)
+    pr7 = shop.predict(s7.tr, s7.t)
+    if s7.t - (at(25, 17, 0) + 12 * 60) >= 360 and (pr7 is not None and pr7.get("eta_min") is not None):
+        bad.append((i, shop.status(s7.tr, s7.t)["kind"], pr7))
+ok(not bad, "angehalten zum Einkaufen: keine Ankunftszeit, kein „gleich da“", bad[:3])
+ok(shop.status(s7.tr, s7.t)["kind"] in ("stay", "place"), "beim Einkaufen: dort", shop.status(s7.tr, s7.t))
 
 # ---------------------------------------------------------------- names of places (made-up spots only)
 print("Ortsnamen statt „Gelernter Ort“")

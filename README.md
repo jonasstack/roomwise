@@ -8,7 +8,7 @@
 
 roomwise shows your home as a floor plan in Home Assistant and lets you run it from there. You draw the rooms
 once, put lamps, radiators, windows and the robot vacuum where they really are, and from then on the plan is
-the remote control: tap a room to switch its lights, tap the radiator to change the temperature, see at a glance
+the remote control: tap a room to zoom in, double-tap it to switch its lights, tap the radiator to change the temperature, see at a glance
 which window is still open. It is made for the tablet that hangs on the wall all day.
 
 Behind the plan sits **Hausregeln** ("house rules"), a second integration that takes care of the things a home

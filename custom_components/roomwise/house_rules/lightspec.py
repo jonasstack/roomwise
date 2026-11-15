@@ -250,7 +250,7 @@ def clean_action(a: Any, default_color: str = "warm", *, nested: bool = False) -
         sc = a.get("scene")
         out["scene"] = sc[:200] if isinstance(sc, str) and sc.startswith("scene.") else ""
     if not nested and isinstance(a.get("per_light"), dict):
-        per = {e: clean_action(v, default_color, nested=True) for e, v in list(a["per_light"].items())[:40] if isinstance(e, str) and e.startswith("light.") and isinstance(v, dict)}
+        per = {e: clean_action(v, default_color, nested=True) for e, v in list(a["per_light"].items())[:40] if is_lightlike(e) and isinstance(v, dict)}
         per = {e: v for e, v in per.items() if v}
         if per:
             out["per_light"] = per
@@ -268,6 +268,15 @@ def for_light(spec: dict[str, Any] | None, entity_id: str) -> dict[str, Any] | N
     if own:
         out.update(own)
     return out
+
+
+# lamps that are a switch (a relay or smart switch behind a lamp, a helper): they only go on and off
+SWITCH_LIGHT = ("switch.", "input_boolean.")
+
+
+def is_lightlike(entity_id: Any) -> bool:
+    """A lamp for the light plan and the rules: light.* or a switch that switches a lamp (inventory: kind "light")."""
+    return isinstance(entity_id, str) and entity_id.startswith(("light.", *SWITCH_LIGHT))
 
 
 class Caps:

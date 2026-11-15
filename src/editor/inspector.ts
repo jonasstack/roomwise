@@ -2537,7 +2537,9 @@ function settingsPanel(ed: Ed): TemplateResult {
             <div class="grow"><div class="title accent">${t('plan_io.import')}</div></div>
           </button>
         </div>
-        <div class="hint-s">${t('plan_io.hint')}</div>`,
+        <div class="hint-s">${t('plan_io.hint')}</div>
+        <button class="btn danger block pressable gap" data-plan-reset style="margin-top:var(--fp-space-3)" @click=${() => void ed.resetPlan()}><ha-icon icon="mdi:restart"></ha-icon>${t('plan_reset.button')}</button>
+        <div class="hint-s">${t('plan_reset.hint')}</div>`,
       { icon: 'mdi:file-document-outline' },
     )}
     ${fold(

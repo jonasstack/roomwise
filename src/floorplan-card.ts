@@ -540,14 +540,17 @@ export class FloorplanCard extends LitElement {
         const home = pr?.destination === 'home';
         const dest = pr ? (home ? t('people.to_home') : t('people.to_place', { place: pr.name ?? '' })) : t('people.on_way');
         // minutes left now: from the arrival estimated at the last position, counting down until the next one
-        const now = this._tripNow || Date.now();
-        const left = pr?.arrive_at ? Math.ceil((pr.arrive_at * 1000 - Math.max(now, Date.now())) / 60000) : pr?.eta_min ?? null;
+        const now = Math.max(this._tripNow || 0, Date.now());
+        // only from a fresh position (Hausregeln stops it after 10 min without one): never "gleich da" for somebody
+        // whose phone went quiet – they may have stopped somewhere
+        const fresh = !pr?.as_of || now - pr.as_of * 1000 <= 10 * 60000;
+        const left = !fresh ? null : pr?.arrive_at ? Math.ceil((pr.arrive_at * 1000 - now) / 60000) : pr?.eta_min ?? null;
         const eta = left == null ? '' : left <= 0 ? t('people.eta_soon') : t('people.eta_min', { n: left });
         const open = this._tripOpen === p.entity_id;
         const rows: [string, string][] = [];
         if (pr) rows.push([t('people.d_dest'), home ? t('people.home') : (pr.name ?? '')]);
-        if (pr?.arrive_at) rows.push([t('people.d_arrive'), t('people.at_clock', { time: formatClock(new Date(pr.arrive_at * 1000)) })]);
-        else if (pr?.eta_min != null) rows.push([t('people.d_arrive'), t('people.at_clock', { time: formatClock(new Date(Date.now() + pr.eta_min * 60000)) })]);
+        if (fresh && pr?.arrive_at) rows.push([t('people.d_arrive'), t('people.at_clock', { time: formatClock(new Date(pr.arrive_at * 1000)) })]);
+        else if (fresh && pr?.eta_min != null) rows.push([t('people.d_arrive'), t('people.at_clock', { time: formatClock(new Date(Date.now() + pr.eta_min * 60000)) })]);
         if (pr?.distance_km != null) rows.push([t('people.d_left'), `${formatNumber(pr.distance_km, pr.distance_km < 10 ? 1 : 0)} km`]);
         if (p.since) rows.push([t('people.d_since'), clock(p.since)]);
         if (p.speed_kmh != null) rows.push([t('people.d_speed'), `${formatNumber(p.speed_kmh, 0)} km/h`]);

@@ -548,7 +548,8 @@ export class HrLightAction extends StoreElement {
             <input type="range" min="0" max="30" step="0.5" .value=${String(a.transition ?? 0)} aria-label=${t('light.fade')}
               @change=${(e: Event) => { const v = Number((e.target as HTMLInputElement).value); set({ transition: v || undefined }); }} />
             <output>${a.transition ? `${a.transition} s` : t('light.fade_none')}</output>
-          </div>`
+          </div>
+          ${a.transition ? html`<p class="note">${t('light.fade_both')}</p>` : nothing}`
         : nothing}
       ${caps.features & FEATURE_FLASH
         ? html`<div class="seg">

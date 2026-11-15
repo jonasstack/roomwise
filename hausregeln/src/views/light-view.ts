@@ -24,6 +24,7 @@ import { featureHint } from '../components/feature';
 import '../components/sheet';
 import '../components/pop';
 import '../components/room-arrange';
+import '../components/light-add';
 import { hiddenRoomsNote } from '../components/room-arrange';
 import { registerPage } from '../components/page';
 import { kit } from '../design/kit';
@@ -617,7 +618,13 @@ export class HrLightPlans extends StoreElement {
     _sim: { state: true },
     _simDay: { state: true },
     _glowMap: { state: true },
+    _others: { state: true },
+    _lightAdd: { state: true },
   };
+  /** "Licht hinzufügen" open: for which room, and from a light rule (then "Nur in dieser Regel" too) */
+  declare _lightAdd: { room: string; rule: boolean } | null;
+  /** the light rule's lamp choice shows the lamps of the other rooms too ("+ Lichter aus anderen Räumen") */
+  declare _others: boolean;
   /** the pop-up open on top of the room's (or of the page) */
   declare _pop: Pop;
   /** the light rule shown in "Regel ansehen und ändern" */
@@ -1278,7 +1285,7 @@ export class HrLightPlans extends StoreElement {
         <span class="grow"><h2>${r.name}</h2><div class="state">${p.on ? this._lightState(r) : t('light.rules_off')}</div></span>
         <button class="switch" role="switch" aria-label=${t('light.rules_on_x', { room: r.name })} aria-checked=${p.on ? 'true' : 'false'} @click=${() => this._save(r.id, { on: !p.on })}></button>
       </div>
-      <div class="rl-chips">${s.devices.some((d) => d.kind === 'light' && d.room === r.id) ? nothing : html`<button class="rl-chip warm" @click=${() => fire(this, 'hr-room-settings', { id: r.id })}>${t('light.no_lamp')}</button>`}${this._presence(r)}${whiles.map((x) => html`<span class="rl-chip acc">${t('light.x_applies', { name: x.name })}</span>`)}</div>
+      <div class="rl-chips">${s.devices.some((d) => d.kind === 'light' && d.room === r.id) ? nothing : html`<button class="rl-chip warm" data-no-lamp @click=${() => (this._lightAdd = { room: r.id, rule: false })}>${t('light.no_lamp')}</button>`}${this._presence(r)}${whiles.map((x) => html`<span class="rl-chip acc">${t('light.x_applies', { name: x.name })}</span>`)}</div>
       <div class="foot">
         <span>${p.rules.length === 1 ? t('light.one_rule') : t('light.n_rules', { n: p.rules.length })} · ${!p.on ? t('light.paused') : active ? (active === 1 ? t('light.one_active') : t('light.n_active', { n: active })) : t('light.none_active')}</span>
         <span>${t('light.smart_x', { mode: smartLabel(p.smart?.mode) })}</span>
@@ -1465,10 +1472,29 @@ export class HrLightPlans extends StoreElement {
     const up = (patch: Partial<LightRule>) => (this._wiz = { ...x, ...patch });
     const { own, loose } = this._lightChoice(r);
     const ruleLights = x.lights.length ? x.lights : own.map((l) => l.entity_id);
+    const pick = (id: string) => up({ lights: x.lights.includes(id) ? x.lights.filter((y) => y !== id) : [...x.lights, id] });
+    const shown = new Set([...own, ...loose].map((l) => l.entity_id));
+    // lamps of other rooms: the chosen ones always show (with their room), all of them after "+ Lichter aus anderen Räumen"
+    const otherRooms = this.store.rooms
+      .filter((o) => o.id !== r.id)
+      .map((o) => ({ room: o, lights: this.store.devices.filter((d) => d.kind === 'light' && d.room === o.id) }))
+      .filter((o) => o.lights.length);
+    const chosenOther = otherRooms.flatMap((o) => o.lights.filter((l) => x.lights.includes(l.entity_id)).map((l) => ({ l, room: o.room })));
     const lightChips = html`<div class="chips">
       <button aria-pressed=${!x.lights.length ? 'true' : 'false'} @click=${() => up({ lights: [] })}>Alle ${r.in}</button>
-      ${[...own, ...loose].map((l) => html`<button aria-pressed=${x.lights.includes(l.entity_id) ? 'true' : 'false'} @click=${() => up({ lights: x.lights.includes(l.entity_id) ? x.lights.filter((y) => y !== l.entity_id) : [...x.lights, l.entity_id] })}>${l.name}${l.room ? '' : ' ·'}</button>`)}
+      ${[...own, ...loose].map((l) => html`<button aria-pressed=${x.lights.includes(l.entity_id) ? 'true' : 'false'} @click=${() => pick(l.entity_id)}>${l.name}${l.room ? '' : ' ·'}</button>`)}
+      ${this._others ? nothing : chosenOther.filter(({ l }) => !shown.has(l.entity_id)).map(({ l, room }) => html`<button aria-pressed="true" @click=${() => pick(l.entity_id)}>${l.name} · ${room.name}</button>`)}
     </div>
+    ${otherRooms.length
+      ? this._others
+        ? html`${otherRooms.map(
+              (o) => html`<div class="hint" style="margin:10px 0 4px">${o.room.name}</div>
+                <div class="chips">${o.lights.map((l) => html`<button aria-pressed=${x.lights.includes(l.entity_id) ? 'true' : 'false'} @click=${() => pick(l.entity_id)}>${l.name}</button>`)}</div>`,
+            )}
+            <button class="btn small" style="margin-top:8px" @click=${() => (this._others = false)}>${t('light.others_hide')}</button>`
+        : html`<button class="btn small" style="margin-top:8px" data-other-lights @click=${() => (this._others = true)}>${icon(mdiPlus, 16)} ${t('light.others_add')}</button>`
+      : nothing}
+    <button class="btn small ${own.length ? '' : 'primary'}" style="margin-top:8px" data-light-add @click=${() => (this._lightAdd = { room: r.id, rule: true })}>${icon(mdiPlus, 16)} ${t('light.add_title')}</button>
     ${this._foundLights(own)}`;
     let body: TemplateResult;
     switch (step) {
@@ -1635,7 +1661,22 @@ export class HrLightPlans extends StoreElement {
       ${this._pop === 'glow' ? html`<hr-light-glow .store=${s} @close=${() => (this._pop = '')}></hr-light-glow>` : nothing}
       ${this._pop === 'cal' ? html`<hr-light-cal .store=${s} @close=${() => (this._pop = '')}></hr-light-cal>` : nothing}
       ${r && this._wiz ? this._wizard(r) : nothing}
+      ${this._lightAdd ? this._lightAddPop() : nothing}
     `;
+  }
+
+  /** "Licht hinzufügen": a lamp or light switch of the house for this room (for good) or only for the open rule */
+  private _lightAddPop() {
+    const a = this._lightAdd!;
+    const room = this.store.rooms.find((x) => x.id === a.room);
+    if (!room) return nothing;
+    const pick = (e: CustomEvent<{ entity_id: string; assign: boolean }>) => {
+      const w = this._wiz;
+      // the rule takes it when it is only for the rule, or when the rule names its lamps one by one
+      if (a.rule && w && (!e.detail.assign || w.lights.length) && !w.lights.includes(e.detail.entity_id)) this._wiz = { ...w, lights: [...w.lights, e.detail.entity_id] };
+      this._lightAdd = null;
+    };
+    return html`<hr-light-add .store=${this.store} .room=${room} ?forRule=${a.rule} @pick=${pick} @close=${() => (this._lightAdd = null)}></hr-light-add>`;
   }
 }
 customElements.define('hr-light-plans', HrLightPlans);

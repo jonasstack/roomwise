@@ -224,6 +224,36 @@ export class CardFullscreen {
       this.card.toggleAttribute('kiosk', true);
       this.onChange();
     }
+    this.settleKiosk();
+  }
+
+  /** Right after a reload Home Assistant builds its sidebar and header bit by bit: a part not there yet at the first
+   * try stayed visible (a bar on the left) until the first tap. Hide again a few times while the page settles, and
+   * tell the page its size changed so the plan fits the full area at once. */
+  private settleTimers: number[] = [];
+  private settleKiosk() {
+    for (const t of this.settleTimers) clearTimeout(t);
+    this.settleTimers = [300, 900, 2000, 4000, 7000].map((ms) =>
+      window.setTimeout(() => {
+        if (!this.card.isConnected || !this.wanted || this.mode === 'fullscreen') return;
+        if (this.mode === 'kiosk') {
+          for (const u of this.undo.reverse()) {
+            try {
+              u();
+            } catch {
+              /* element gone */
+            }
+          }
+        }
+        this.undo = hideHomeAssistantChrome(this.card);
+        if (this.undo.length && this.mode !== 'kiosk') {
+          this.mode = 'kiosk';
+          this.card.toggleAttribute('kiosk', true);
+          this.onChange();
+        }
+        window.dispatchEvent(new Event('resize'));
+      }, ms),
+    );
   }
 
   /** `byUser`: the button or Escape – not remembered any more; else (the card goes away) it comes back later */
@@ -250,6 +280,8 @@ export class CardFullscreen {
   }
 
   private unkiosk() {
+    for (const t of this.settleTimers) clearTimeout(t);
+    this.settleTimers = [];
     for (const u of this.undo.reverse()) {
       try {
         u();

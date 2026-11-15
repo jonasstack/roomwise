@@ -6,6 +6,44 @@ All notable changes to roomwise are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0-beta.8] - 2026-11-15
+
+### Added
+
+- Light switches count as lamps: a `switch.*` or `input_boolean.*` named after a light (relay or smart switch behind a
+  lamp, "Licht", "Lampe", "LED", "Lichterkette" …; not a mode or timer, a socket only when its name says lamp) is a
+  lamp that only goes on and off – in Hausregeln (light plan, rules, vacation light, Reinschau, live preview, by-hand
+  detection; switched by its own domain) and on the card (room lights, double tap). Detection can be changed or left
+  out like any other.
+- House rules: **"Licht hinzufügen"** – in a light rule and on a room without a lamp: search every lamp and light
+  switch of the house, assign it to the room for good or use it only in this rule.
+
+### Added
+
+- Editor settings: **"Grundriss zurücksetzen"** – start over with one empty floor (the card's settings stay), asks
+  first, undo brings the plan back until it is saved; then the card starts with its first steps again.
+- House rules light rules: **"Lichter aus anderen Räumen"** – a rule can switch lamps of other rooms too (grouped by
+  room; chosen ones stay visible with their room's name).
+
+### Changed
+
+- House rules light rules: the fade a rule switches a lamp on with is also used when the lamp goes off or dims
+  down later (rule over, room empty); a fade of its own still wins.
+- Rooms by default: a **tap focuses** the room (zooms in), a **double tap switches its lights**, holding opens its
+  panel (before: a tap switched the lights). A room's own tap action still wins.
+- Focused room in 3D: walls of other rooms between the camera and it are left out entirely, its own walls towards
+  the camera sink to a line.
+
+### Fixed
+
+- Card on a wall tablet: after a reload in remembered full screen a bar of Home Assistant's sidebar stayed on the
+  left until the first tap – the kiosk mode now hides it again while the page settles and refits the plan.
+- House rules "Wo ist wer": standing somewhere is no longer taken for "on the way home". A single position a few
+  hundred metres off (phones indoors, e.g. a sports hall) no longer ends a stay – leaving needs a fix 800 m away, a
+  reported speed, a next fix clearly farther out or a third one outside; "home" needs a real approach (500 m nearer and
+  nearer with each of the last two fixes), the habit alone never says it; the arrival time only while the last fix came
+  nearer and is at most 10 minutes old – no more "gleich da" for somebody whose phone went quiet (card too).
+
 ## [0.1.0-beta.7] - 2026-11-15
 
 ### Added
@@ -342,7 +380,8 @@ The first public alpha. roomwise has been in daily use in one home before this r
 - Pause for motion sensors while a robot vacuum cleans.
 - Setup assistant and per-feature switches; after installation only the automatic house mode runs.
 
-[Unreleased]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.7...HEAD
+[Unreleased]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.8...HEAD
+[0.1.0-beta.8]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.7...v0.1.0-beta.8
 [0.1.0-beta.7]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.6...v0.1.0-beta.7
 [0.1.0-beta.6]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.5...v0.1.0-beta.6
 [0.1.0-beta.5]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.4...v0.1.0-beta.5

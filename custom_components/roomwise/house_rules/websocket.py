@@ -13,7 +13,7 @@ from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.util import dt as dt_util
 
-from . import permissions
+from . import lightspec, permissions
 from .const import API_VERSION, ASSISTANTS, DOMAIN, MODES, VERSION
 from .i18n import tr
 from .lightpreview import IDLE
@@ -1241,7 +1241,7 @@ async def ws_light_preview(hass: HomeAssistant, connection: websocket_api.Active
         for e in msg.get("lights") or []:
             st = hass.states.get(e)
             name = str(st.attributes.get("friendly_name", e)) if st else e
-            if not e.startswith("light."):
+            if not lightspec.is_lightlike(e):
                 connection.send_error(msg["id"], "invalid", tr(hass, "light.preview_not_light", name=name))
                 return
             if user is None or not user.permissions.check_entity(e, POLICY_CONTROL):

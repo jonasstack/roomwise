@@ -90,6 +90,11 @@ ok(rows[2]?.icon === 'mdi:map-marker-path' && rows[2].text === 'Lou unterwegs' &
 const eta = (n) => m.card(`(async () => { const p = card._hr.places.persons.find((x) => x.entity_id === 'person.kim'); p.prediction = { ...p.prediction, arrive_at: Math.round(Date.now() / 1000) + ${n} }; card._hr = { ...card._hr }; card._tripNow = Date.now(); await card.updateComplete; return card.shadowRoot.querySelectorAll('.pp-trips .pp-eta')[1]?.textContent ?? ''; })()`);
 ok((await eta(5 * 60 - 20)) === '5 Min.', 'Ankunft aus der letzten Position zählt herunter (5 Min.)');
 ok((await eta(-30)) === 'gleich da', 'Ankunftszeit vorbei, noch unterwegs: „gleich da“');
+// the last position is old (the phone went quiet, maybe the person stopped somewhere): no countdown, never "gleich da"
+const stale = (n, ago) => m.card(`(async () => { const p = card._hr.places.persons.find((x) => x.entity_id === 'person.kim'); const now = Math.round(Date.now() / 1000); p.prediction = { ...p.prediction, as_of: now - ${ago}, arrive_at: now + ${n} }; card._hr = { ...card._hr }; card._tripNow = Date.now(); await card.updateComplete; return card.shadowRoot.querySelectorAll('.pp-trips .pp-eta')[1]?.textContent ?? ''; })()`);
+ok((await stale(-30, 3 * 60)) === 'gleich da', 'frische Position (3 Min.), Zeit vorbei: „gleich da“');
+ok((await stale(-30, 15 * 60)) === '', 'letzte Position 15 Min. alt: keine Zeit, kein „gleich da“');
+ok((await stale(5 * 60, 15 * 60)) === '', 'letzte Position 15 Min. alt: auch keine Restminuten');
 ok((await m.card('!card.shadowRoot.querySelector(".pp-more")')) === true, 'Details erst nach Tippen');
 // the building moves down below the panel instead of lying under it
 const below = await m.card('(() => { const p = card.shadowRoot.querySelector(".pp-trips").getBoundingClientRect(); const plan = card.shadowRoot.querySelector("fp-plan"); return { inset: plan.insetTop, panel: Math.round(p.bottom - plan.getBoundingClientRect().top) }; })()');

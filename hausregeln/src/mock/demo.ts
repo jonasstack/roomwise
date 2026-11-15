@@ -99,6 +99,8 @@ const devices: Device[] = [
   D('binary_sensor.fenster_bad', 'Fenster Bad', 'window', 'bad', 'off', { kind_hint: 'door' }),
   D('binary_sensor.tuer_bad', 'Badtür', 'door', 'bad', 'off'),
   D('climate.heizung_bad', 'Heizung Bad', 'climate', 'bad', 'off', { detail: '22 °C' }),
+  // a light switch (a relay behind a lamp) without a room yet: counts as a lamp that only goes on and off
+  D('switch.spiegellicht', 'Spiegellicht', 'light', undefined, 'off'),
 ];
 
 const rooms: Room[] = [

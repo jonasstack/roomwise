@@ -25,6 +25,7 @@ import { frontDoor as findFrontDoor, wayToDoor, type PetState } from '../pets';
 import { buildNav } from '../petnav';
 import { carLive, liveClass, numOf } from '../models';
 import { hasMediaControls } from '../media-controls';
+import { resolveAction } from '../actions';
 
 /** Does a tap on the piece do something (an entity, or own media buttons of a pure infrared device)? */
 const linked = (f: FurnitureConfig) => !!f.entity || hasMediaControls(f.media) || !!f.contents?.length;
@@ -820,7 +821,7 @@ export class FpPlan extends LitElement {
     if (this.panZoom?.busy || performance.now() - this.lastInteract < 2000 || this.camAnim) return this.schedulePrebuild(1500);
     const roomH = Math.max(this.wallHeight, this.roomHeight);
     const overviewH = this.fullWalls ? roomH : this.wallHeight;
-    const rooms = pg.floor.rooms.filter((r) => r.points.length >= 3).sort((a, b) => Number(b.tap_action?.action === 'zoom') - Number(a.tap_action?.action === 'zoom'));
+    const rooms = pg.floor.rooms.filter((r) => r.points.length >= 3).sort((a, b) => Number(resolveAction(b, 'room', 'tap').action === 'zoom') - Number(resolveAction(a, 'room', 'tap').action === 'zoom'));
     const wanted: { key: string; height: number; focus?: RoomConfig }[] = [
       { key: this.furnKeyFor(overviewH), height: overviewH },
       ...rooms.map((r) => ({ key: this.furnKeyFor(roomH, r.id), height: roomH, focus: r })),

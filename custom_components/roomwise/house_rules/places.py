@@ -71,6 +71,15 @@ WARM_DAYS = 30  # how far the first learning reaches back
 THROTTLE_M = 20  # a new fix is processed when it moved this far …
 THROTTLE_S = 20  # … or this much time passed
 DRIVE = 8.3  # m/s assumed between a stay and the next fix far away (30 km/h)
+# Leaving a spot needs evidence: indoors (a sports hall, a shop) phones report positions a few hundred metres off now
+# and then – with a good accuracy value. Such a fix is only a "maybe"; the departure is confirmed by a fix this far
+# away, a reported speed, a next fix clearly farther out than the first, or a third fix in a row outside. A fix back
+# at the spot drops it.
+LEAVE_FAR = 800  # m: this far from the spot in one fix is a departure at once
+LEAVE_SPEED = 2.5  # m/s reported by the tracker together with a fix outside: under way
+CLOSER_M = 500  # m nearer to home over the recent fixes (and nearer with each of the last two) for "getting closer"
+ETA_FRESH = 600  # s: an arrival time counts down only this long after the last position; then "unterwegs" without time
+APPROACH_M = 50  # m the last fix must be nearer to the destination than the one before (else no arrival time)
 DETOUR = 1.35  # roads are longer than the straight line
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/reverse"
 LEARN_VERSION = 1
@@ -235,6 +244,7 @@ class Track:
         self.trend: str | None = None  # closer | away (to home), with hysteresis
         self.speed: float | None = None  # m/s reported by the tracker
         self.speed_t = 0.0
+        self.away: dict[str, float] | None = None  # fixes outside the resting spot, not yet sure: t, lat, lon (first), n, d (farthest)
         self.timeline: list[dict[str, Any]] = []  # today and yesterday: stays and trips
 
 
@@ -339,6 +349,7 @@ class Learner:
                 if tr.stay is not None:
                     self._end_stay(tr, t, None)
                 tr.stay = None
+                tr.away = None
                 tr.zone, tr.zone_since = zone_key, t
                 tr.trend = None
         if lat is None or lon is None:
@@ -350,16 +361,35 @@ class Learner:
             tr.fixes.append((t, lat, lon))
         if zone_key is None and good:
             st = tr.stay
-            if st is not None and dist(st["lat"], st["lon"], lat, lon) <= STAY_RADIUS + min(acc or 0, 100):
+            d = dist(st["lat"], st["lon"], lat, lon) if st is not None else 0.0
+            if st is not None and d <= STAY_RADIUS + min(acc or 0, 100):
                 n = min(st["n"], 20)
                 st["lat"] = (st["lat"] * n + lat) / (n + 1)
                 st["lon"] = (st["lon"] * n + lon) / (n + 1)
                 st["n"] += 1
                 st["last"] = t
+                tr.away = None  # back at the spot: the stray fix was GPS noise
             else:
-                if st is not None:
-                    self._end_stay(tr, t, (lat, lon))
-                tr.stay = {"lat": lat, "lon": lon, "n": 1, "since": t, "last": t}
+                # a resting spot (several fixes, a while, or a confirmed place) is left only on evidence
+                settled = st is not None and (st["n"] >= 2 or tr.node is not None or st["last"] - st["since"] >= 300)
+                fast = speed is not None and speed >= LEAVE_SPEED
+                aw = tr.away
+                sure = d >= LEAVE_FAR or fast or (aw is not None and (d >= aw["d"] + 100 or aw["n"] >= 2))
+                if settled and not sure:
+                    if aw is None:
+                        tr.away = {"t": t, "lat": lat, "lon": lon, "n": 1, "d": d}
+                    else:
+                        aw["n"] += 1
+                        aw["d"] = max(aw["d"], d)
+                else:
+                    if st is not None:
+                        # left: from the first fix outside (the one that was not sure yet), if there was one
+                        if aw is not None:
+                            self._end_stay(tr, aw["t"], (aw["lat"], aw["lon"]))
+                        else:
+                            self._end_stay(tr, t, (lat, lon))
+                    tr.away = None
+                    tr.stay = {"lat": lat, "lon": lon, "n": 1, "since": t, "last": t}
         if tr.left_at is not None and tr.bearing is None and tr.origin_pos and good and dist(tr.origin_pos[0], tr.origin_pos[1], lat, lon) >= 500:
             tr.bearing = round(bearing(tr.origin_pos[0], tr.origin_pos[1], lat, lon))
         self._trend(tr)
@@ -465,23 +495,27 @@ class Learner:
             tr.timeline = [e for e in tr.timeline if (e["b"] or entry["a"]) >= cutoff][-120:]
 
     def _trend(self, tr: Track) -> None:
-        """Getting closer to home or moving away (needs 300 m within 15 minutes; keeps the last verdict otherwise)."""
+        """Getting closer to home or moving away, within 15 minutes; keeps the last verdict otherwise. "closer" needs
+        a real approach: 500 m nearer overall and nearer with each of the last two fixes – GPS noise at a spot jumps
+        back and forth and never adds up to that. While resting at a spot there is no trend."""
         home = self.home()
-        if home is None or tr.zone == "home" or not tr.fixes:
+        if home is None or tr.zone == "home" or not tr.fixes or tr.node is not None:
             tr.trend = None
             return
         now = tr.fixes[-1][0]
         ds = [dist(home[0], home[1], f[1], f[2]) for f in tr.fixes if now - f[0] <= 900][-6:]
-        if len(ds) < 2:
+        if len(ds) < 3:
             return
         # net change over the last few fixes (a turn earlier in the window does not count)
         dnow = ds[-1]
-        closer = ds[0] - dnow >= 300
+        closer = ds[0] - dnow >= CLOSER_M and ds[-3] - ds[-2] >= APPROACH_M and ds[-2] - dnow >= APPROACH_M
         away = dnow - ds[0] >= 300
         if closer and not away:
             tr.trend = "closer"
         elif away and not closer:
             tr.trend = "away"
+        elif tr.trend == "closer" and ds[-2] - dnow < -APPROACH_M:
+            tr.trend = None  # farther again: no longer on the way home"
 
     # ------------------------------------------------------------------ reading
     def speed(self, tr: Track, now: float) -> float | None:
@@ -521,7 +555,10 @@ class Learner:
         """The likely destination while moving: {destination, probability, eta_min, arrive_at, as_of, basis} or None.
         mode: how the person travels (detect_mode), for the arrival time when the speed is not known.
         The arrival is estimated at the last position (as_of) and counts down from there: the person goes on between
-        two positions, so eta_min is what is left now; arrive_at (seconds) lets screens count down by themselves."""
+        two positions, so eta_min is what is left now; arrive_at (seconds) lets screens count down by themselves.
+        Only real movement counts: a person not yet clearly away from where the trip started (GPS noise at a spot) has
+        no destination; "home" needs the approach (trend "closer") – the habit alone never says "on the way home"; an
+        arrival time only while the last fixes come nearer to the destination and the last one is fresh."""
         if tr.zone is not None or tr.node is not None or tr.last is None:
             return None
         _t, lat, lon = tr.fixes[-1] if tr.fixes else tr.last
@@ -534,6 +571,10 @@ class Learner:
         fix_t = min(float(_t), now)
         elapsed = max(0.0, fix_t - start)
         o_pos = tr.origin_pos
+        v_now = self.speed(tr, now)
+        gone_far = o_pos is not None and dist(o_pos[0], o_pos[1], lat, lon) >= 300
+        if not (gone_far or (v_now is not None and v_now >= 1.5) or tr.trend == "closer"):
+            return None
         scores: dict[str, float] = {}
         durs: dict[str, list[tuple[float, float, float | None]]] = {}
         total = 0.0
@@ -569,27 +610,43 @@ class Learner:
             scores[trip["d"]] = scores.get(trip["d"], 0.0) + w
             durs.setdefault(trip["d"], []).append((trip["dur"], w if trip["o"] == tr.origin else w * 0.3, trip.get("km")))
             total += w
-        v = self.speed(tr, now)
+        v = v_now
         home = self.home()
-        if total < 0.8:
+        if "home" in scores and tr.trend != "closer":
+            # "on the way home" only when the person really comes nearer – the time of day alone is no evidence
+            total -= scores.pop("home")
+            durs.pop("home", None)
+        if total < 0.8 or not scores:
             # hardly anything learned yet: only "getting closer to home" says something
             if home is None or tr.trend != "closer":
                 return None
             p = 0.55
             if head is not None and angle(head, bearing(lat, lon, home[0], home[1])) < 45:
                 p = 0.7
-            return {"destination": "home", "probability": p, **self._arrival(self._eta(lat, lon, home, None, v, elapsed, mode), fix_t, now), "basis": "direction"}
+            return {"destination": "home", "probability": p, **self._arrival(self._eta(lat, lon, home, None, v, elapsed, mode), fix_t, now, self._nearer(tr, home)), "basis": "direction"}
         best = max(scores, key=lambda k: scores[k])
         prob = scores[best] / (total + 0.5)
         if best == "home" and tr.trend == "closer":
             prob = min(0.98, prob + 0.1)
         d_pos = self.pos(best)
         assert d_pos is not None
-        return {"destination": best, "probability": round(prob, 2), **self._arrival(self._eta(lat, lon, d_pos, (durs[best], o_pos), v, elapsed, mode), fix_t, now), "basis": "learned"}
+        return {"destination": best, "probability": round(prob, 2), **self._arrival(self._eta(lat, lon, d_pos, (durs[best], o_pos), v, elapsed, mode), fix_t, now, self._nearer(tr, d_pos)), "basis": "learned"}
 
     @staticmethod
-    def _arrival(eta_fix: int, fix_t: float, now: float) -> dict[str, Any]:
-        """The arrival estimated at the last position, counted down to now (at least 1 minute while still on the way)."""
+    def _nearer(tr: Track, dest: tuple[float, float]) -> bool:
+        """The last fix is nearer to the destination than the one before (by more than GPS noise)."""
+        if len(tr.fixes) < 2:
+            return False
+        a, b = tr.fixes[-2], tr.fixes[-1]
+        return dist(a[1], a[2], dest[0], dest[1]) - dist(b[1], b[2], dest[0], dest[1]) >= APPROACH_M
+
+    @staticmethod
+    def _arrival(eta_fix: int, fix_t: float, now: float, nearer: bool = True) -> dict[str, Any]:
+        """The arrival estimated at the last position, counted down to now (at least 1 minute while still on the way).
+        No time when the last position did not come nearer, or is older than ETA_FRESH: then nobody knows where the
+        person is now – a countdown would end in "gleich da" for someone who stopped somewhere."""
+        if not nearer or now - fix_t > ETA_FRESH:
+            return {"eta_min": None, "arrive_at": None, "as_of": round(fix_t)}
         at = fix_t + eta_fix * 60
         return {"eta_min": max(1, math.ceil((at - now) / 60)), "arrive_at": round(at), "as_of": round(fix_t)}
 

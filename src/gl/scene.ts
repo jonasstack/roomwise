@@ -711,6 +711,21 @@ export class GlScene {
     const sillC = this.color('--fp-wall-top');
     const handleC = this.color('--fp-handle');
     const ext = o.wallColor ? this.color(paint(o.wallColor)) : undefined;
+    // zoomed onto a room: walls of other rooms between the camera and it are left out entirely
+    const camDir: Point = [Math.sin(sp), Math.cos(sp)];
+    const side: Point = [Math.cos(sp), -Math.sin(sp)];
+    let inFront: ((a: Point, b: Point) => boolean) | undefined;
+    if (o.focus && o.focus.points.length >= 3) {
+      const pts = o.focus.points;
+      const cx = pts.reduce((t, q) => t + q[0], 0) / pts.length;
+      const cy = pts.reduce((t, q) => t + q[1], 0) / pts.length;
+      const along = (q: Point) => (q[0] - cx) * camDir[0] + (q[1] - cy) * camDir[1];
+      const across = (q: Point) => (q[0] - cx) * side[0] + (q[1] - cy) * side[1];
+      const front = Math.max(...pts.map(along));
+      const lo = Math.min(...pts.map(across)) - 40;
+      const hi = Math.max(...pts.map(across)) + 40;
+      inFront = (a, b) => Math.min(along(a), along(b)) >= front - 5 && Math.max(across(a), across(b)) > lo && Math.min(across(a), across(b)) < hi;
+    }
     for (const p of wallPieces(floor)) {
       const dx = p.b[0] - p.a[0];
       const dy = p.b[1] - p.a[1];
@@ -720,6 +735,7 @@ export class GlScene {
       const mid: Point = [(p.a[0] + p.b[0]) / 2, (p.a[1] + p.b[1]) / 2];
       const segN: Point = [-dy / len, dx / len];
       const touchesFocus = !!o.focus && (p.front === o.focus || p.back === o.focus);
+      if (!touchesFocus && inFront?.(p.a, p.b)) continue;
       const towards = touchesFocus ? false : p.outward ? facing(p.outward) > 0.5 : o.full && Math.abs(facing(segN)) > 0.5;
       const isBack = !!p.outward && facing(p.outward) < -0.3;
       const H = isBack && o.backHeight && o.backHeight > o.height ? o.backHeight : o.height;
@@ -739,9 +755,10 @@ export class GlScene {
       const key = `${p.a.join(',')}|${p.b.join(',')}`;
       const was = this.loweredState.get(key);
       this.loweredState.set(key, lowered);
-      g.scale.z = (was ?? lowered) ? 0.1 : 1;
+      // the focused room's own walls towards the camera sink almost to the floor (only a line stays)
+      g.scale.z = (was ?? lowered) ? 0.03 : 1;
       if (was !== undefined && was !== lowered) {
-        this.animate(g, lowered ? 0.1 : 1, 420);
+        this.animate(g, lowered ? 0.03 : 1, 420);
         g.userData.keep = true; // animates: stays a separate object
       }
       const slab = (l: number, h: number, z = 0, x = 0) => {
