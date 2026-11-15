@@ -412,7 +412,7 @@ export class HrSettingsView extends StoreElement {
           <div class="rl-info">${icon(mdiHomeRemoveOutline, 20)}<span>${t('settings.remove_here')}</span></div>
           <button slot="foot" class="btn" @click=${this._close}>${t('common.close')}</button>
           ${live ? html`<button slot="foot" class="btn" @click=${() => (this._pop = 'backup')}>${icon(mdiContentSaveOutline, 18)}${t('settings.remove_backup_first')}</button>` : nothing}
-          ${s.haAdmin ? html`<button slot="foot" class="btn tinted" @click=${() => openPath('/config/integrations/integration/house_rules')}>${icon(mdiOpenInNew, 18)}${t('settings.remove_to_ha')}</button>` : nothing}
+          ${s.haAdmin ? html`<button slot="foot" class="btn tinted" @click=${() => openPath('/config/integrations/integration/roomwise')}>${icon(mdiOpenInNew, 18)}${t('settings.remove_to_ha')}</button>` : nothing}
         </hr-pop>`;
     }
   }

@@ -2,7 +2,7 @@ import type { FloorplanCardConfig, HomeAssistant } from './types';
 import { companionInfo } from './entry-server';
 
 /**
- * Shared floor plans and trace images, kept by the companion integration (custom_components/floorplan_card,
+ * Shared floor plans and trace images, kept by the card part of roomwise (custom_components/roomwise/card,
  * plans.py). A card references a shared plan by id (`plan: <id>`); the plan's content replaces the matching keys of
  * the card config, everything else (title, height, view, users …) stays per card. Editing from any dashboard saves
  * a new revision, and every open card follows it live.

@@ -32,7 +32,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import async_call_later, async_track_time_change, async_track_time_interval
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN
+from .const import INTEGRATION
 
 if TYPE_CHECKING:
     from .core import HouseRules
@@ -583,7 +583,7 @@ class Simulator:
             for e in room.get("motion") or []:
                 out[e] = (rid, max(after, 1.0))  # motion only sees movement: like the room, it counts a while longer
             if not (room.get("presence") or room.get("zones") or room.get("motion")):
-                eid = reg.async_get_entity_id("binary_sensor", DOMAIN, f"room_{rid}_occupied")
+                eid = reg.async_get_entity_id("binary_sensor", INTEGRATION, f"room_{rid}_occupied")
                 if eid:
                     out[eid] = (rid, 0.0)
         return out

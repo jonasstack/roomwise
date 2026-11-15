@@ -26,7 +26,7 @@ No fonts are bundled; both use the system font of the device.
 
 ## 3D models
 
-In `models/` (copied to `custom_components/floorplan_card/frontend/models/` by the build). Details in
+In `models/` (copied to `custom_components/roomwise/frontend/models/` by the build). Details in
 [`models/LICENSE.md`](models/LICENSE.md).
 
 | File | Author | License |
@@ -39,8 +39,8 @@ restyled by the card. All furniture, appliances, floors and the dog and cat figu
 
 ## Sounds of the Hausregeln alarm
 
-In `hausregeln/custom_components/house_rules/sounds/`. Details in
-[`QUELLEN.md`](hausregeln/custom_components/house_rules/sounds/QUELLEN.md).
+In `custom_components/roomwise/house_rules/sounds/`. Details in
+[`QUELLEN.md`](custom_components/roomwise/house_rules/sounds/QUELLEN.md).
 
 | File | Source | License |
 |---|---|---|

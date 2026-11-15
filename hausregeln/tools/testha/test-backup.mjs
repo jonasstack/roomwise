@@ -14,7 +14,7 @@ for (const [r, ents] of Object.entries({ flur: ['light.flurlicht', 'binary_senso
   for (const e of ents) await ws.call({ type: 'config/entity_registry/update', entity_id: e, area_id: A[r] }).catch((err) => console.log('area', e, err.message));
 let info = await ws.call({ type: 'house_rules/info' }).catch(() => null);
 if (!info?.loaded) {
-  const flow = await api('POST', '/api/config/config_entries/flow', { handler: 'house_rules' });
+  const flow = await api('POST', '/api/config/config_entries/flow', { handler: 'roomwise' });
   await api('POST', `/api/config/config_entries/flow/${flow.body.flow_id}`, {});
   info = await until(async () => {
     const i = await ws.call({ type: 'house_rules/info' }).catch(() => null);
@@ -121,7 +121,7 @@ ok(res.notes.some((n) => /PIN/.test(n)) && s.alarm.config.confirm === 'none' && 
 
 // ---------------------------------------------------------------- 4. repairs
 console.log('\n# Reparaturen');
-const issues = async () => (await ws.call({ type: 'repairs/list_issues' })).issues.filter((i) => i.domain === 'house_rules');
+const issues = async () => (await ws.call({ type: 'repairs/list_issues' })).issues.filter((i) => i.domain === 'roomwise' && !['frontend_missing', 'old_integrations'].includes(i.issue_id));
 const check = () => ws.call({ type: 'house_rules/issues/check' });
 await ws.call({ type: 'house_rules/alarm/config', config: { enabled: false } });
 await check();
@@ -131,7 +131,7 @@ let list = await issues();
 let it = list.find((i) => i.issue_id === 'missing_light.verschwunden');
 ok(it && it.translation_key === 'entity_missing' && it.is_fixable && /Mit verschwundenem Licht/.test(it.translation_placeholders.used_in), 'fehlendes Gerät in einer Regel → Hinweis (behebbar)', list);
 // fix it in the Repairs panel: replace with another light
-const fix = await api('POST', '/api/repairs/issues/fix', { handler: 'house_rules', issue_id: 'missing_light.verschwunden' });
+const fix = await api('POST', '/api/repairs/issues/fix', { handler: 'roomwise', issue_id: 'missing_light.verschwunden' });
 ok(fix.body?.type === 'form' && fix.body.step_id === 'init', 'Reparatur-Dialog öffnet', fix.body);
 const bad = await api('POST', `/api/repairs/issues/fix/${fix.body.flow_id}`, { replacement: 'light.verschwunden' });
 ok(bad.body?.errors?.replacement === 'invalid_entity', 'dasselbe / fehlende Gerät wird abgelehnt', bad.body);
@@ -180,7 +180,7 @@ await ws.call({ type: 'lovelace/config/save', url_path: 'hr-plan-test', config: 
 const card = async () => (await check()).some((i) => i.id === 'card_not_loaded');
 // the card's companion integration loads the card itself; once another test set it up in this test HA it stays
 // loaded until a restart, so only that side can be checked then
-const companion = (await api('GET', '/api/config')).body?.components?.includes('floorplan_card');
+const companion = (await api('GET', '/api/config')).body?.components?.includes('roomwise');
 if (companion) {
   await sleep(1500);
   ok(!(await card()), 'Begleit-Integration lädt die Karte: kein Hinweis (ohne Begleit-Integration nicht prüfbar, bis zum Neustart des Test-HA)');

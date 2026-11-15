@@ -39,7 +39,7 @@ let finished = false;
 
 let info = await ws.call({ type: 'house_rules/info' }).catch(() => null);
 if (!info?.loaded) {
-  const flow = await api('POST', '/api/config/config_entries/flow', { handler: 'house_rules' });
+  const flow = await api('POST', '/api/config/config_entries/flow', { handler: 'roomwise' });
   await api('POST', `/api/config/config_entries/flow/${flow.body.flow_id}`, {});
   info = await until(async () => {
     const i = await ws.call({ type: 'house_rules/info' }).catch(() => null);
@@ -55,7 +55,7 @@ await ws.sub({ type: 'house_rules/subscribe' }, (e) => (e?.kind === 'history_add
 
 // setup time (HA keeps it per integration)
 const setup = await ws.call({ type: 'integration/setup_info' }).catch(() => []);
-const hr = setup.find((s) => s.domain === 'house_rules');
+const hr = setup.find((s) => s.domain === 'roomwise');
 if (hr) ok(hr.seconds <= BUDGET.setupS, `Einrichtung house_rules ${hr.seconds?.toFixed?.(2)} s (Budget ${BUDGET.setupS} s)`);
 else console.log('  (integration/setup_info kennt house_rules nicht)');
 

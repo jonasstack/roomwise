@@ -10,10 +10,10 @@ import sys
 from datetime import datetime
 from types import SimpleNamespace
 
-sys.path.insert(0, os.environ.get("HA_CONFIG_DIR", "/config"))  # CI: a folder whose custom_components/ holds house_rules
+sys.path.insert(0, os.environ.get("HA_CONFIG_DIR", "/config"))  # CI: a folder whose custom_components/ holds roomwise
 from homeassistant.util import dt as dt_util  # noqa: E402
 
-from custom_components.house_rules import wakeup as W  # noqa: E402
+from custom_components.roomwise.house_rules import wakeup as W  # noqa: E402
 
 dt_util.set_default_time_zone(dt_util.get_time_zone("Europe/Berlin"))
 fails = 0
@@ -293,7 +293,7 @@ X.run(at(9, 9))
 ok(not X.ended and not X.w.ends_sleep(), "Funktion aus → nichts")
 
 print("Klasse: Hausmodus-Automatik beendet Schlafen wirklich")
-from custom_components.house_rules import modes as M  # noqa: E402
+from custom_components.roomwise.house_rules import modes as M  # noqa: E402
 
 def mode_world():
     calls = []

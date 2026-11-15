@@ -11,7 +11,7 @@ const api = rest(tok);
 const ws = await wsConnect(tok);
 let info = await ws.call({ type: 'floorplan_card/info' }).catch(() => undefined);
 if (!info?.loaded) {
-  const flow = await api('POST', '/api/config/config_entries/flow', { handler: 'floorplan_card' });
+  const flow = await api('POST', '/api/config/config_entries/flow', { handler: 'roomwise' });
   if (flow.body?.type === 'form') await api('POST', `/api/config/config_entries/flow/${flow.body.flow_id}`, {});
   info = await until(() => ws.call({ type: 'floorplan_card/info' }).then((i) => (i.loaded ? i : undefined)).catch(() => undefined), 15000);
 }
@@ -59,10 +59,10 @@ ok(String(write).startsWith('unauthorized'), 'non-admin: wifi/set refused');
 uws.close();
 
 // diagnostics: only counts
-const entry = (await api('GET', '/api/config/config_entries/entry')).body.find((e) => e.domain === 'floorplan_card');
+const entry = (await api('GET', '/api/config/config_entries/entry')).body.find((e) => e.domain === 'roomwise');
 const diag = await api('GET', `/api/diagnostics/config_entry/${entry.entry_id}`);
 const d = JSON.stringify(diag.body);
-ok(diag.status === 200 && diag.body?.data?.wifi?.networks === 3, 'diagnostics: number of networks', diag.body?.data?.wifi);
+ok(diag.status === 200 && diag.body?.data?.card?.wifi?.networks === 3, 'diagnostics: number of networks (card part of the roomwise download)', diag.body?.data?.card?.wifi);
 ok(![PW_HOME, PW_GUEST, 'Demo Home', 'Demo-Gast', 'Gäste'].some((s) => d.includes(s)), 'diagnostics: no password, SSID or name');
 
 // stored in Home Assistant's own storage, in a file of its own (not in the dashboard)

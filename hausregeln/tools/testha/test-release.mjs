@@ -30,7 +30,7 @@ async function ensureEntry(handler) {
   }
   return until(async () => (await api('GET', '/api/config/config_entries/entry')).body.find((x) => x.domain === handler && x.state === 'loaded')?.entry_id, 60000, 500);
 }
-await ensureEntry('house_rules');
+await ensureEntry('roomwise');
 const info = await until(async () => (await ws.call({ type: 'house_rules/info' }).catch(() => null))?.loaded && true, 60000);
 ok(info, 'Hausregeln läuft');
 await until(async () => (await ws.call({ type: 'house_rules/snapshot' })).devices.length > 10, 90000, 1000);
@@ -71,7 +71,7 @@ const alarmLines = await until(async () => {
 ok(alarmLines && alarmLines.some((e) => /scharf/.test(e.message)) && alarmLines.some((e) => /unscharf/.test(e.message)), 'Scharf und unscharf stehen im Logbuch', alarmLines);
 ok(alarmLines?.every((e) => e.entity_id?.startsWith('alarm_control_panel.')), 'mit der Alarmanlage als Entität', alarmLines?.map((e) => e.entity_id));
 await ws.call({ type: 'house_rules/alarm/config', config: { enabled: false } });
-const ours = await logbook((e) => e.name === 'Hausregeln' || e.domain === 'house_rules');
+const ours = await logbook((e) => e.name === 'Hausregeln' || e.domain === 'roomwise');
 ok(ours.length < 20, `wenige Zeilen von Hausregeln (${ours.length})`);
 
 // ---------------------------------------------------------------- 2. export as automation
@@ -174,8 +174,8 @@ ok((await ws.call({ type: 'house_rules/trash/purge', rule_id: twin.rule.id })).r
 
 // ---------------------------------------------------------------- 4. roles on every command
 console.log('\n# Rollen');
-const permSrc = readFileSync(new URL('custom_components/house_rules/permissions.py', ROOT), 'utf8');
-const wsSrc = readFileSync(new URL('custom_components/house_rules/websocket.py', ROOT), 'utf8');
+const permSrc = readFileSync(new URL('../custom_components/roomwise/house_rules/permissions.py', ROOT), 'utf8');
+const wsSrc = readFileSync(new URL('../custom_components/roomwise/house_rules/websocket.py', ROOT), 'utf8');
 const NEED = Object.fromEntries([...permSrc.matchAll(/^\s+"([a-z_/]+)": "(guest|resident|admin|ha_admin)",/gm)].map((m) => [m[1], m[2]]));
 const registered = [...new Set([...wsSrc.matchAll(/"house_rules\/([a-z_/]+)"/g)].map((m) => m[1]))];
 ok(registered.every((c) => NEED[c]), 'jeder Befehl hat eine Rolle', registered.filter((c) => !NEED[c]));
@@ -291,8 +291,8 @@ await ws.call({ type: 'house_rules/alarm/config', config: { enabled: false, code
 const guest = await matrix('guest');
 ok(await denied(save({ id: 'rel_gast', name: 'Gast', type: 'when', when: [{ subject: 'binary_sensor.badtuer', verb: 'opens' }], then: [{ subject: 'light.badlicht', verb: 'turn_on' }] }, guest)), 'Gast: keine Regel anlegen');
 ok(!(await denied(guest.call({ type: 'house_rules/window_warning/ack' }))) && !(await denied(guest.call({ type: 'house_rules/rule/run', rule_id: klingel.id }))), 'Gast: bedienen (bestätigen, Regel ausführen) geht');
-const guestPause = await tabletApi('POST', '/api/services/house_rules/pause', { rule_id: klingel.id, minutes: 1 });
-ok(guestPause.status === 401 || guestPause.status === 403, `Gast: auch die Aktion house_rules.pause wird abgelehnt (${guestPause.status})`);
+const guestPause = await tabletApi('POST', '/api/services/roomwise/pause', { rule_id: klingel.id, minutes: 1 });
+ok(guestPause.status === 401 || guestPause.status === 403, `Gast: auch die Aktion roomwise.pause wird abgelehnt (${guestPause.status})`);
 guest.close();
 const resident = await matrix('resident');
 const resRule = await save({ id: 'rel_bewohner', name: 'Vom Bewohner', type: 'when', when: [{ subject: 'binary_sensor.badtuer', verb: 'opens' }], then: [{ subject: 'light.badlicht', verb: 'turn_on' }] }, resident).catch((e) => e);
@@ -333,7 +333,7 @@ ok((await roles()).find((u) => u.id === tabletUser.id).role === 'resident', 'zur
 if (!SKIP_UNINSTALL) {
   console.log('\n# Entfernen');
   const has = (key) => existsSync(new URL(key, STORAGE));
-  let entry = await ensureEntry('house_rules');
+  let entry = await ensureEntry('roomwise');
   // reload and disable keep everything
   await api('POST', `/api/config/config_entries/entry/${entry}/reload`);
   await until(async () => (await ws.call({ type: 'house_rules/info' }).catch(() => null))?.loaded, 60000, 500);
@@ -346,40 +346,33 @@ if (!SKIP_UNINSTALL) {
   ok(await until(async () => (await snapshot()).rules.some((r) => r.id === klingel.id), 20000), 'wieder eingeschaltet: Regeln da');
   await save({ id: 'rel_fehlt', name: 'Mit fehlendem Gerät', type: 'when', when: [{ subject: 'binary_sensor.haustuer', verb: 'opens' }], then: [{ subject: 'light.gibt_es_nicht', verb: 'turn_on' }] });
   await ws.call({ type: 'house_rules/issues/check' }).catch(() => null);
-  const issuesBefore = (await ws.call({ type: 'repairs/list_issues' })).issues.filter((i) => i.domain === 'house_rules').length;
-  const entitiesBefore = (await ws.call({ type: 'config/entity_registry/list' })).filter((e) => e.platform === 'house_rules').length;
+  const issuesBefore = (await ws.call({ type: 'repairs/list_issues' })).issues.filter((i) => i.domain === 'roomwise').length;
+  const entitiesBefore = (await ws.call({ type: 'config/entity_registry/list' })).filter((e) => e.platform === 'roomwise').length;
+  // the card part: stored settings, a dashboard resource pointing to its files (from earlier versions)
+  await ws.call({ type: 'floorplan_card/walks/done', card_id: 'release_test', pet_id: 'hund', slot: '07:00' }).catch((e) => console.log('walks', e.message));
+  const resList = () => ws.call({ type: 'lovelace/resources' });
+  const mine = await ws.call({ type: 'lovelace/resources/create', res_type: 'module', url: '/floorplan_card_files/floorplan-card.js?v=1' }).catch((e) => ({ error: e.message }));
+  const other = await ws.call({ type: 'lovelace/resources/create', res_type: 'module', url: '/local/andere-karte.js' }).catch((e) => ({ error: e.message }));
+  ok(!mine.error && !other.error, 'Dashboard-Ressourcen angelegt', [mine, other]);
   await sleep(6000); // delayed writes reach the disk
-  ok(has('house_rules') && has('house_rules.history') && has('house_rules.versions'), 'vorher: Dateien da');
+  ok(has('house_rules') && has('house_rules.history') && has('house_rules.versions') && has('floorplan_card'), 'vorher: Dateien da (Hausregeln und Kartenteil)');
   ok(entitiesBefore > 3, `vorher: ${entitiesBefore} Entitäten, ${issuesBefore} Reparatur-Hinweise`);
   const del = await api('DELETE', `/api/config/config_entries/entry/${entry}`);
   ok(del.status === 200, `Integration gelöscht (${del.status})`);
   await sleep(7000); // longer than any delayed write: nothing may come back
   const left = ['house_rules', 'house_rules.history', 'house_rules.habits', 'house_rules.smart_heat', 'house_rules.telemetry', 'house_rules.versions'].filter(has);
   ok(!left.length, 'keine Dateien von Hausregeln übrig', left);
-  ok(!(await ws.call({ type: 'config/entity_registry/list' })).some((e) => e.platform === 'house_rules'), 'keine Entitäten übrig');
-  ok(!(await ws.call({ type: 'repairs/list_issues' })).issues.some((i) => i.domain === 'house_rules'), 'keine Reparatur-Hinweise übrig');
-  ok(!('hausregeln' in (await ws.call({ type: 'get_panels' }))), 'Seitenleiste ohne Hausregeln');
-  entry = await ensureEntry('house_rules');
-  ok(entry && (await until(async () => (await ws.call({ type: 'house_rules/info' }).catch(() => null))?.loaded, 60000, 500)), 'wieder hinzufügen geht (frisch)');
-  ok(!(await snapshot()).rules.some((r) => r.id === klingel.id), 'frisch: alte Regeln sind weg');
-
-  // the companion: stored settings, Repairs, a dashboard resource pointing to its files
-  const fp = await ensureEntry('floorplan_card');
-  await ws.call({ type: 'floorplan_card/walks/done', card_id: 'release_test', pet_id: 'hund', slot: '07:00' }).catch((e) => console.log('walks', e.message));
-  const resList = () => ws.call({ type: 'lovelace/resources' });
-  const mine = await ws.call({ type: 'lovelace/resources/create', res_type: 'module', url: '/floorplan_card_files/floorplan-card.js?v=1' }).catch((e) => ({ error: e.message }));
-  const other = await ws.call({ type: 'lovelace/resources/create', res_type: 'module', url: '/local/andere-karte.js' }).catch((e) => ({ error: e.message }));
-  ok(!mine.error && !other.error, 'Dashboard-Ressourcen angelegt', [mine, other]);
-  await api('POST', `/api/config/config_entries/entry/${fp}/reload`);
-  await sleep(1500);
-  ok(has('floorplan_card'), 'Begleit-Integration: Datei da (neu laden behält sie)');
-  await api('DELETE', `/api/config/config_entries/entry/${fp}`);
-  await sleep(2000);
-  ok(!has('floorplan_card'), 'Begleit-Integration: Datei gelöscht');
+  ok(!has('floorplan_card'), 'Kartenteil: Datei gelöscht');
   const urls = (await resList()).map((r) => r.url);
   ok(!urls.some((u) => u.startsWith('/floorplan_card_files/')) && urls.includes('/local/andere-karte.js'), 'eigene Dashboard-Ressource entfernt, fremde bleibt', urls);
   for (const r of await resList()) if (r.url === '/local/andere-karte.js') await ws.call({ type: 'lovelace/resources/delete', resource_id: r.id });
-  await ensureEntry('floorplan_card');
+  ok(!(await ws.call({ type: 'config/entity_registry/list' })).some((e) => e.platform === 'roomwise'), 'keine Entitäten übrig');
+  ok(!(await ws.call({ type: 'repairs/list_issues' })).issues.some((i) => i.domain === 'roomwise'), 'keine Reparatur-Hinweise übrig');
+  ok(!('hausregeln' in (await ws.call({ type: 'get_panels' }))), 'Seitenleiste ohne Hausregeln');
+  entry = await ensureEntry('roomwise');
+  ok(entry && (await until(async () => (await ws.call({ type: 'house_rules/info' }).catch(() => null))?.loaded, 60000, 500)), 'wieder hinzufügen geht (frisch)');
+  ok(!(await snapshot()).rules.some((r) => r.id === klingel.id), 'frisch: alte Regeln sind weg');
+
 }
 
 ws.close();

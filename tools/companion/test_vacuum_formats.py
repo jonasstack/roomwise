@@ -1,6 +1,6 @@
 """Map formats of the vacuum adapters, without Home Assistant: python3 tools/companion/test_vacuum_formats.py
 
-Feeds custom_components/floorplan_card/vacuum_formats.py with the attribute shapes of Dreame Vacuum, Xiaomi Cloud
+Feeds custom_components/roomwise/card/vacuum_formats.py with the attribute shapes of Dreame Vacuum, Xiaomi Cloud
 Map Extractor and Valetudo (built by the fake robots of testha/fp_fake/world.py) and checks that floor, walls, dock,
 position and path come out in robot millimetres where they belong.
 """
@@ -22,7 +22,7 @@ def load(name: str, path: Path):
     return mod
 
 
-F = load("vacuum_formats", ROOT / "custom_components/floorplan_card/vacuum_formats.py")
+F = load("vacuum_formats", ROOT / "custom_components/roomwise/card/vacuum_formats.py")
 W = load("world", ROOT / "tools/companion/testha/fp_fake/world.py")
 fails = 0
 

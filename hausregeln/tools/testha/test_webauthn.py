@@ -1,7 +1,7 @@
 """Checks webauthn.py with a simulated authenticator (no browser needed). Run: python3 tools/testha/test_webauthn.py"""
 import base64, hashlib, importlib.util, json, os, struct, sys
 
-spec = importlib.util.spec_from_file_location("wa", os.path.join(os.path.dirname(__file__), "../../custom_components/house_rules/webauthn.py"))
+spec = importlib.util.spec_from_file_location("wa", os.path.join(os.path.dirname(__file__), "../../../custom_components/roomwise/house_rules/webauthn.py"))
 wa = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(wa)
 from cryptography.hazmat.primitives import hashes

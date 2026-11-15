@@ -8,7 +8,7 @@ import importlib.util
 import sys
 import types
 
-ROOT = "custom_components/house_rules"
+ROOT = "../custom_components/roomwise/house_rules"
 pkg = types.ModuleType("hr")
 pkg.__path__ = [ROOT]
 sys.modules["hr"] = pkg

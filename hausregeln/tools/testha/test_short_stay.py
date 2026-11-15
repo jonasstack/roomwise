@@ -10,8 +10,8 @@ from datetime import datetime
 
 sys.path.insert(0, os.environ.get("HA_CONFIG_DIR", "/config"))
 
-from custom_components.house_rules import smart_heat as S  # noqa: E402
-from custom_components.house_rules.habits import SLOT, SLOTS  # noqa: E402
+from custom_components.roomwise.house_rules import smart_heat as S  # noqa: E402
+from custom_components.roomwise.house_rules.habits import SLOT, SLOTS  # noqa: E402
 
 fails = 0
 

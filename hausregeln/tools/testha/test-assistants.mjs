@@ -24,7 +24,7 @@ const place = {
 for (const [r, ents] of Object.entries(place)) for (const e of ents) await ws.call({ type: 'config/entity_registry/update', entity_id: e, area_id: A[r] }).catch((err) => console.log('area', e, err.message));
 let info = await ws.call({ type: 'house_rules/info' }).catch(() => null);
 if (!info?.loaded) {
-  const flow = await api('POST', '/api/config/config_entries/flow', { handler: 'house_rules' });
+  const flow = await api('POST', '/api/config/config_entries/flow', { handler: 'roomwise' });
   await api('POST', `/api/config/config_entries/flow/${flow.body.flow_id}`, {});
   info = await until(async () => {
     const i = await ws.call({ type: 'house_rules/info' }).catch(() => null);

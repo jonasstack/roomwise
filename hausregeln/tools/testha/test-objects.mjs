@@ -36,7 +36,7 @@ for (const [name, tr] of [
   if (!persons.storage.some((p) => p.name === name)) await ws.call({ type: 'person/create', name, device_trackers: [tr] });
 let info = await ws.call({ type: 'house_rules/info' }).catch(() => null);
 if (!info?.loaded) {
-  const flow = await api('POST', '/api/config/config_entries/flow', { handler: 'house_rules' });
+  const flow = await api('POST', '/api/config/config_entries/flow', { handler: 'roomwise' });
   await api('POST', `/api/config/config_entries/flow/${flow.body.flow_id}`, {});
   info = await until(async () => {
     const i = await ws.call({ type: 'house_rules/info' }).catch(() => null);

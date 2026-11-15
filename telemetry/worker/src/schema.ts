@@ -1,5 +1,5 @@
 /**
- * Strict validation of what roomwise sends (hausregeln/custom_components/house_rules/telemetry.py).
+ * Strict validation of what roomwise sends (custom_components/roomwise/house_rules/telemetry.py).
  * Unknown fields are rejected, strings must match tight patterns (no free text can slip through), numbers are
  * bounded, maps and lists are size-limited. A tiny hand-written validator: no dependencies.
  */

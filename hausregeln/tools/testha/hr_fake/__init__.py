@@ -22,7 +22,7 @@ from homeassistant.core import Context, HomeAssistant, ServiceCall, callback
 
 DOMAIN = "hr_fake"
 _LOGGER = logging.getLogger(__name__)
-TELEMETRY_MODULE = "custom_components.house_rules.telemetry"
+TELEMETRY_MODULE = "custom_components.roomwise.house_rules.telemetry"
 PLATFORMS = ["light", "switch", "binary_sensor", "sensor", "climate", "media_player", "vacuum", "number", "device_tracker", "lock", "cover", "button", "event"]
 
 

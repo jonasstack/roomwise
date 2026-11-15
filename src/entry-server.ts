@@ -5,7 +5,7 @@ import { defaultTitle, textTemplate } from './walk-notify';
 import type { LearnedFloor, VacuumMap } from './vacuum-live';
 
 /**
- * The card's companion integration (custom_components/floorplan_card, same HACS package): it runs what must
+ * The card part of the integration roomwise (custom_components/roomwise/card, same HACS package): it runs what must
  * work without any tablet — the front door warning (announcement, flashing lights, acknowledged by a switch
  * or a tap) and walk check-offs shared by every device. The card configures it over the websocket; without
  * the integration everything keeps working on the devices that show the card.
@@ -174,7 +174,7 @@ export async function serverConfig(hass: HomeAssistant, cfg: FloorplanCardConfig
 /** The companion is installed but not added yet: add it (one config entry, nothing to fill in) */
 async function setUpCompanion(hass: HomeAssistant): Promise<boolean> {
   try {
-    const flow = await hass.callApi<{ flow_id: string; type: string }>('POST', 'config/config_entries/flow', { handler: 'floorplan_card', show_advanced_options: false });
+    const flow = await hass.callApi<{ flow_id: string; type: string }>('POST', 'config/config_entries/flow', { handler: 'roomwise', show_advanced_options: false });
     if (flow.type === 'form') await hass.callApi('POST', `config/config_entries/flow/${flow.flow_id}`, {});
     for (let i = 0; i < 20; i++) {
       await new Promise((r) => setTimeout(r, 300));

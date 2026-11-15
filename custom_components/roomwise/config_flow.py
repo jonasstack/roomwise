@@ -1,4 +1,4 @@
-"""Config flow: one click, nothing to fill in (the card configures everything); no options."""
+"""Config flow: one click, nothing to fill in, one entry (the card and Hausregeln are set up in their own UI)."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from .const import DOMAIN
 
 
-class FloorplanCardConfigFlow(ConfigFlow, domain=DOMAIN):
-    """Set up the companion."""
+class RoomwiseConfigFlow(ConfigFlow, domain=DOMAIN):
+    """Set up roomwise."""
 
     VERSION = 1
 
@@ -18,5 +18,5 @@ class FloorplanCardConfigFlow(ConfigFlow, domain=DOMAIN):
         if self._async_current_entries():
             return self.async_abort(reason="single_instance_allowed")
         if user_input is not None:
-            return self.async_create_entry(title="Floorplan card (Grundriss-Karte)", data={})
+            return self.async_create_entry(title="roomwise", data={})
         return self.async_show_form(step_id="user")

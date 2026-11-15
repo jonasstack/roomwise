@@ -10,6 +10,6 @@ __pycache__/
 .ruff_cache/
 .cache/
 # built by tools/build.mjs (CI builds them for releases; never commit stale bundles)
-custom_components/floorplan_card/frontend/floorplan-card.js
-custom_components/floorplan_card/frontend/chunks/
-hausregeln/custom_components/house_rules/frontend/house-rules-panel.js
+custom_components/roomwise/frontend/floorplan-card.js
+custom_components/roomwise/frontend/chunks/
+custom_components/roomwise/house_rules/frontend/house-rules-panel.js

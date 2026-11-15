@@ -11,7 +11,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 sys.path.insert(0, "/config")
-from custom_components.house_rules import places as P  # noqa: E402
+from custom_components.roomwise.house_rules import places as P  # noqa: E402
 
 FAIL = []
 TZ = ZoneInfo("Europe/Berlin")

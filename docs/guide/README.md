@@ -20,28 +20,20 @@ with the German label in brackets where the Hausregeln panel only exists in Germ
 
 ## 1. Installation
 
-roomwise has two parts today: the companion integration *Grundriss-Karte*, which brings the card, and the optional
-rules integration *Hausregeln*. Both will become one integration later; your settings will be carried over.
-
-**Card and companion integration**
+roomwise is one integration: the card, what must work without a tablet, and the rules part *Hausregeln*.
 
 1. In HACS: ⋮ → **Custom repositories** → `https://github.com/jonasstack/roomwise`, type **Integration**.
 2. Open *roomwise* → **Download**.
 3. Restart Home Assistant.
-4. Settings → Devices & services → **Add integration** → *Grundriss-Karte*. Nothing to fill in.
-5. Reload the browser. The card is now available on every dashboard.
+4. Settings → Devices & services → **Add integration** → *roomwise*. Nothing to fill in.
+5. Reload the browser. The card is now available on every dashboard, and **Hausregeln** appears in the sidebar.
+6. Open **Hausregeln**. The setup assistant (*Einrichtung*) asks about residents, rooms and sensors, which
+   functions you want (alarm, window warning, light, heating, vacation, robot vacuum, AI) and then only about those,
+   and the wall tablet. Skip whatever you don't need; you can run it again under Settings → Setup.
 
-**Hausregeln (optional)**
-
-1. Download `house_rules.zip` from the latest release on GitHub and unpack it into
-   `<config>/custom_components/house_rules/`, so that `manifest.json` lies directly in that folder.
-2. Restart Home Assistant, then Settings → Devices & services → **Add integration** → *Hausregeln*.
-3. Open **Hausregeln** in the sidebar. The setup assistant (*Einrichtung*) asks about residents, rooms and sensors,
-   example rules, alarm, window warning, light, heating, vacation, robot vacuum, AI and the wall tablet. Skip
-   whatever you don't need; you can run it again under Settings → Setup.
-
-Only the automatic house mode runs after installation. Everything else stays off until you turn it on in
-Hausregeln under Settings → Features (*Funktionen*).
+Coming from the two earlier integrations (*Grundriss-Karte* and *Hausregeln*, up to 0.1.0-beta.2): delete their
+folders `custom_components/floorplan_card` and `custom_components/house_rules` – not the integrations under Devices
+& services – and restart. roomwise takes over everything with the same entity ids.
 
 ## 2. Your first floor plan
 
@@ -75,13 +67,13 @@ picture first). Then:
    the same panel.
 3. **Draw the rooms** on top with the room tool.
 
-The picture shows only in the editor unless you switch on *Also show on the card* (2D view). With the companion
+The picture shows only in the editor unless you switch on *Also show on the card* (2D view). With the roomwise
 integration it is stored there; without it, a much smaller copy goes into the card configuration.
 
 ### The same plan on several dashboards
 
-With the companion integration a plan can be shared: editor → Settings → **On several dashboards** → *Use on several
-dashboards*. After **Save**, the plan is stored by the companion and the card only refers to it (`plan: <id>`). On
+With the roomwise integration a plan can be shared: editor → Settings → **On several dashboards** → *Use on several
+dashboards*. After **Save**, the plan is stored by the roomwise integration and the card only refers to it (`plan: <id>`). On
 another dashboard, add the card and choose **Use a shared floor plan** (or pick it in the same settings section).
 Editing from any dashboard updates all of them, and open cards follow at once. Floors, rooms, furniture, devices,
 walls, north and the front door warning are shared; title, height, view and per-person settings stay per card.
@@ -102,7 +94,7 @@ Every object, marker, room, door and window has its own actions for tap, double 
 the popup, open Home Assistant's more-info dialog, run a script, navigate, or do nothing. Locks, alarm panels and
 sirens always ask before they switch.
 
-A few objects have extra settings: the **robot vacuum** can show its live position (Roborock with the companion
+A few objects have extra settings: the **robot vacuum** can show its live position (Roborock with the roomwise integration
 integration; align its map in the editor with *Align automatically*), a **car** takes battery, range, charging
 and location entities, a **dog** gets walk times and reminders.
 
@@ -207,11 +199,10 @@ system, views jump instead of gliding.
 
 ## 8. Updates
 
-HACS shows new versions of the card and companion integration. After **Update**:
+HACS shows new versions of roomwise. After **Update**:
 
 - If the release notes mention Python changes, restart Home Assistant. A change to the card alone only needs a
   browser reload (on tablets: reload the kiosk app; clear its cache if the old version sticks).
-- Hausregeln: download the new `house_rules.zip`, replace the folder `custom_components/house_rules/` and restart.
 
 The [changelog](../../CHANGELOG.md) lists what changed. During the beta, settings formats can still change;
 roomwise converts old settings itself, but read the notes before you update.
@@ -221,7 +212,7 @@ roomwise converts old settings itself, but read the notes before you update.
 Everything roomwise stores is part of a normal Home Assistant backup (Settings → System → Backups):
 
 - the floor plan lives in the dashboard configuration,
-- the companion integration and Hausregeln keep their data in Home Assistant's `.storage/` folder.
+- roomwise (the card part and Hausregeln) keeps its data in Home Assistant's `.storage/` folder.
 
 For an extra copy of the plan, open the editor, tap `{}` and save the YAML somewhere. To restore it, paste it into
 the card's code editor (edit card → *Show code editor*). Restoring a full Home Assistant backup brings back rules,
@@ -244,15 +235,15 @@ Hausregeln creates (a switch per rule, the alarm panel) follow Home Assistant's 
 
 ## 11. Removing roomwise
 
-Disabling or reloading an integration keeps everything. Only **deleting** it (Settings → Devices & services →
-the integration → ⋮ → Delete) removes it cleanly:
+Disabling or reloading roomwise keeps everything. Only **deleting** it (Settings → Devices & services →
+roomwise → ⋮ → Delete) removes it cleanly, both parts:
 
 - **Hausregeln** deletes its rules, plans, history, rule versions, trash, learned data and diagnostics settings,
   its hints under Repairs and its messages on your phones; Home Assistant removes its entities and the sidebar
   entry. Make a backup first (Hausregeln → Settings → Back up and restore, *Sichern und wiederherstellen*) if you want to keep your rules.
-- **The companion integration** deletes its stored settings and hints, stops loading the card on your dashboards and
+- **The card part** deletes its stored settings and hints, stops loading the card on your dashboards and
   removes dashboard resources that point to its files. Cards on your dashboards stay in place and show an error until
   you remove them or install roomwise again.
 
 Neither part creates helpers, automations (unless you export one yourself) or notification categories, so nothing
-else is left behind. Finally, remove the downloaded files in HACS (or the `custom_components` folders) and restart.
+else is left behind. Finally, remove roomwise in HACS (or the folder `custom_components/roomwise`) and restart.

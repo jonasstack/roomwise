@@ -1,6 +1,6 @@
 /**
  * Face ID / Touch ID / fingerprint via passkeys (WebAuthn). Needs a secure connection (https or localhost);
- * the server checks every confirmation (custom_components/house_rules/webauthn.py).
+ * the server checks every confirmation (custom_components/roomwise/house_rules/webauthn.py).
  */
 import type { Store } from './store';
 import { t } from './i18n';

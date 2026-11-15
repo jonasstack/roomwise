@@ -27,11 +27,14 @@ syncChunks(`${WWW_DIR}/chunks`);
 import { cpSync, existsSync, statSync } from 'node:fs';
 if (existsSync('dist/models')) cpSync('dist/models', `${WWW_DIR}/models`, { recursive: true, filter: (src) => { try { const dst = src.replace('dist/models', `${WWW_DIR}/models`); return !existsSync(dst) || statSync(dst).size !== statSync(src).size || statSync(src).isDirectory(); } catch { return true; } } });
 const url = `${BASE}?v=${hash}`;
-// the companion integration carries the card too: keep its copy current
-const CC = process.env.FP_CC_DIR || (configDir ? `${configDir}/custom_components/floorplan_card` : '');
+// the integration carries the card too: keep its copy current – roomwise, or the former companion
+// integration floorplan_card in a home that has not switched yet (never a half roomwise folder without manifest)
+const CC =
+  process.env.FP_CC_DIR ||
+  (configDir ? [`${configDir}/custom_components/roomwise`, `${configDir}/custom_components/floorplan_card`].find((d) => existsSync(`${d}/manifest.json`)) ?? '' : '');
 if (CC && existsSync(CC)) {
   syncChunks(`${CC}/frontend/chunks`);
-  cpSync('custom_components/floorplan_card/frontend', `${CC}/frontend`, { recursive: true });
+  cpSync('custom_components/roomwise/frontend', `${CC}/frontend`, { recursive: true });
 }
 
 const ha = await connect();

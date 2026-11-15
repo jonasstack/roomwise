@@ -1,7 +1,8 @@
-"""Hausregeln: simple, understandable automations written as sentences.
+"""Hausregeln: simple, understandable automations written as sentences – the house_rules part of roomwise.
 
-Sets up the engine, the websocket API, the sidebar panel ("Hausregeln") and the entities
-(a switch per rule, the house mode, an occupancy sensor per room).
+Set up by the roomwise integration (../__init__.py): the engine, the websocket API, the sidebar panel
+("Hausregeln") and the entities (a switch per rule, the house mode, an occupancy sensor per room – the platform
+files of roomwise hand over to switch.py, select.py …).
 """
 
 from __future__ import annotations
@@ -19,22 +20,23 @@ from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import Unauthorized
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.service import async_register_admin_service
-from homeassistant.helpers.typing import ConfigType
 
-from .const import DOMAIN, FRONTEND_URL, PANEL_JS, PANEL_URL_PATH, PLATFORMS, VERSION
+from .const import DOMAIN, FRONTEND_URL, INTEGRATION, PANEL_JS, PANEL_URL_PATH, PLATFORMS, VERSION
 from .core import HouseRules
 from .i18n import tr
 from .permissions import allowed
 from .websocket import PAUSE_MINUTES, async_register
 
 _LOGGER = logging.getLogger(__name__)
-CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 FRONTEND_DIR = Path(__file__).parent / "frontend"
 
 
-async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+def async_register_ws(hass: HomeAssistant) -> None:
+    """The websocket commands (house_rules/…), once per start"""
+    if hass.data.get(f"{DOMAIN}_ws"):
+        return
     async_register(hass)
-    return True
+    hass.data[f"{DOMAIN}_ws"] = True
 
 
 async def _register_frontend(hass: HomeAssistant) -> None:
@@ -72,6 +74,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.async_add_executor_job(vocabulary)  # read the JSON files once, off the event loop
     await hass.async_add_executor_job(texts)
+    async_register_ws(hass)
     core = HouseRules(hass, entry)
     hass.data[DOMAIN] = core
     await core.async_start()
@@ -98,14 +101,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         minutes = float(call.data.get("minutes", 60))
         await core.pause_rule(call.data["rule_id"], time.time() + minutes * 60 if minutes else None)
 
-    hass.services.async_register(DOMAIN, "run", _run, schema=vol.Schema({vol.Required("rule_id"): cv.string}))
-    hass.services.async_register(DOMAIN, "pause", _pause, schema=vol.Schema({vol.Required("rule_id"): cv.string, vol.Optional("minutes", default=60): PAUSE_MINUTES}))
+    hass.services.async_register(INTEGRATION, "run", _run, schema=vol.Schema({vol.Required("rule_id"): cv.string}))
+    hass.services.async_register(INTEGRATION, "pause", _pause, schema=vol.Schema({vol.Required("rule_id"): cv.string, vol.Optional("minutes", default=60): PAUSE_MINUTES}))
 
     async def _reset_pin(call: ServiceCall) -> None:
-        core.alarm.reset_pin(remove_pin=call.data.get("remove_pin", False), by="Über die Aktion house_rules.reset_alarm_pin")
+        core.alarm.reset_pin(remove_pin=call.data.get("remove_pin", False), by="Über die Aktion roomwise.reset_alarm_pin")
 
     # admins only (Entwicklerwerkzeuge → Aktionen, or the REST API with a token from the command line)
-    async_register_admin_service(hass, DOMAIN, "reset_alarm_pin", _reset_pin, schema=vol.Schema({vol.Optional("remove_pin", default=False): cv.boolean}))
+    async_register_admin_service(hass, INTEGRATION, "reset_alarm_pin", _reset_pin, schema=vol.Schema({vol.Optional("remove_pin", default=False): cv.boolean}))
     return True
 
 
@@ -116,7 +119,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await core.async_stop()
     frontend.async_remove_panel(hass, PANEL_URL_PATH)
     for svc in ("run", "pause", "reset_alarm_pin"):
-        hass.services.async_remove(DOMAIN, svc)
+        hass.services.async_remove(INTEGRATION, svc)
     return ok
 
 

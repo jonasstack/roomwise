@@ -1,7 +1,7 @@
 // Bundles src/floorplan-card.ts into dist/: the entry dist/floorplan-card.js (name never changes, dashboards and
 // the companion's loader point at it) plus lazily loaded ES module chunks in dist/chunks/ (editor, 3D, rare popups),
 // so a wall tablet only parses what the plan needs to appear.
-//   node tools/build.mjs            entry + chunks, copied into custom_components/floorplan_card/frontend/
+//   node tools/build.mjs            entry + chunks, copied into custom_components/roomwise/frontend/
 //   node tools/build.mjs --single   one self-contained file dist/single/floorplan-card.js (card-only manual install)
 //   node tools/build.mjs --watch    rebuild on change (dist/ only)
 import * as esbuild from 'esbuild';
@@ -54,8 +54,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   }
   // 3D models (CC0) ship next to the script
   if (existsSync('models')) cpSync('models', 'dist/models', { recursive: true });
-  // the HACS package (integration) carries the card, its chunks and its models: custom_components/floorplan_card/frontend
-  const FE = 'custom_components/floorplan_card/frontend';
+  // the HACS package (integration roomwise) carries the card, its chunks and its models: custom_components/roomwise/frontend
+  const FE = 'custom_components/roomwise/frontend';
   if (!process.argv.includes('--watch') && !single) {
     mkdirSync(FE, { recursive: true });
     copyFileSync('dist/floorplan-card.js', `${FE}/floorplan-card.js`);

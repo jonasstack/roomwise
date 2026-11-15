@@ -11,7 +11,7 @@ Use the bug report template. The two things that help most:
 
 1. **Diagnostics and logs.** Settings → Devices & services → *Grundriss-Karte* (or *Hausregeln*) → ⋮ →
    *Download diagnostics*, where the entry offers it. In any case: Settings → System → Logs → *Show full logs*,
-   and copy the lines that mention `floorplan_card` or `house_rules`. Look through what you attach before you
+   and copy the lines that mention `roomwise`, `floorplan_card` or `house_rules`. Look through what you attach before you
    post it; you know your home better than we do.
 2. **The browser console.** Open the dashboard, press F12 (or connect the tablet to a computer with remote
    debugging), reload and copy the red lines.
@@ -30,8 +30,8 @@ The repository holds three parts:
 | Folder | What it is | Language |
 |---|---|---|
 | `src/` | the card (Lovelace custom card, Lit 3 and three.js) | TypeScript |
-| `custom_components/floorplan_card/` | the companion integration: serves the card, front door alert, walk reminders, live vacuum | Python |
-| `hausregeln/` | Hausregeln: the rules integration (`custom_components/house_rules`) and its panel (`src/`) | Python, TypeScript |
+| `custom_components/roomwise/` | the integration roomwise: `card/` serves the card, front door alert, walk reminders, live vacuum; `house_rules/` is Hausregeln (rules, house mode, plans, alarm) | Python |
+| `hausregeln/` | the Hausregeln panel (`src/`), its build and the test tools | TypeScript |
 
 Both integrations will be merged into a single `roomwise` integration later. Until then they live side by side.
 
@@ -40,8 +40,8 @@ Both integrations will be merged into a single `roomwise` integration later. Unt
 ```bash
 npm ci
 (cd hausregeln && npm ci)
-npm run build                       # card -> dist/ and custom_components/floorplan_card/frontend/
-(cd hausregeln && npm run build)    # panel -> hausregeln/custom_components/house_rules/frontend/
+npm run build                       # card -> dist/ and custom_components/roomwise/frontend/
+(cd hausregeln && npm run build)    # panel -> custom_components/roomwise/house_rules/frontend/
 ```
 
 ### Checks before a pull request

@@ -25,12 +25,14 @@ from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.event import async_call_later, async_track_time_interval
 
 from .backup import collect, exists, sections_of
-from .const import DOMAIN
+from .const import INTEGRATION
 
 if TYPE_CHECKING:
     from .core import HouseRules
 
 _LOGGER = logging.getLogger(__name__)
+# hints of roomwise that are not Hausregeln's (the card part, migrate.py): never cleared here
+OTHER_ISSUES = ("frontend_missing", "old_integrations")
 
 UNAVAILABLE_HOURS = 24
 CHECK_EVERY = 30 * 60
@@ -99,12 +101,12 @@ class Issues:
             return self.active
         reg = ir.async_get(self.hass)
         for (domain, issue_id), _issue in list(reg.issues.items()):
-            if domain == DOMAIN and issue_id not in found:
-                ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+            if domain == INTEGRATION and issue_id not in found and issue_id not in OTHER_ISSUES:
+                ir.async_delete_issue(self.hass, INTEGRATION, issue_id)
         for issue_id, f in found.items():
             ir.async_create_issue(
                 self.hass,
-                DOMAIN,
+                INTEGRATION,
                 issue_id,
                 is_fixable=bool(f.get("fixable")),
                 is_persistent=False,
@@ -203,7 +205,7 @@ class Issues:
 
     async def _card_not_loaded(self) -> bool:
         """A dashboard shows the floor plan card, but neither its companion integration nor a resource loads it."""
-        if "floorplan_card" in self.hass.config.components:
+        if self.hass.data.get("floorplan_card") is not None:
             return False
         try:
             from homeassistant.components.lovelace.const import LOVELACE_DATA  # noqa: PLC0415

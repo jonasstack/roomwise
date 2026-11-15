@@ -84,7 +84,7 @@ const ws = await wsConnect(token);
 // 4) the companion integration (one click, nothing to fill in)
 let info = await ws.call({ type: 'floorplan_card/info' }).catch(() => undefined);
 if (!info?.loaded) {
-  const flow = await j('/api/config/config_entries/flow', { method: 'POST', headers: H, body: JSON.stringify({ handler: 'floorplan_card' }) });
+  const flow = await j('/api/config/config_entries/flow', { method: 'POST', headers: H, body: JSON.stringify({ handler: 'roomwise' }) });
   if (flow.body.type === 'form') await j(`/api/config/config_entries/flow/${flow.body.flow_id}`, { method: 'POST', headers: H, body: '{}' });
   for (let i = 0; i < 20 && !info?.loaded; i++) {
     await sleep(500);

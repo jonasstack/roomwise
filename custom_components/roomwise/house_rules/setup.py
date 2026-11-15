@@ -149,7 +149,7 @@ class Setup:
 
     def floorplan(self) -> bool:
         """Is the floor plan card (part of roomwise) installed? Its integration serves the card."""
-        return "floorplan_card" in self.core.hass.config.components
+        return self.core.hass.data.get("floorplan_card") is not None  # the card part of roomwise runs
 
     def view(self) -> dict[str, Any]:
         d = self.data

@@ -100,34 +100,30 @@ the light of your real days.
 
 ## Installation
 
-roomwise currently consists of two integrations. The companion integration *Grundriss-Karte* brings the card to
-every dashboard and runs the parts that must work without a tablet (front door alert, walk reminders, live
-vacuum). Hausregeln is optional and installed separately until both are merged into one integration.
-
-### Card and companion integration (HACS)
+roomwise is one integration: it brings the card to every dashboard, runs what must work without a tablet (front
+door alert, walk reminders, live vacuum) and adds **Hausregeln** (rules, house mode, light and heating plans,
+alarm) to the sidebar.
 
 1. HACS → ⋮ (top right) → **Custom repositories** → URL `https://github.com/jonasstack/roomwise`, type
    **Integration** → **Add**.
 2. Open *roomwise* in HACS → **Download**.
 3. Restart Home Assistant.
-4. Settings → Devices & services → **Add integration** → *roomwise*. There is nothing
-   to fill in.
-5. Reload the browser (on a tablet: reload the kiosk app). The card is now available on every dashboard; you
-   don't need to add a resource.
+4. Settings → Devices & services → **Add integration** → *roomwise*. There is nothing to fill in.
+5. Reload the browser (on a tablet: reload the kiosk app). The card is now available on every dashboard (no
+   resource to add), and **Hausregeln** appears in the sidebar. Its setup assistant opens on first use; every step
+   can be skipped.
 
-Manual install: download `floorplan_card.zip` from the [latest release](https://github.com/jonasstack/roomwise/releases)
-and unpack it so that `manifest.json` lies directly in `<config>/custom_components/floorplan_card/`.
-
-### Hausregeln (optional)
-
-1. Download `house_rules.zip` from the [latest release](https://github.com/jonasstack/roomwise/releases) and unpack
-   it into `<config>/custom_components/house_rules/`.
-2. Restart Home Assistant, then Settings → Devices & services → **Add integration** → *Hausregeln*.
-3. **Hausregeln** appears in the sidebar. The setup assistant opens on first use; every step can be skipped.
+Manual install: download `roomwise.zip` from the [latest release](https://github.com/jonasstack/roomwise/releases) and
+unpack it so that `manifest.json` lies directly in `<config>/custom_components/roomwise/`.
 
 After installation only the automatic house mode runs. Everything else (alarm, light plans, heating, vacation,
-AI) stays off until you switch it on under Settings → Features in Hausregeln. The card notices Hausregeln by
-itself and shows the house mode and the alarm state in its header.
+AI) stays off until you switch it on in the setup assistant or under Settings → Features in Hausregeln.
+
+**Coming from 0.1.0-beta.2 or earlier** (two integrations, *Grundriss-Karte* `floorplan_card` and *Hausregeln*
+`house_rules`): install roomwise, delete the folders `custom_components/floorplan_card` and
+`custom_components/house_rules` (not the integrations under Devices & services – that would delete their
+settings), restart. roomwise takes over settings, rules and entities with the same entity ids. The actions are now
+called `roomwise.run`, `roomwise.pause` and `roomwise.reset_alarm_pin`.
 
 ## First steps
 
@@ -180,7 +176,7 @@ sensor, the card can use it. Some features need more than the standard entities:
 | Lights, switches, fans, covers, media players, climate | any integration | Colour and colour temperature only where the light reports them |
 | Doors and windows | any `binary_sensor` with open/closed | |
 | Room occupancy (Hausregeln) | motion, presence and occupancy sensors, presence zones | Rooms with only a door contact use door logic alone |
-| Robot vacuum popup and room cleaning | any `vacuum` entity | Room selection needs `vacuum.clean_area` support, or (with the companion) a robot whose integration cleans segments: Dreame Vacuum, Xiaomi Miio, Valetudo (MQTT) |
+| Robot vacuum popup and room cleaning | any `vacuum` entity | Room selection needs `vacuum.clean_area` support, or (with the roomwise integration) a robot whose integration cleans segments: Dreame Vacuum, Xiaomi Miio, Valetudo (MQTT) |
 | Robot vacuum driving live on the plan | **Roborock** (core integration), **Dreame Vacuum**, **Xiaomi Cloud Map Extractor** or any map camera with `calibration_points` (Xiaomi Vacuum Map Card style), **Valetudo** (its "Map data" camera) | The map source is found by itself. Besides Roborock only tested against simulated robots in the integrations' real formats. Map cameras update every few seconds, so the robot is shown further behind. Other brands get the popup without the live view |
 | Cars | built with Mercedes me, works with generic battery, range, charging and location entities | Charge limit and pre-climate depend on what the car's integration offers |
 | Heating (Hausregeln) | `climate` entities; optional room thermometers and window contacts | Valve position hints only where the thermostat reports it |
@@ -212,7 +208,7 @@ range of real tablets. Numbers from the stats overlay together with your tablet 
 
 ## Privacy
 
-Everything stays in your Home Assistant. The card and the companion integration don't contact any service
+Everything stays in your Home Assistant. The card and the roomwise integration don't contact any service
 on the internet; even the 3D models come from your own instance. Hausregeln only talks to the outside when an
 administrator sets it up: the AI provider you choose, CallMeBot for Telegram and Signal, your own SMTP server.
 
@@ -241,7 +237,7 @@ The room needs lights: assign an area or pick lights in the room settings.
 Switch to *Saver* or *Off* under Effects & performance for that tablet's user, or use 2D.
 
 **The vacuum doesn't move on the plan.**
-The live view needs the companion integration and a robot whose integration reports its position (Roborock,
+The live view needs the roomwise integration and a robot whose integration reports its position (Roborock,
 Dreame Vacuum, Xiaomi Cloud Map Extractor, Valetudo). Select the vacuum in the editor: it shows where the
 position comes from (or that none was found) and lets you pick another map entity. Then align its map to the plan.
 

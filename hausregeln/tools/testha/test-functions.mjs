@@ -61,7 +61,7 @@ for (const [name, trk] of [['Alex Test', 'device_tracker.alex_handy'], ['Sam Tes
 const zones = await ws.call({ type: 'zone/list' });
 if (!zones.some((z) => z.name === 'Testzone')) await ws.call({ type: 'zone/create', name: 'Testzone', latitude: 52.4, longitude: 13.2, radius: 300 });
 if (!(await ws.call({ type: 'house_rules/info' }).catch(() => null))?.loaded) {
-  const flow = await api('POST', '/api/config/config_entries/flow', { handler: 'house_rules' });
+  const flow = await api('POST', '/api/config/config_entries/flow', { handler: 'roomwise' });
   await api('POST', `/api/config/config_entries/flow/${flow.body.flow_id}`, {});
   await until(async () => (await ws.call({ type: 'house_rules/info' }).catch(() => null))?.loaded, 30000, 500);
 }

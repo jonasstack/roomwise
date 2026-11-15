@@ -1,7 +1,11 @@
-"""Constants for Hausregeln."""
+"""Constants for Hausregeln (the house_rules part of roomwise)."""
 
+from ..const import DOMAIN as INTEGRATION, VERSION  # noqa: F401 — the integration (roomwise) and its version
+
+# the part's own name: key in hass.data, prefix of its websocket commands (house_rules/…), its storage files and
+# events – kept from the former integration `house_rules` so stored data, the panel and the card keep working.
+# Home Assistant itself (entity platform, actions, Repairs, logbook) knows only INTEGRATION.
 DOMAIN = "house_rules"
-VERSION = "0.1.0-beta.3"
 API_VERSION = 1
 
 STORAGE_KEY = "house_rules"
@@ -42,4 +46,4 @@ ASSISTANTS = ("light", "alarm", "window_warning", "vacation", "vacuum", "mode_au
 PLATFORMS = ["switch", "select", "binary_sensor", "sensor", "alarm_control_panel"]
 
 # entity platforms that never show up as devices (browser tabs, cars …)
-IGNORED_PLATFORMS = {"browser_mod", "house_rules"}
+IGNORED_PLATFORMS = {"browser_mod", "house_rules", "roomwise"}

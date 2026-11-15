@@ -1,11 +1,8 @@
 # Checks on every push and pull request (and weekly, because HACS and Home Assistant keep moving).
 #
-# Today roomwise ships two integrations: the companion `floorplan_card` (custom_components/, installed by HACS)
-# and Hausregeln `house_rules` (hausregeln/custom_components/, installed by hand from the release zip).
-# When both become the single integration `roomwise` in custom_components/roomwise:
-#   - hassfest: drop the matrix, validate custom_components/ as it is
-#   - python: lint/compile custom_components/ only, point HA_CONFIG_DIR tests at custom_components/roomwise
-#   - frontend: the panel build moves into the root build (no separate hausregeln/ npm project)
+# roomwise is one integration in custom_components/roomwise (the card part in card/, Hausregeln in house_rules/),
+# installed by HACS straight from this repository. The Hausregeln panel is still built by its own npm project in
+# hausregeln/ (its sources and tools stay there).
 name: Validate
 
 on:
@@ -82,10 +79,10 @@ jobs:
           python-version: "3.13"
       - run: pip install ruff==0.17.3 cryptography
       - name: Lint (ruff)
-        run: ruff check custom_components hausregeln/custom_components hausregeln/tools
+        run: ruff check custom_components hausregeln/tools
       - name: Byte-compile
-        run: python -m compileall -q custom_components hausregeln/custom_components
-      - name: Manifests, services, translations, websocket registration (both integrations)
+        run: python -m compileall -q custom_components
+      - name: Manifest, services, translations, websocket registration
         run: python tools/check-integrations.py
       - name: Passkey check (no Home Assistant needed)
         run: python hausregeln/tools/testha/test_webauthn.py
@@ -106,29 +103,17 @@ jobs:
           HA_CONFIG_DIR: ${{ runner.temp }}/ha-config
         run: |
           mkdir -p "$HA_CONFIG_DIR/custom_components"
-          ln -s "$GITHUB_WORKSPACE/hausregeln/custom_components/house_rules" "$HA_CONFIG_DIR/custom_components/house_rules"
+          ln -s "$GITHUB_WORKSPACE/custom_components/roomwise" "$HA_CONFIG_DIR/custom_components/roomwise"
           python hausregeln/tools/testha/test_pin.py
           python hausregeln/tools/testha/test_sim.py
           python hausregeln/tools/testha/test_sleep_start.py
           python hausregeln/tools/testha/test_heat_model.py
 
   hassfest:
-    name: hassfest (${{ matrix.integration }})
+    name: hassfest
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        integration: [floorplan_card, house_rules]
     steps:
       - uses: actions/checkout@v4
-      # hassfest validates custom_components/*: put exactly the integration under test there
-      - name: Arrange custom_components/
-        run: |
-          if [ "${{ matrix.integration }}" = house_rules ]; then
-            rm -rf custom_components
-            mkdir -p custom_components
-            cp -r hausregeln/custom_components/house_rules custom_components/
-          fi
       - uses: home-assistant/actions/hassfest@master
 
   hacs:

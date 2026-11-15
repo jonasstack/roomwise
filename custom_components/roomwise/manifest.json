@@ -1,16 +1,27 @@
 {
-  "domain": "floorplan_card",
+  "domain": "roomwise",
   "name": "roomwise",
   "after_dependencies": [
     "mobile_app",
-    "recorder"
+    "notify",
+    "tts",
+    "person",
+    "sun",
+    "automation",
+    "recorder",
+    "energy",
+    "lovelace"
   ],
-  "codeowners": ["@jonasstack"],
+  "codeowners": [
+    "@jonasstack"
+  ],
   "config_flow": true,
   "dependencies": [
     "frontend",
     "http",
-    "websocket_api"
+    "websocket_api",
+    "panel_custom",
+    "repairs"
   ],
   "documentation": "https://github.com/jonasstack/roomwise",
   "integration_type": "service",
@@ -18,5 +29,5 @@
   "issue_tracker": "https://github.com/jonasstack/roomwise/issues",
   "requirements": [],
   "single_config_entry": true,
-  "version": "0.1.0-beta.3"
+  "version": "0.1.0-beta.4"
 }

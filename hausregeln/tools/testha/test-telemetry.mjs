@@ -14,7 +14,7 @@ const mock = (msg = {}) => ws.call({ type: 'hr_fake/telemetry', ...msg });
 // ---------------------------------------------------------------- the fake home (idempotent)
 let info = await ws.call({ type: 'house_rules/info' }).catch(() => null);
 if (!info?.loaded) {
-  const flow = await api('POST', '/api/config/config_entries/flow', { handler: 'house_rules' });
+  const flow = await api('POST', '/api/config/config_entries/flow', { handler: 'roomwise' });
   await api('POST', `/api/config/config_entries/flow/${flow.body.flow_id}`, {});
   info = await until(async () => {
     const i = await ws.call({ type: 'house_rules/info' }).catch(() => null);
@@ -33,15 +33,9 @@ for (const e of moved) areaBefore[e] = (await ws.call({ type: 'config/entity_reg
 for (const e of moved) await ws.call({ type: 'config/entity_registry/update', entity_id: e, area_id: roomId }).catch(() => undefined);
 const persons = await ws.call({ type: 'person/list' });
 if (!persons.storage.some((p) => p.name === 'Erika Beispiel')) await ws.call({ type: 'person/create', name: 'Erika Beispiel' });
-// the floor plan card's companion too (its diagnostics, "roomwise" part of the report); removed again at the end
-let fpEntry = (await ws.call({ type: 'config_entries/get', domain: 'floorplan_card' }))[0];
-const fpOwn = !fpEntry;
-if (!fpEntry) {
-  const flow = await api('POST', '/api/config/config_entries/flow', { handler: 'floorplan_card' });
-  if (flow.body?.flow_id) await api('POST', `/api/config/config_entries/flow/${flow.body.flow_id}`, {});
-  fpEntry = await until(async () => (await ws.call({ type: 'config_entries/get', domain: 'floorplan_card' }))[0], 15000);
-}
-ok(!!fpEntry, 'Begleit-Integration eingerichtet');
+// roomwise holds the card part too (its diagnostics, "roomwise" part of the report): the same entry
+const fpEntry = (await ws.call({ type: 'config_entries/get', domain: 'roomwise' }))[0];
+ok(!!fpEntry && !!(await ws.call({ type: 'floorplan_card/info' }).catch(() => null)), 'Kartenteil von roomwise läuft');
 if (fpEntry) await ws.call({ type: 'floorplan_card/entry_alert/set', card_id: 'tele_test', config: { door: 'binary_sensor.haustuer', windows: [{ e: 'binary_sensor.fenster_bad', n: 'Fenster im Arbeitszimmer' }], texts: { general: 'Erika, Fenster zu!' } } }).catch((e) => console.log('  (entry alert:', e.message, ')'));
 
 // every identifier of the fake home that must never show up in what is sent
@@ -188,21 +182,22 @@ const sv = await ws.call({ type: 'house_rules/setup/save' });
 ok(sv.steps.includes('diagnostics') && sv.steps.indexOf('diagnostics') === sv.steps.length - 2, 'Einrichtung: Schritt „diagnostics“ vor „done“');
 
 // ---------------------------------------------------------------- diagnostics downloads
-const hrEntry = (await ws.call({ type: 'config_entries/get', domain: 'house_rules' }))[0];
-const d1 = await api('GET', `/api/diagnostics/config_entry/${hrEntry.entry_id}`);
+const hrEntry = fpEntry;
+const d0 = await api('GET', `/api/diagnostics/config_entry/${hrEntry.entry_id}`);
+// one download, both parts: { roomwise, card, house_rules }
+const d1 = { status: d0.status, body: { data: d0.body?.data?.house_rules } };
 ok(d1.status === 200 && d1.body?.data?.version, 'Diagnose Hausregeln herunterladbar', d1.status);
 const l1 = leaks(d1.body?.data ?? {});
 ok(l1.length === 0, 'Diagnose Hausregeln: keine Entitäten oder Namen', l1.slice(0, 5));
 ok(JSON.stringify(d1.body?.data?.rules ?? []).length > 2 ? /[a-z_]+\.[0-9a-f]{6}/.test(JSON.stringify(d1.body.data)) : true, 'Diagnose Hausregeln: Pseudonyme statt Entitäten');
 ok(Array.isArray(d1.body?.data?.recent_errors) && d1.body.data.recent_errors.some((e) => e.type === 'AttributeError'), 'Diagnose Hausregeln: letzte Fehler (lokal)');
 if (fpEntry) {
-  const d2 = await api('GET', `/api/diagnostics/config_entry/${fpEntry.entry_id}`);
+  const d2 = { status: d0.status, body: { data: d0.body?.data?.card } };
   ok(d2.status === 200 && d2.body?.data?.loaded === true, 'Diagnose Grundriss-Karte herunterladbar', d2.status);
   const s2 = JSON.stringify(d2.body?.data ?? {});
   ok(leaks(d2.body?.data ?? {}).length === 0 && !s2.includes('Erika'), 'Diagnose Grundriss-Karte: keine Entitäten, Namen, Texte', leaks(d2.body?.data ?? {}).slice(0, 5));
   ok(/binary_sensor\.[0-9a-f]{6}/.test(s2), 'Diagnose Grundriss-Karte: Pseudonyme statt Entitäten');
   await ws.call({ type: 'floorplan_card/entry_alert/remove', card_id: 'tele_test' }).catch(() => undefined);
-  if (fpOwn) await api('DELETE', `/api/config/config_entries/entry/${fpEntry.entry_id}`);
 }
 
 for (const e of moved) await ws.call({ type: 'config/entity_registry/update', entity_id: e, area_id: areaBefore[e] }).catch(() => undefined);

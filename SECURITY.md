@@ -20,19 +20,19 @@ roomwise ist noch in der Beta. Sicherheitskorrekturen gibt es nur für die **neu
 Bitte **nicht** als öffentliches Issue melden. Stattdessen privat über GitHub:
 **[Security → Report a vulnerability](https://github.com/jonasstack/roomwise/security/advisories/new)** (GitHub Security Advisories).
 
-Hilfreich sind: betroffene Version, Teil (Karte, Begleit-Integration `floorplan_card`, Hausregeln `house_rules`), Schritte zum Nachstellen und was jemand damit erreichen kann. Du bekommst eine Antwort, sobald die Meldung gesichtet ist; die Korrektur erscheint in einer neuen Alpha-Version, danach wird die Meldung veröffentlicht. Bitte keine Tests gegen fremde Home-Assistant-Installationen.
+Hilfreich sind: betroffene Version, Teil (Karte, Kartenteil `roomwise/card`, Hausregeln `roomwise/house_rules`), Schritte zum Nachstellen und was jemand damit erreichen kann. Du bekommst eine Antwort, sobald die Meldung gesichtet ist; die Korrektur erscheint in einer neuen Alpha-Version, danach wird die Meldung veröffentlicht. Bitte keine Tests gegen fremde Home-Assistant-Installationen.
 
 ### Was roomwise speichert
 
 Alles liegt nur im eigenen Home Assistant:
 
 - **Karte:** der Grundriss in der Dashboard-Konfiguration (Räume, Türen, Fenster, Möbel, Zuordnung zu Entitäten).
-- **Begleit-Integration** (`.storage/floorplan_card`): Einstellungen der Haustür-Warnung, Gassi-Zeiten und heute abgehakte Runden, gelernte Fahrwege der Saugroboter.
+- **Kartenteil von roomwise** (`.storage/floorplan_card`): Einstellungen der Haustür-Warnung, Gassi-Zeiten und heute abgehakte Runden, gelernte Fahrwege der Saugroboter.
 - **Hausregeln** (`.storage/house_rules` und weitere Dateien `house_rules*`): Regeln, Räume, Hausmodus, Licht- und Heizpläne, Verlauf (höchstens 400 Einträge), Einstellungen der Alarmanlage. Die Alarm-PIN nur als gesalzener, langsamer Hash (PBKDF2-SHA256), Passkeys nur als öffentliche Schlüssel. Zugangsdaten für KI-Anbieter, SMTP und CallMeBot liegen im Klartext im Speicher von Home Assistant (wie bei Home Assistant üblich) und werden **nie** an den Browser zurückgegeben – die Oberfläche erfährt nur, ob etwas gesetzt ist.
 
 ### Was roomwise sendet
 
-- **Karte und Begleit-Integration:** keine Verbindungen ins Internet. Auch die 3D-Modelle kommen vom eigenen Home Assistant.
+- **Karte und Kartenteil von roomwise:** keine Verbindungen ins Internet. Auch die 3D-Modelle kommen vom eigenen Home Assistant.
 - **Hausregeln**, nur wenn ein Administrator es einrichtet:
   - an den gewählten **KI-Anbieter** (Ollama, Gemini, OpenAI, Anthropic, Mistral oder OpenAI-kompatibel): Regeltexte, Regeln und Namen von Geräten, Räumen und Personen. Der Schlüssel geht nur an die gespeicherte Adresse.
   - bei Alarm an **CallMeBot** (Telegram/Signal, HTTPS) und an den eingetragenen **SMTP-Server** (STARTTLS als Standard; „unverschlüsselt“ ist wählbar und schickt das Passwort im Klartext).
@@ -74,19 +74,19 @@ roomwise is still beta software. Security fixes are made for the **latest beta r
 Please do **not** open a public issue. Report privately through GitHub instead:
 **[Security → Report a vulnerability](https://github.com/jonasstack/roomwise/security/advisories/new)** (GitHub Security Advisories).
 
-Useful details: affected version, part (card, companion integration `floorplan_card`, house rules `house_rules`), steps to reproduce and what an attacker gains. You will get an answer once the report has been triaged; the fix ships in a new alpha release, after which the advisory is published. Please do not test against other people's Home Assistant installations.
+Useful details: affected version, part (card, card part `roomwise/card`, house rules `roomwise/house_rules`), steps to reproduce and what an attacker gains. You will get an answer once the report has been triaged; the fix ships in a new alpha release, after which the advisory is published. Please do not test against other people's Home Assistant installations.
 
 ### What roomwise stores
 
 Everything stays inside your own Home Assistant:
 
 - **Card:** the floor plan in the dashboard configuration (rooms, doors, windows, furniture, entity assignments).
-- **Companion integration** (`.storage/floorplan_card`): front door warning settings, dog walk times and today's check-offs, learned robot vacuum paths.
+- **Card part of roomwise** (`.storage/floorplan_card`): front door warning settings, dog walk times and today's check-offs, learned robot vacuum paths.
 - **House rules** (`.storage/house_rules` and other `house_rules*` files): rules, rooms, house mode, light and heating plans, history (at most 400 entries), alarm settings. The alarm PIN only as a salted, slow hash (PBKDF2-SHA256), passkeys only as public keys. Credentials for AI providers, SMTP and CallMeBot are kept in plain text in Home Assistant's storage (as usual for Home Assistant) and are **never** sent back to the browser – the UI only learns whether they are set.
 
 ### What roomwise sends
 
-- **Card and companion:** no connections to the internet. Even the 3D models are served by your own Home Assistant.
+- **Card and card part of roomwise:** no connections to the internet. Even the 3D models are served by your own Home Assistant.
 - **House rules**, only when an administrator sets it up:
   - to the chosen **AI provider** (Ollama, Gemini, OpenAI, Anthropic, Mistral or OpenAI-compatible): rule texts, rules and names of devices, rooms and persons. The key is only ever sent to the stored address.
   - on alarm to **CallMeBot** (Telegram/Signal, HTTPS) and to your **SMTP server** (STARTTLS by default; "none" can be selected and sends the password in clear text).

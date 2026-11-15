@@ -41,7 +41,7 @@ console.log('— Restart und Flackern');
   await sleep(35000);
   ok((await mode()) === 'sleep', 'Bett-Sensor 4 s weg → Schlafen bleibt');
   // restart of the integration: every waiting time starts from zero, the sensor "changed just now"
-  const entry = (await api('GET', '/api/config/config_entries/entry')).body.find((x) => x.domain === 'house_rules').entry_id;
+  const entry = (await api('GET', '/api/config/config_entries/entry')).body.find((x) => x.domain === 'roomwise').entry_id;
   await api('POST', `/api/config/config_entries/entry/${entry}/reload`);
   await until(async () => (await ws.call({ type: 'house_rules/info' }).catch(() => null))?.loaded, 60000, 500);
   ok((await snap()).starting === true, 'nach dem Neustart: Startphase');

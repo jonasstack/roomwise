@@ -21,8 +21,8 @@ export async function setupDemo() {
   for (let i = 0; i < 90 && (await api('GET', '/api/config')).body?.state !== 'RUNNING'; i++) await sleep(2000);
   // Hausregeln set up (as after the one-click config flow), so the card shows house mode and alarm
   const entries = await api('GET', '/api/config/config_entries/entry');
-  if (!entries.body.some?.((e) => e.domain === 'house_rules')) {
-    const flow = await api('POST', '/api/config/config_entries/flow', { handler: 'house_rules' });
+  if (!entries.body.some?.((e) => e.domain === 'roomwise')) {
+    const flow = await api('POST', '/api/config/config_entries/flow', { handler: 'roomwise' });
     if (flow.body.flow_id) await api('POST', `/api/config/config_entries/flow/${flow.body.flow_id}`, {});
     await sleep(3000);
   }

@@ -1,6 +1,6 @@
 #!/bin/sh
 # Starts the isolated test Home Assistant for the companion tests: container fp-test-ha on 127.0.0.1:8124 with this
-# checkout's custom_components/floorplan_card and the recording helper fp_fake (testha/fp_fake). It shares the port with the
+# checkout's custom_components/roomwise and the recording helper fp_fake (testha/fp_fake). It shares the port with the
 # Hausregeln test HA (hr-test-ha) and stops it, so run it only inside `sh tools/heavy.sh testha …`.
 # `start.sh fresh` starts from scratch. Waits until Home Assistant answers.
 set -e
@@ -16,7 +16,7 @@ cp "$R/tools/companion/testha/configuration.yaml" "$D/"
 docker rm -f hr-test-ha fp-test-ha >/dev/null 2>&1 || true
 docker run -d --name fp-test-ha -p 127.0.0.1:8124:8123 -e TZ=Europe/Berlin \
   -v "$D:/config" \
-  -v "$R/custom_components/floorplan_card:/config/custom_components/floorplan_card:ro" \
+  -v "$R/custom_components/roomwise:/config/custom_components/roomwise:ro" \
   -v "$R/tools/companion/testha/fp_fake:/config/custom_components/fp_fake:ro" \
   ghcr.io/home-assistant/home-assistant:stable >/dev/null
 i=0

@@ -63,7 +63,7 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
         "ha_version": HA_VERSION,
         "loaded": data is not None,
         "frontend_served": bool(hass.data.get(f"{DOMAIN}_frontend")),
-        "house_rules": "house_rules" in hass.config.components,
+        "house_rules": hass.data.get("house_rules") is not None,
     }
     if data is None:
         return out

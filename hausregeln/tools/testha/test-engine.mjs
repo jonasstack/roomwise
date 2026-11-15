@@ -37,7 +37,7 @@ for (const [name, tr] of [
 // integration set up?
 let info = await ws.call({ type: 'house_rules/info' }).catch(() => null);
 if (!info?.loaded) {
-  const flow = await api('POST', '/api/config/config_entries/flow', { handler: 'house_rules' });
+  const flow = await api('POST', '/api/config/config_entries/flow', { handler: 'roomwise' });
   await api('POST', `/api/config/config_entries/flow/${flow.body.flow_id}`, {});
   info = await until(async () => {
     const i = await ws.call({ type: 'house_rules/info' }).catch(() => null);
@@ -1192,7 +1192,7 @@ await test('Einrichtung (Assistent)', async () => {
   ok(kue && kue.candidates.some((c) => c.entity_id === 'binary_sensor.fp2_alles'), 'Vorschlag: Melder je Raum aus HA-Bereich und Geräteklasse', kue?.candidates);
   ok(sug.examples.length >= 2 && sug.examples.every((e) => e.sentence && e.rule.when.length && e.rule.then.length), `${sug.examples.length} Beispielregeln aus echten Geräten`, sug.examples.map((e) => e.sentence));
   ok(sug.alarm.away.some((d) => d.entity_id === 'binary_sensor.haustuer') && sug.alarm.sirens.some((d) => d.entity_id === 'switch.sirene'), 'Vorschlag Alarm: Sensoren und Sirene', sug.alarm);
-  ok(sug.vacuums.some((v) => v.entity_id === 'vacuum.robo') && sug.floorplan === false, 'Saugroboter gefunden, Grundriss-Karte nicht installiert');
+  ok(sug.vacuums.some((v) => v.entity_id === 'vacuum.robo') && sug.floorplan === true, 'Saugroboter gefunden, Grundriss-Karte da (Kartenteil von roomwise)');
   ok(sug.window_warning.doors.some((d) => d.entity_id === 'binary_sensor.haustuer'), 'Fenster-Warnung: Haustür vorgeschlagen', sug.window_warning.doors);
   // a car's door ("Front left door" on a device with odometer and range) is never the house's front door, nor a door / window at all
   const wwv = await ws.call({ type: 'house_rules/window_warning/get' });
@@ -1379,10 +1379,10 @@ await test('Alarm: Sicherheit (PIN, Sperre, Hauptschalter, Nachricht)', async ()
   const stored = JSON.parse(execSync('docker exec hr-test-ha cat /config/.storage/house_rules').toString());
   ok(Object.values(stored.data.runtime?.alarm_pin ?? {}).some((v) => v[0] >= 5), 'die Sperre ist gespeichert (übersteht einen Neustart)');
   const tU = await userToken(tok, 'tablet');
-  const res = await fetch('http://127.0.0.1:8124/api/services/house_rules/reset_alarm_pin', { method: 'POST', headers: { authorization: `Bearer ${tU}`, 'content-type': 'application/json' }, body: '{}' });
+  const res = await fetch('http://127.0.0.1:8124/api/services/roomwise/reset_alarm_pin', { method: 'POST', headers: { authorization: `Bearer ${tU}`, 'content-type': 'application/json' }, body: '{}' });
   d = await ws.call({ type: 'house_rules/alarm/disarm', code: '2468' });
   ok(res.status === 401 && d.error === 'locked', 'Aktion „Alarm-PIN zurücksetzen“ ohne Admin → abgelehnt', res.status);
-  await api('POST', '/api/services/house_rules/reset_alarm_pin', {});
+  await api('POST', '/api/services/roomwise/reset_alarm_pin', {});
   d = await ws.call({ type: 'house_rules/alarm/disarm', code: '2468' });
   ok(d.ok && (await ws.call({ type: 'house_rules/snapshot' })).alarm.config.pin_locked === 0, 'Admin-Aktion hebt die Sperre auf, richtige PIN geht sofort', d);
   for (let i = 0; i < 5; i++) d = await ws.call({ type: 'house_rules/alarm/disarm', code: '0000' });

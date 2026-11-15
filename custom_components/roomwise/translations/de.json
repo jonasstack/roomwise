@@ -2,12 +2,12 @@
   "config": {
     "step": {
       "user": {
-        "title": "Hausregeln",
-        "description": "Einfache, verständliche Automationen als Sätze. Nach dem Einrichten erscheint „Hausregeln“ in der Seitenleiste."
+        "title": "roomwise",
+        "description": "Richtet roomwise ein: die Grundriss-Karte steht danach auf jedem Dashboard bereit, und in der Seitenleiste erscheint „Hausregeln“. Es gibt nichts auszufüllen. Beim ersten Öffnen von Hausregeln führt die Ersteinrichtung durch alles; bis dahin läuft nur die Hausmodus-Automatik.\n\nWaren die früheren Integrationen „Grundriss-Karte“ und „Hausregeln“ installiert, übernimmt roomwise deren Einstellungen und Entitäten."
       }
     },
     "abort": {
-      "single_instance_allowed": "Hausregeln ist schon eingerichtet."
+      "single_instance_allowed": "roomwise ist bereits eingerichtet."
     }
   },
   "services": {
@@ -47,6 +47,10 @@
     }
   },
   "issues": {
+    "frontend_missing": {
+      "title": "roomwise: Kartendatei fehlt",
+      "description": "roomwise ist eingerichtet, aber die Datei der Karte (`frontend/floorplan-card.js`) fehlt in seinem Ordner. Die Dashboards können die Grundriss-Karte deshalb nicht anzeigen.\n\nInstalliere roomwise über HACS neu (HACS → roomwise → Neu herunterladen) und starte Home Assistant danach neu."
+    },
     "entity_missing": {
       "title": "Hausregeln: Gerät {entity_id} gibt es nicht mehr",
       "fix_flow": {
@@ -101,7 +105,11 @@
     },
     "card_not_loaded": {
       "title": "Grundriss-Karte wird nicht geladen",
-      "description": "Ein Dashboard zeigt die Grundriss-Karte (custom:floorplan-card), aber nichts lädt sie: Die Begleit-Integration „Grundriss-Karte“ ist nicht eingerichtet und es gibt keine Dashboard-Ressource dafür. Das Dashboard zeigt deshalb einen Fehler statt des Grundrisses.\n\nRichte unter Einstellungen → Geräte & Dienste → Integration hinzufügen die Integration „Grundriss-Karte“ ein. Sie liefert die Karte an alle Dashboards aus."
+      "description": "Ein Dashboard zeigt die Grundriss-Karte (custom:floorplan-card), aber nichts lädt sie: Der Kartenteil von roomwise läuft nicht und es gibt keine Dashboard-Ressource dafür. Das Dashboard zeigt deshalb einen Fehler statt des Grundrisses.\n\nPrüfe unter Einstellungen → Reparaturen und im Protokoll, warum roomwise nicht vollständig startet (z. B. weil die alten Integrationen noch installiert sind), und starte Home Assistant danach neu."
+    },
+    "old_integrations": {
+      "title": "roomwise: alte Integrationen noch installiert",
+      "description": "roomwise ersetzt die früheren Integrationen „Grundriss-Karte“ (`floorplan_card`) und „Hausregeln“ (`house_rules`). Solange deren Ordner noch da sind, startet roomwise nicht, damit nichts doppelt schaltet.\n\nSo geht es weiter:\n1. Lösche die Ordner {folders} (über HACS „Entfernen“, den File Editor, Samba oder das Terminal). Nicht die Integration unter Geräte & Dienste löschen – dabei würden ihre Einstellungen gelöscht.\n2. Starte Home Assistant neu.\n\nroomwise übernimmt dann Einstellungen, Regeln und Entitäten (mit denselben Entitäts-IDs, deine Automationen laufen weiter)."
     }
   }
 }

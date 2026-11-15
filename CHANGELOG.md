@@ -6,6 +6,19 @@ All notable changes to roomwise are listed here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **One integration, roomwise** (0.1.0-beta.4): the card's companion integration `floorplan_card` and Hausregeln
+  `house_rules` are now one integration in `custom_components/roomwise` – HACS installs everything in one step
+  (download, restart, add *roomwise*; nothing to fill in), Hausregeln is in the sidebar right away and its setup
+  assistant opens on first use. The release carries one `roomwise.zip` (HACS installs it, `zip_release`).
+- Coming from the two old integrations: install roomwise, delete the folders `custom_components/floorplan_card` and
+  `custom_components/house_rules` (not the integrations under Devices & services), restart. roomwise takes over their
+  entities with the same entity ids, their device and settings, and removes the old entries; as long as an old folder
+  is still there, roomwise does not start and says so under Repairs.
+- The actions are called `roomwise.run`, `roomwise.pause` and `roomwise.reset_alarm_pin` (before `house_rules.…`).
+  Websocket commands, events and storage files keep their names.
+
 ## [0.1.0-beta.3] - 2026-11-15
 
 ### Fixed

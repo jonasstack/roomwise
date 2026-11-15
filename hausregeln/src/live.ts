@@ -372,7 +372,7 @@ export class LiveStore extends Store {
     this.changed();
   }
   async alarmResetPin() {
-    await this.ws({ type: 'call_service', domain: 'house_rules', service: 'reset_alarm_pin', service_data: {} });
+    await this.ws({ type: 'call_service', domain: 'roomwise', service: 'reset_alarm_pin', service_data: {} });
   }
   override async modeAutoSet(mode: AutoMode | '_enabled', config: Record<string, unknown>) {
     this.modeAuto = await this.ws<ModeAutoView>({ type: 'house_rules/mode_auto/set', mode, config });

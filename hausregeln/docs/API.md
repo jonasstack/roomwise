@@ -1,11 +1,11 @@
 # Hausregeln: Schnittstelle für die Grundriss-Karte (und andere Oberflächen)
 
 Diese Datei ist der Schnittstellen-Vertrag zwischen Hausregeln und der Grundriss-Karte von roomwise (Ordner `src/` dieses Repositorys).
-Sie beschreibt alles, was die Karte von der Integration **Hausregeln** (`custom_components/house_rules`, Domain `house_rules`)
+Sie beschreibt alles, was die Karte von der Integration **Hausregeln** (`custom_components/roomwise/house_rules`, Teil der Integration `roomwise`; Befehle und Ereignisse heißen weiter `house_rules/…`)
 nutzen kann: fertige Oberflächen-Elemente zum Einbetten, das Regelformat, alle Websocket-Befehle, Live-Updates,
 Entitäten, Ereignisse und Dienste. API-Version: **1** (steht in `house_rules/info`).
 
-> Code: `hausregeln/custom_components/house_rules` (Integration) und `hausregeln/src` (Oberfläche) in diesem Repository.
+> Code: `custom_components/roomwise/house_rules` (Integration) und `hausregeln/src` (Oberfläche) in diesem Repository.
 
 ---
 
@@ -177,7 +177,7 @@ stecken im Wert `zone` der Personen-Verben (`enters_zone`, `leaves_zone`, `in_zo
 
 ### 3.2 Arten und Verben
 
-Die vollständige, maschinenlesbare Liste liefert `house_rules/vocabulary` (gleich `custom_components/house_rules/vocabulary.json`,
+Die vollständige, maschinenlesbare Liste liefert `house_rules/vocabulary` (gleich `custom_components/roomwise/house_rules/vocabulary.json`,
 erzeugt aus `src/vocabulary.ts`). Jede Art hat `label`, `plural`, `any` („irgendein Fenster“), `icon` (SVG-Pfad) und Verben mit
 `id`, `flavour` (`event` | `state` | `action`), `label` (deutscher Nebensatz, z. B. „aufgeht“), `pl` (Plural),
 `params` (`key`, `type`, `label`, `default`, `min`, `max`, `step`, `unit`), `hint`, `sensitive`.
@@ -374,7 +374,7 @@ Die vollständige Rechte-Tabelle prüft `tools/testha/test-permissions.mjs`. Ein
 | Befehl | Parameter | Antwort / Hinweis |
 |---|---|---|
 | `house_rules/alarm/arm` **(bewohner)** | `mode` (`away`/`night`/`home`), `force?` | `{ ok }` oder `{ ok: false, error: 'open', open: [{ entity_id, name }] }` → nachfragen, dann mit `force: true` (offene werden ausgenommen) |
-| `house_rules/alarm/disarm` **(bewohner)** | `code?` oder `webauthn` + `rp_id` | `{ ok, error?, retry_in? }` – je nach Einstellung `confirm`: `none`, `pin`, `device` (Face ID / Touch ID per Passkey, PIN als Ausweg). Fehler: `wrong_code`, `locked` (nach 5 falschen PINs je Nutzer gesperrt, 30 s, dann doppelt so lange, höchstens 1 h; `retry_in` Sek.; die Sperre übersteht einen Neustart, aufheben mit `house_rules.reset_alarm_pin` oder der Datei `house_rules_pin_reset`, siehe Dienste), `no_pin`, `needs_device`. Dieselbe Prüfung gilt für `alarm_control_panel.alarmanlage` (Code = PIN, sobald `pin`/`device` gilt) |
+| `house_rules/alarm/disarm` **(bewohner)** | `code?` oder `webauthn` + `rp_id` | `{ ok, error?, retry_in? }` – je nach Einstellung `confirm`: `none`, `pin`, `device` (Face ID / Touch ID per Passkey, PIN als Ausweg). Fehler: `wrong_code`, `locked` (nach 5 falschen PINs je Nutzer gesperrt, 30 s, dann doppelt so lange, höchstens 1 h; `retry_in` Sek.; die Sperre übersteht einen Neustart, aufheben mit `roomwise.reset_alarm_pin` oder der Datei `house_rules_pin_reset`, siehe Dienste), `no_pin`, `needs_device`. Dieselbe Prüfung gilt für `alarm_control_panel.alarmanlage` (Code = PIN, sobald `pin`/`device` gilt) |
 | `house_rules/alarm/challenge` | – | `{ challenge, credentials, user }` für Face ID / Touch ID; gültig 3 Min., höchstens 20 gleichzeitig (die neuesten) |
 | `house_rules/alarm/register_device` **(bewohner)** | `payload`, `name`, `rp_id`, `code?` | ohne `code` nur ein Admin von Home Assistant, alle anderen (auch die Rolle Admin) mit der Alarm-PIN; dieses Gerät für Face ID / Touch ID einrichten (siehe `src/passkey.ts`). Nur Admins, oder wer die PIN der Alarmanlage mitschickt (sonst `unauthorized`): ein eingerichtetes Gerät kann die Anlage ausschalten |
 | `house_rules/alarm/preview_tone` **(admin)** | `tone`, `player` | Ton leise auf einem Lautsprecher probehören |
@@ -652,7 +652,7 @@ Ereignisse auf dem HA-Bus (`hass.connection.subscribeEvents(cb, 'house_rules_fir
 * `house_rules_ventilate` – `{ room, room_name, reason: humidity/co2/mould/time/close_window, message, minutes }` bei jeder Lüft-Erinnerung (je Grund höchstens stündlich; kommt auch in der Ruhezeit, nur die Handy-Nachricht nicht)
 * `house_rules_ventilate` – `{ room, room_name, reason: humidity/co2/mould/time/close_window, message, minutes }` einmal je Anlass (Feuchte/CO₂/Schimmelgefahr: von „über der Grenze“ bis deutlich darunter; Lüftungsplan: je Zeit und Tag; Fenster: je Öffnen). Kommt auch in der Ruhezeit und wenn die Handy-Nachricht durch die Grenzen von „Benachrichtigungen“ ausfällt. Speichern von Einstellungen beginnt keinen neuen Anlass; ein Anlass, den es nur durch eine geänderte Einstellung gibt (z. B. niedrigere Grenze), bleibt ohne Handy-Nachricht
 
-Dienste (folgen den Rollen, wenn eine Person sie aufruft; aus Automationen/Skripten ohne Person immer): `house_rules.run` (`rule_id`), `house_rules.pause` **(bewohner)** (`rule_id`, `minutes`, 0 = Pause aufheben), `house_rules.reset_alarm_pin` **(admin)** (`remove_pin`, Standard `false`: hebt jede PIN-Sperre auf; `true` löscht zusätzlich die PIN, Bestätigung dann „ohne“).
+Dienste (folgen den Rollen, wenn eine Person sie aufruft; aus Automationen/Skripten ohne Person immer): `roomwise.run` (`rule_id`), `roomwise.pause` **(bewohner)** (`rule_id`, `minutes`, 0 = Pause aufheben), `roomwise.reset_alarm_pin` **(admin)** (`remove_pin`, Standard `false`: hebt jede PIN-Sperre auf; `true` löscht zusätzlich die PIN, Bestätigung dann „ohne“).
 
 PIN-Sperre über die Kommandozeile (ohne Anmeldung, wer an den Konfigurationsordner kommt, besitzt Home Assistant ohnehin): `touch /config/house_rules_pin_reset` hebt die Sperre auf, `echo pin > /config/house_rules_pin_reset` entfernt zusätzlich die PIN. Die Datei wird beim nächsten PIN-Versuch oder Start gelesen, danach gelöscht; beides steht im Verlauf.
 

@@ -1,7 +1,7 @@
-"""Grundriss-Karte (floorplan card) — companion integration.
+"""roomwise, the card part (formerly the companion integration `floorplan_card`).
 
-One HACS package: it serves the card itself (no dashboard resource to add by hand) and runs what has to work
-without any tablet:
+Set up by the roomwise integration (../__init__.py): it serves the card itself (no dashboard resource to add by
+hand) and runs what has to work without any tablet:
   * the front door warning (announcement, flashing lights, acknowledged by a switch or a tap on a tablet),
   * walk check-offs of the dogs, shared by every device,
   * shared floor plans (one plan on several dashboards) and the editor's trace images,
@@ -25,11 +25,11 @@ from aiohttp import web
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers import config_validation as cv, entity_registry as er, issue_registry as ir
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN, STORAGE_KEY, STORAGE_VERSION, VERSION
+from .const import DOMAIN, INTEGRATION, STORAGE_KEY, STORAGE_VERSION, VERSION
 from .entry_alert import EntryAlert, sanitize
 from .pets import ACTION_PREFIX, PetTracker, sanitize_pets
 from .plans import PlanStore
@@ -39,11 +39,10 @@ from .websocket import async_register_commands
 
 _LOGGER = logging.getLogger(__name__)
 
-CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
-
 FRONTEND_URL = "/floorplan_card_files"
 LOADER_URL = "/floorplan_card_loader.js"
-FRONTEND_DIR = Path(__file__).parent / "frontend"
+# the built card: custom_components/roomwise/frontend (next to the integration's manifest)
+FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
 # walk check-offs of one day (any user may send them): at most this many pets in all, slots per pet
 MAX_WALK_KEYS = 200
 MAX_WALK_SLOTS = 48
@@ -331,9 +330,9 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
     if not present:
         # a broken install: say so in Settings → Repairs (the dashboards would only show "custom element doesn't exist")
         _LOGGER.warning("No bundled card found in %s", FRONTEND_DIR)
-        ir.async_create_issue(hass, DOMAIN, "frontend_missing", is_fixable=False, severity=ir.IssueSeverity.ERROR, translation_key="frontend_missing")
+        ir.async_create_issue(hass, INTEGRATION, "frontend_missing", is_fixable=False, severity=ir.IssueSeverity.ERROR, translation_key="frontend_missing")
         return
-    ir.async_delete_issue(hass, DOMAIN, "frontend_missing")
+    ir.async_delete_issue(hass, INTEGRATION, "frontend_missing")
     from homeassistant.components.frontend import add_extra_js_url
     from homeassistant.components.http import StaticPathConfig
 
@@ -343,22 +342,21 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
     hass.data[f"{DOMAIN}_frontend"] = True
 
 
-async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
+def async_register(hass: HomeAssistant) -> None:
+    """The card's websocket commands (floorplan_card/…), once per start"""
+    if hass.data.get(f"{DOMAIN}_ws"):
+        return
     async_register_commands(hass)
-    return True
+    hass.data[f"{DOMAIN}_ws"] = True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    async_register(hass)
     data = FloorplanData(hass)
     data.entry = entry
     await data.async_load()
     hass.data[DOMAIN] = data
     await _async_register_frontend(hass)
-    # the song sensors of the former song recognition (removed): their registry entries would stay "unavailable"
-    ent_reg = er.async_get(hass)
-    for ent in er.async_entries_for_config_entry(ent_reg, entry.entry_id):
-        if ent.domain == "sensor":
-            ent_reg.async_remove(ent.entity_id)
     return True
 
 
@@ -385,7 +383,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     for key in (PLANS_KEY, IMAGES_KEY, WIFI_KEY):
         await Store(hass, STORE_VERSION, key).async_remove()
     reg = ir.async_get(hass)
-    for domain, issue_id in [k for k in reg.issues if k[0] == DOMAIN]:
+    for domain, issue_id in [k for k in reg.issues if k[0] == INTEGRATION and k[1] == "frontend_missing"]:
         ir.async_delete_issue(hass, domain, issue_id)
     if hass.data.pop(f"{DOMAIN}_frontend", None):
         from homeassistant.components.frontend import remove_extra_js_url

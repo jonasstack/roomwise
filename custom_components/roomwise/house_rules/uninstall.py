@@ -17,7 +17,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.storage import Store
 
-from .const import DOMAIN, STORAGE_KEY, STORAGE_KEY_HISTORY, STORAGE_VERSION
+from .const import INTEGRATION, STORAGE_KEY, STORAGE_KEY_HISTORY, STORAGE_VERSION
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ async def remove_everything(hass: HomeAssistant) -> list[str]:
     except Exception as err:  # noqa: BLE001 — removal must go on
         _LOGGER.debug("telemetry not removed: %s", err)
     reg = ir.async_get(hass)
-    for domain, issue_id in [k for k in reg.issues if k[0] == DOMAIN]:
+    for domain, issue_id in [k for k in reg.issues if k[0] == INTEGRATION]:
         ir.async_delete_issue(hass, domain, issue_id)
         done.append(f"repairs:{issue_id}")
     for service in hass.services.async_services_for_domain("notify"):

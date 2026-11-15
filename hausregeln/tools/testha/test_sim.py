@@ -10,8 +10,8 @@ import sys
 from datetime import date, datetime, timedelta
 from types import SimpleNamespace
 
-sys.path.insert(0, os.environ.get("HA_CONFIG_DIR", "/config"))  # CI: a folder whose custom_components/ holds house_rules
-from custom_components.house_rules import simulate as S  # noqa: E402
+sys.path.insert(0, os.environ.get("HA_CONFIG_DIR", "/config"))  # CI: a folder whose custom_components/ holds roomwise
+from custom_components.roomwise.house_rules import simulate as S  # noqa: E402
 
 FAIL = []
 

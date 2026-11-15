@@ -22,7 +22,7 @@ from homeassistant.util.yaml import dump as yaml_dump
 from .actions import COLORS, NIGHT_LIGHT
 from .conditions import duration_of
 from .engine import _signed_seconds
-from .const import DOMAIN
+from .const import INTEGRATION
 from .select import OPTIONS as SELECT_OPTIONS
 from .i18n import num, quote, tr
 from . import logic_export
@@ -65,7 +65,7 @@ class _Export:
 
     # ------------------------------------------------------------------ helpers
     def own(self, platform: str, uid: str) -> str | None:
-        return self._reg.async_get_entity_id(platform, DOMAIN, uid)
+        return self._reg.async_get_entity_id(platform, INTEGRATION, uid)
 
     def text(self, c: dict[str, Any], section: str) -> str:
         t = self.core.describer.clause(c, section)
@@ -453,9 +453,9 @@ class _Export:
             return [self.todo_action(what, self.t("no_disarm"))]
         if subject.startswith("rule:"):
             if verb == "run":
-                return [{"action": f"{DOMAIN}.run", "data": {"rule_id": subject[5:]}}]
+                return [{"action": f"{INTEGRATION}.run", "data": {"rule_id": subject[5:]}}]
             if verb == "pause":
-                return [{"action": f"{DOMAIN}.pause", "data": {"rule_id": subject[5:], "minutes": round((seconds(c.get("for")) or 3600) / 60)}}]
+                return [{"action": f"{INTEGRATION}.pause", "data": {"rule_id": subject[5:], "minutes": round((seconds(c.get("for")) or 3600) / 60)}}]
             return [self.todo_action(what, self.t("unknown_step"))]
         ents = self.res.entities(subject, room, room)
         if not ents:

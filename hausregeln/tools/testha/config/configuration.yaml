@@ -25,7 +25,7 @@ hr_fake:
 logger:
   default: warning
   logs:
-    custom_components.house_rules: debug
+    custom_components.roomwise: debug
 input_boolean:
   besuch:
     name: Besuch da

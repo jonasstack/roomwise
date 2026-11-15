@@ -2,12 +2,12 @@
   "config": {
     "step": {
       "user": {
-        "title": "House Rules",
-        "description": "Simple automations written as sentences. After setup, “House Rules” appears in the sidebar."
+        "title": "roomwise",
+        "description": "Sets up roomwise: the floor plan card is then available on every dashboard, and \"Hausregeln\" (house rules) appears in the sidebar. There is nothing to fill in. The first time you open Hausregeln, the setup wizard leads you through everything; until then only the automatic house mode runs.\n\nIf the earlier integrations \"Floorplan card\" and \"Hausregeln\" were installed, roomwise takes over their settings and entities."
       }
     },
     "abort": {
-      "single_instance_allowed": "House Rules is already set up."
+      "single_instance_allowed": "roomwise is already set up."
     }
   },
   "services": {
@@ -47,6 +47,10 @@
     }
   },
   "issues": {
+    "frontend_missing": {
+      "title": "roomwise: card file missing",
+      "description": "roomwise is set up, but the card's file (`frontend/floorplan-card.js`) is missing from its folder. Dashboards therefore cannot show the floor plan card.\n\nReinstall roomwise through HACS (HACS → roomwise → Redownload) and restart Home Assistant afterwards."
+    },
     "entity_missing": {
       "title": "House Rules: device {entity_id} no longer exists",
       "fix_flow": {
@@ -101,7 +105,11 @@
     },
     "card_not_loaded": {
       "title": "The floor plan card is not loaded",
-      "description": "A dashboard shows the floor plan card (custom:floorplan-card), but nothing loads it: the companion integration “Floor plan card” is not set up and there is no dashboard resource for it. The dashboard therefore shows an error instead of the floor plan.\n\nAdd the integration “Floor plan card” under Settings → Devices & services → Add integration. It serves the card to every dashboard."
+      "description": "A dashboard shows the floor plan card (custom:floorplan-card), but nothing loads it: the card part of roomwise is not running and there is no dashboard resource for it. The dashboard therefore shows an error instead of the floor plan.\n\nCheck Settings → Repairs and the log for why roomwise does not start completely (for example because the old integrations are still installed), then restart Home Assistant."
+    },
+    "old_integrations": {
+      "title": "roomwise: the old integrations are still installed",
+      "description": "roomwise replaces the earlier integrations \"Floorplan card\" (`floorplan_card`) and \"Hausregeln\" (`house_rules`). As long as their folders are still there, roomwise does not start, so nothing switches twice.\n\nWhat to do:\n1. Delete the folders {folders} (with HACS \"Remove\", the File editor, Samba or the terminal). Do not delete the integration under Devices & services – that would delete its settings.\n2. Restart Home Assistant.\n\nroomwise then takes over settings, rules and entities (with the same entity ids, your automations keep working)."
     }
   }
 }

@@ -19,29 +19,21 @@ Einstellungen von Home Assistant zurechtfindest, aber roomwise noch nicht kennst
 
 ## 1. Installation
 
-roomwise besteht heute aus zwei Teilen: der Begleit-Integration *Grundriss-Karte*, die die Karte mitbringt, und der
-optionalen Regel-Integration *Hausregeln*. Später werden beide eine Integration; deine Einstellungen werden dabei
-übernommen.
-
-**Karte und Begleit-Integration**
+roomwise ist eine Integration: die Karte, was ohne Tablet laufen muss, und der Regel-Teil *Hausregeln*.
 
 1. In HACS: ⋮ → **Benutzerdefinierte Repositories** → `https://github.com/jonasstack/roomwise`, Typ **Integration**.
 2. *roomwise* öffnen → **Herunterladen**.
 3. Home Assistant neu starten.
-4. Einstellungen → Geräte & Dienste → **Integration hinzufügen** → *Grundriss-Karte*. Nichts auszufüllen.
-5. Browser neu laden. Die Karte steht jetzt auf jedem Dashboard bereit.
+4. Einstellungen → Geräte & Dienste → **Integration hinzufügen** → *roomwise*. Nichts auszufüllen.
+5. Browser neu laden. Die Karte steht jetzt auf jedem Dashboard bereit, in der Seitenleiste erscheint **Hausregeln**.
+6. **Hausregeln** öffnen. Der Einrichtungsassistent fragt nach Bewohnern, Räumen und Meldern, welche Funktionen du
+   willst (Alarmanlage, Fenster-Warnung, Licht, Heizung, Urlaub, Saugroboter, KI) und danach nur nach diesen, und
+   nach dem Wandtablet. Was du nicht brauchst, überspringst du; den Assistenten gibt es jederzeit wieder unter
+   Einstellungen → Einrichtung.
 
-**Hausregeln (optional)**
-
-1. `house_rules.zip` aus dem neuesten Release auf GitHub laden und nach `<config>/custom_components/house_rules/`
-   entpacken, sodass `manifest.json` direkt in diesem Ordner liegt.
-2. Home Assistant neu starten, dann Einstellungen → Geräte & Dienste → **Integration hinzufügen** → *Hausregeln*.
-3. **Hausregeln** in der Seitenleiste öffnen. Der Einrichtungsassistent fragt nach Bewohnern, Räumen und Meldern,
-   Beispielregeln, Alarmanlage, Fenster-Warnung, Licht, Heizung, Urlaub, Saugroboter, KI und Wandtablet. Was du
-   nicht brauchst, überspringst du; den Assistenten gibt es jederzeit wieder unter Einstellungen → Einrichtung.
-
-Nach der Installation läuft nur der automatische Hausmodus. Alles andere bleibt aus, bis du es in Hausregeln unter
-Einstellungen → **Funktionen** einschaltest.
+Umstieg von den beiden früheren Integrationen (*Grundriss-Karte* und *Hausregeln*, bis 0.1.0-beta.2): ihre Ordner
+`custom_components/floorplan_card` und `custom_components/house_rules` löschen – nicht die Integrationen unter
+Geräte & Dienste – und neu starten. roomwise übernimmt alles mit denselben Entitäts-IDs.
 
 ## 2. Der erste Grundriss
 
@@ -79,12 +71,12 @@ Werkzeugleiste) und tippe auf **Bild laden**. Es liegt unter der aktuellen Etage
 3. **Räume nachzeichnen** mit dem Raum-Werkzeug.
 
 Das Bild ist nur im Editor zu sehen, außer du schaltest *Auch auf der Karte zeigen* ein (2D-Ansicht). Mit der
-Begleit-Integration wird es dort gespeichert, ohne sie landet eine stark verkleinerte Kopie in der Kartenkonfiguration.
+Integration roomwise wird es dort gespeichert, ohne sie landet eine stark verkleinerte Kopie in der Kartenkonfiguration.
 
 ### Derselbe Grundriss auf mehreren Dashboards
 
-Mit der Begleit-Integration lässt sich ein Grundriss teilen: Editor → Einstellungen → **Auf mehreren Dashboards** →
-*Auf mehreren Dashboards verwenden*. Nach **Sichern** liegt der Grundriss in der Begleit-Integration, die Karte verweist
+Mit der Integration roomwise lässt sich ein Grundriss teilen: Editor → Einstellungen → **Auf mehreren Dashboards** →
+*Auf mehreren Dashboards verwenden*. Nach **Sichern** liegt der Grundriss in der Integration roomwise, die Karte verweist
 nur noch darauf (`plan: <id>`). Auf einem anderen Dashboard die Karte hinzufügen und **Geteilten Grundriss verwenden**
 wählen (oder im selben Einstellungs-Abschnitt auswählen). Änderungen von einem Dashboard aus erscheinen auf allen,
 offene Karten ziehen sofort nach. Geteilt werden Etagen, Räume, Möbel, Geräte, Wände, Nordrichtung und die
@@ -106,7 +98,7 @@ Jedes Objekt, jede Markierung, jeder Raum, jede Tür und jedes Fenster hat eigen
 Doppeltippen und langes Drücken: schalten, Bedienfeld öffnen, den Dialog von Home Assistant öffnen, ein Skript
 starten, eine Seite öffnen oder nichts tun. Schlösser, Alarmanlagen und Sirenen fragen immer vorher.
 
-Einige Objekte haben mehr Einstellungen: Der **Saugroboter** kann live fahren (Roborock mit Begleit-Integration;
+Einige Objekte haben mehr Einstellungen: Der **Saugroboter** kann live fahren (Roborock mit der Integration roomwise;
 seine Karte im Editor mit *Automatisch ausrichten* an den Plan anpassen), ein **Auto** bekommt Entitäten für Akku,
 Reichweite, Laden und Ort, ein **Hund** Gassi-Zeiten und Erinnerungen.
 
@@ -211,12 +203,11 @@ im System *Bewegung reduzieren* eingeschaltet, springen Ansichten statt zu gleit
 
 ## 8. Updates
 
-HACS zeigt neue Versionen von Karte und Begleit-Integration. Nach **Aktualisieren**:
+HACS zeigt neue Versionen von roomwise. Nach **Aktualisieren**:
 
 - Nennen die Release-Hinweise Python-Änderungen, Home Assistant neu starten. Hat sich nur die Karte geändert,
   genügt es, den Browser neu zu laden (auf Tablets die Kiosk-App; bleibt die alte Version hängen, ihren Cache
   leeren).
-- Hausregeln: das neue `house_rules.zip` laden, den Ordner `custom_components/house_rules/` ersetzen und neu starten.
 
 Was sich geändert hat, steht im [Changelog](../../CHANGELOG.md). In der Beta können sich Einstellungsformate noch
 ändern; roomwise rechnet alte Einstellungen selbst um, aber lies vor dem Update die Hinweise.
@@ -227,7 +218,7 @@ Alles, was roomwise speichert, gehört zu einer normalen Sicherung von Home Assi
 Sicherungen):
 
 - der Grundriss steht in der Konfiguration des Dashboards,
-- Begleit-Integration und Hausregeln legen ihre Daten im Ordner `.storage/` von Home Assistant ab.
+- roomwise (Kartenteil und Hausregeln) legt seine Daten im Ordner `.storage/` von Home Assistant ab.
 
 Für eine zusätzliche Kopie des Plans den Editor öffnen, `{}` antippen und das YAML irgendwo ablegen. Zum
 Zurückholen in den Code-Editor der Karte einfügen (Karte bearbeiten → *Code-Editor anzeigen*). Eine vollständige
@@ -250,17 +241,17 @@ Hausregeln prüft die Rollen bei jeder Aktion selbst, nicht nur in der Oberfläc
 
 ## 11. roomwise entfernen
 
-Ausschalten oder Neuladen einer Integration behält alles. Erst **Löschen** (Einstellungen → Geräte & Dienste →
-die Integration → ⋮ → Löschen) räumt sauber auf:
+Ausschalten oder Neuladen von roomwise behält alles. Erst **Löschen** (Einstellungen → Geräte & Dienste →
+roomwise → ⋮ → Löschen) räumt beide Teile sauber auf:
 
 - **Hausregeln** löscht Regeln, Pläne, Verlauf, Versionen, Papierkorb, Gelerntes und die Einstellung der
   Diagnosedaten, seine Hinweise unter Reparaturen und seine Nachrichten auf den Handys; Home Assistant entfernt die
   Entitäten und den Eintrag in der Seitenleiste. Sichere vorher (Hausregeln → Einstellungen → Sichern und wiederherstellen), wenn du
   deine Regeln behalten willst.
-- **Die Begleit-Integration** löscht ihre gespeicherten Einstellungen und Hinweise, lädt die Karte nicht mehr auf
+- **Der Kartenteil** löscht seine gespeicherten Einstellungen und Hinweise, lädt die Karte nicht mehr auf
   den Dashboards und entfernt Dashboard-Ressourcen, die auf ihre Dateien zeigen. Karten auf den Dashboards bleiben
   stehen und zeigen einen Fehler, bis du sie entfernst oder roomwise wieder installierst.
 
 Keiner der Teile legt Helfer, Automationen (außer du exportierst selbst eine) oder Benachrichtigungs-Kategorien an,
-also bleibt nichts weiter zurück. Zum Schluss die heruntergeladenen Dateien in HACS entfernen (oder die Ordner unter
-`custom_components`) und neu starten.
+also bleibt nichts weiter zurück. Zum Schluss roomwise in HACS entfernen (oder den Ordner
+`custom_components/roomwise`) und neu starten.

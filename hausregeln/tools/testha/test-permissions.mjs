@@ -13,8 +13,8 @@ if (!tok) throw new Error('test HA not reachable');
 const ws = await wsConnect(tok);
 const api = rest(tok);
 
-// ---------------------------------------------------------------- set up both integrations (idempotent)
-for (const handler of ['house_rules', 'floorplan_card']) {
+// ---------------------------------------------------------------- set up roomwise (idempotent)
+for (const handler of ['roomwise']) {
   const entries = (await api('GET', '/api/config/config_entries/entry')).body;
   if (entries.some((e) => e.domain === handler && e.state === 'loaded')) continue;
   const flow = await api('POST', '/api/config/config_entries/flow', { handler });
@@ -175,7 +175,7 @@ const MATRIX = {
 };
 
 // ---------------------------------------------------------------- every command in the sources is in the matrix and registered
-const sources = ['custom_components/floorplan_card/websocket.py', 'hausregeln/custom_components/house_rules/websocket.py'].map((f) => readFileSync(new URL(f, ROOT), 'utf8')).join('\n');
+const sources = ['custom_components/roomwise/card/websocket.py', 'custom_components/roomwise/house_rules/websocket.py'].map((f) => readFileSync(new URL(f, ROOT), 'utf8')).join('\n');
 const commands = [...new Set([...sources.matchAll(/"type"\): "((?:house_rules|floorplan_card)\/[a-z_/]+)"/g)].map((m) => m[1]))];
 ok(commands.length >= 70, `${commands.length} Befehle in den Quellen gefunden`);
 const missing = commands.filter((c) => !MATRIX[c]);
@@ -206,7 +206,7 @@ ok((await ws.call({ type: 'house_rules/info' })).loaded && (await ws.call({ type
 // ---------------------------------------------------------------- made "Admin" in Hausregeln: still never more than Home Assistant allows
 // The tablet (no Home Assistant admin) gets the Hausregeln role Admin: every 'ha_admin' command and a Face ID device
 // without the PIN stay refused. The table must name the same commands as permissions.py.
-const permSrc = readFileSync(new URL('hausregeln/custom_components/house_rules/permissions.py', ROOT), 'utf8');
+const permSrc = readFileSync(new URL('custom_components/roomwise/house_rules/permissions.py', ROOT), 'utf8');
 const haOnly = [...permSrc.matchAll(/^\s+"([a-z_/]+)": "ha_admin",/gm)].map((m) => `house_rules/${m[1]}`);
 const tableHa = Object.keys(MATRIX).filter((c) => MATRIX[c][0] === 'ha_admin');
 ok(haOnly.length >= 14 && haOnly.every((c) => tableHa.includes(c)) && tableHa.every((c) => haOnly.includes(c)), `ha_admin-Befehle: Tabelle = permissions.py (${haOnly.length})`, { haOnly, tableHa });
@@ -263,12 +263,12 @@ await ws.call({ type: 'house_rules/alarm/config', config: { channels: { email: {
 const rule = (await ws.call({ type: 'house_rules/rule/save', rule: { name: 'Perm: Alarm aus', when: [{ subject: 'binary_sensor.haustuer', verb: 'opens' }], then: [{ subject: 'alarm', verb: 'disarm' }], options: { allow_sensitive: true } } })).rule;
 let e = await tablet.call({ type: 'house_rules/rule/run', rule_id: rule.id }).then(() => '', (err) => err.message);
 ok(/^unauthorized/.test(e), 'Regel mit „Alarm aus“: Nicht-Admin darf sie nicht von Hand starten (Websocket)', e);
-const svc = await tabletApi('POST', '/api/services/house_rules/run', { rule_id: rule.id });
-ok(svc.status === 401, '… und nicht über die Aktion house_rules.run', svc.status);
+const svc = await tabletApi('POST', '/api/services/roomwise/run', { rule_id: rule.id });
+ok(svc.status === 401, '… und nicht über die Aktion roomwise.run', svc.status);
 e = await ws.call({ type: 'house_rules/rule/run', rule_id: rule.id }).then(() => '', (err) => err.message);
 ok(!e, 'Admin darf es', e);
 await ws.call({ type: 'house_rules/rule/delete', rule_id: rule.id });
-ok((await tabletApi('POST', '/api/services/house_rules/reset_alarm_pin', {})).status === 401, 'house_rules.reset_alarm_pin nur für Admins');
+ok((await tabletApi('POST', '/api/services/roomwise/reset_alarm_pin', {})).status === 401, 'roomwise.reset_alarm_pin nur für Admins');
 
 // ---------------------------------------------------------------- button events from a phone of a non-admin who gets no alarm messages
 const feats = (await ws.call({ type: 'house_rules/snapshot' })).features;
@@ -311,7 +311,7 @@ const get = async (path) => {
 const loader = await get('/floorplan_card_loader.js');
 ok(loader.status === 200 && /^import\("\/floorplan_card_files\/floorplan-card\.js\?v=[0-9a-f.\-a-z]+"\);\s*$/.test(loader.text), 'Lader der Karte: nur ein import, keine Daten', loader.text.slice(0, 120));
 for (const path of ['/floorplan_card_files/', '/house_rules_static/', '/house_rules_sounds/']) ok((await get(path)).status >= 400, `${path}: kein Verzeichnis-Listing`);
-for (const path of ['/floorplan_card_files/../__init__.py', '/floorplan_card_files/%2e%2e/__init__.py', '/house_rules_sounds/..%2fmanifest.json', '/house_rules_static/%2e%2e/alarm.py', '/house_rules_sounds/%2e%2e/%2e%2e/.storage/house_rules']) {
+for (const path of ['/floorplan_card_files/../__init__.py', '/floorplan_card_files/%2e%2e/__init__.py', '/house_rules_sounds/..%2f..%2fmanifest.json', '/house_rules_static/%2e%2e/alarm.py', '/house_rules_sounds/%2e%2e/%2e%2e/.storage/house_rules']) {
   const r = await get(path);
   ok(r.status >= 400 && !/import |"domain"|code_hash/.test(r.text), `${path}: kein Zugriff außerhalb`, r.status);
 }

@@ -63,8 +63,16 @@ MAX_ERRORS_PER_DAY = 10
 MAX_FRAMES = 25
 RECENT_LOCAL = 20
 TIMEOUT = aiohttp.ClientTimeout(total=15)
-OUR_PACKAGES = ("house_rules", "floorplan_card")
-_OUR_PATH = re.compile(r"[\\/]custom_components[\\/](house_rules|floorplan_card)[\\/](.+)$")
+OUR_PACKAGES = ("roomwise", "house_rules", "floorplan_card")
+# roomwise/house_rules/… and roomwise/card/… (the two parts, reported under their own names as before the merge),
+# the integration's own files (roomwise/migrate.py …) and the folders of the former integrations
+_OUR_PATH = re.compile(r"[\\/]custom_components[\\/](?:roomwise[\\/](house_rules|card)|(house_rules|floorplan_card))[\\/](.+)$")
+
+
+def _part(m: re.Match[str]) -> str:
+    """"house_rules/core.py" / "floorplan_card/vacuum.py" for a path matched by _OUR_PATH"""
+    name = m.group(1) or m.group(2)
+    return f"{'floorplan_card' if name == 'card' else name}/{m.group(3).replace(chr(92), '/')}"
 
 # what a card may report about the browser it runs in (house_rules/telemetry/client); anything else is dropped
 CLIENT_FIELDS: dict[str, tuple[str, ...] | None] = {
@@ -124,7 +132,7 @@ def our_frames(tb: Any) -> list[str]:
     for fr in traceback.extract_tb(tb):
         m = _OUR_PATH.search(fr.filename or "")
         if m:
-            out.append(f"{m.group(1)}/{m.group(2).replace(chr(92), '/')}:{fr.lineno} {fr.name}"[:160])
+            out.append(f"{_part(m)}:{fr.lineno} {fr.name}"[:160])
     return out[-MAX_FRAMES:]
 
 
@@ -145,7 +153,7 @@ class _ErrorHandler(logging.Handler):
             # an error we log ourselves without exception: only where it was logged (the message may contain names)
             m = _OUR_PATH.search(record.pathname or "")
             if m:
-                self._sink("LoggedError", [f"{m.group(1)}/{m.group(2).replace(chr(92), '/')}:{record.lineno} {record.funcName}"[:160]])
+                self._sink("LoggedError", [f"{_part(m)}:{record.lineno} {record.funcName}"[:160]])
         except Exception:  # noqa: BLE001 - a logging handler must never raise
             pass
 
@@ -446,10 +454,10 @@ class Telemetry:
             return "unknown"
 
     def _floorplan_version(self) -> str | None:
-        if "floorplan_card" not in self.hass.config.components:
+        if self.hass.data.get("floorplan_card") is None:
             return None
         try:
-            from custom_components.floorplan_card.const import VERSION as FP  # noqa: PLC0415
+            from ..card.const import VERSION as FP  # noqa: PLC0415
 
             return str(FP)[:30]
         except Exception:  # noqa: BLE001
@@ -457,7 +465,7 @@ class Telemetry:
 
     def _roomwise(self) -> dict[str, Any]:
         """Which roomwise parts are in use (floor plan card companion: cards, warning, dogs, robot vacuum adapters)."""
-        out: dict[str, Any] = {"floorplan_card": "floorplan_card" in self.hass.config.components, "cards": 0, "entry_alert": False, "pets": 0, "vacuum_adapters": {}}
+        out: dict[str, Any] = {"floorplan_card": self.hass.data.get("floorplan_card") is not None, "cards": 0, "entry_alert": False, "pets": 0, "vacuum_adapters": {}}
         fp = self.hass.data.get("floorplan_card")
         cards = getattr(fp, "cards", None)
         if isinstance(cards, dict):

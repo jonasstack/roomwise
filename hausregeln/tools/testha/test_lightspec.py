@@ -6,7 +6,7 @@ what each kind of lamp gets sent, "already like this?" and snapshots. Needs no H
 import importlib.util
 import pathlib
 
-spec = importlib.util.spec_from_file_location("lightspec", pathlib.Path(__file__).resolve().parents[2] / "custom_components/house_rules/lightspec.py")
+spec = importlib.util.spec_from_file_location("lightspec", pathlib.Path(__file__).resolve().parents[3] / "custom_components/roomwise/house_rules/lightspec.py")
 L = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(L)
 

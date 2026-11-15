@@ -20,11 +20,9 @@ const pyConst = [
 ];
 export const FILES = [
   ['package.json', ...json()],
-  ['custom_components/floorplan_card/manifest.json', ...json()],
-  ['custom_components/floorplan_card/const.py', ...pyConst],
+  ['custom_components/roomwise/manifest.json', ...json()],
+  ['custom_components/roomwise/const.py', ...pyConst],
   ['hausregeln/package.json', ...json()],
-  ['hausregeln/custom_components/house_rules/manifest.json', ...json()],
-  ['hausregeln/custom_components/house_rules/const.py', ...pyConst],
 ];
 // package-lock.json files carry the version twice (root and packages[""])
 const LOCKS = ['package-lock.json', 'hausregeln/package-lock.json'];

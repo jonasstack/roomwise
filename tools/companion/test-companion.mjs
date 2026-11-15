@@ -1,5 +1,5 @@
 // Tests the companion integration against an isolated test Home Assistant (never the real one):
-//   sh tools/companion/testha/start.sh (container fp-test-ha on 127.0.0.1:8124 with custom_components/floorplan_card + the
+//   sh tools/companion/testha/start.sh (container fp-test-ha on 127.0.0.1:8124 with custom_components/roomwise + the
 //   test-only component tools/companion/testha/fp_fake, which records tts / light / scene / notify calls). Usage: node tools/companion/test-companion.mjs [url]
 const URL0 = process.argv[2] ?? 'http://127.0.0.1:8124';
 const ok = (c, m) => console.log(c ? '  ok:' : '• FAIL:', m);
@@ -59,7 +59,7 @@ const calls = async (clear = false) => ws.call({ type: 'fp_fake/calls', clear })
 // 1) set up (config flow, nothing to fill in)
 let info = await ws.call({ type: 'floorplan_card/info' }).catch(() => undefined);
 if (!info?.loaded) {
-  const flow = await j('/api/config/config_entries/flow', { method: 'POST', headers: H, body: JSON.stringify({ handler: 'floorplan_card' }) });
+  const flow = await j('/api/config/config_entries/flow', { method: 'POST', headers: H, body: JSON.stringify({ handler: 'roomwise' }) });
   ok(flow.status === 200, `config flow starts (${flow.status} ${flow.body.type})`);
   if (flow.body.type === 'form') {
     const done = await j(`/api/config/config_entries/flow/${flow.body.flow_id}`, { method: 'POST', headers: H, body: '{}' });
@@ -69,7 +69,7 @@ if (!info?.loaded) {
   info = await ws.call({ type: 'floorplan_card/info' }).catch((e) => ({ err: String(e) }));
 }
 ok(info?.loaded, `companion loaded (${JSON.stringify(info)})`);
-const again = await j('/api/config/config_entries/flow', { method: 'POST', headers: H, body: JSON.stringify({ handler: 'floorplan_card' }) });
+const again = await j('/api/config/config_entries/flow', { method: 'POST', headers: H, body: JSON.stringify({ handler: 'roomwise' }) });
 ok(again.body.type === 'abort', `only once (${again.body.type} ${again.body.reason})`);
 
 // 2) the card is served and loaded on every dashboard

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Hassfest-like checks of both integrations that need no Home Assistant (stdlib only, for CI and by hand):
+"""Hassfest-like checks of the integration roomwise that need no Home Assistant (stdlib only, for CI and by hand):
 
   * manifest.json: the keys HACS and Home Assistant expect, domain = folder name, valid JSON
   * services.yaml = services in strings.json = services in every translations/*.json = services registered in code
@@ -17,7 +17,7 @@ import re
 import sys
 
 ROOT = Path(__file__).resolve().parent.parent
-INTEGRATIONS = [ROOT / "custom_components" / "floorplan_card", ROOT / "hausregeln" / "custom_components" / "house_rules"]
+INTEGRATIONS = [ROOT / "custom_components" / "roomwise"]
 MANIFEST_KEYS = ("domain", "name", "codeowners", "config_flow", "dependencies", "documentation", "integration_type", "iot_class", "issue_tracker", "requirements", "version")
 
 problems: list[str] = []
@@ -63,9 +63,10 @@ for comp in INTEGRATIONS:
         if keys(t) != keys(strings):
             problems.append(f"{name}: {tr.name} keys differ from strings.json: {sorted(keys(t) ^ keys(strings))[:8]}")
 
-    code = "\n".join(p.read_text(encoding="utf-8") for p in sorted(comp.glob("*.py")))
-    registered = set(re.findall(r'services\.async_register\(\s*DOMAIN,\s*"([a-z0-9_]+)"', code))
-    registered |= set(re.findall(r'async_register_admin_service\(\s*hass,\s*DOMAIN,\s*"([a-z0-9_]+)"', code))
+    # the parts (card/, house_rules/) belong to the integration too
+    code = "\n".join(p.read_text(encoding="utf-8") for p in sorted(comp.rglob("*.py")))
+    registered = set(re.findall(r'services\.async_register\(\s*(?:DOMAIN|INTEGRATION),\s*"([a-z0-9_]+)"', code))
+    registered |= set(re.findall(r'async_register_admin_service\(\s*hass,\s*(?:DOMAIN|INTEGRATION),\s*"([a-z0-9_]+)"', code))
     yaml_file = comp / "services.yaml"
     in_yaml = yaml_top_keys(yaml_file.read_text(encoding="utf-8")) if yaml_file.exists() else set()
     in_strings = set(strings.get("services", {}))

@@ -298,7 +298,7 @@ await test('Von Hand: übersteht einen Neustart, Person beim Start zählt', asyn
   await api('POST', '/api/services/climate/set_temperature', { entity_id: 'climate.heizung_kueche', temperature: 23 });
   ok(await until(async () => (await now(k)).level === 'manual'), 'Küche in der App 23 °C → von Hand');
   // restart of the integration (unload + load: the same as a restart of Home Assistant for Hausregeln)
-  const entry = (await api('GET', '/api/config/config_entries/entry')).body.find((x) => x.domain === 'house_rules').entry_id;
+  const entry = (await api('GET', '/api/config/config_entries/entry')).body.find((x) => x.domain === 'roomwise').entry_id;
   await api('POST', `/api/config/config_entries/entry/${entry}/reload`);
   await until(async () => (await ws.call({ type: 'house_rules/info' }).catch(() => null))?.loaded, 60000, 500);
   ok((await snapshot()).starting === true, 'nach dem Neustart: Startphase');

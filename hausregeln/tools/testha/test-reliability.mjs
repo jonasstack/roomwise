@@ -37,7 +37,7 @@ for (const [name, trk] of [['Alex Test', 'device_tracker.alex_handy'], ['Sam Tes
   if (!persons.storage.some((p) => p.name === name)) await ws.call({ type: 'person/create', name, device_trackers: [trk] });
 // integration set up? (a fresh test HA)
 if (!(await ws.call({ type: 'house_rules/info' }).catch(() => null))?.loaded) {
-  const flow = await api('POST', '/api/config/config_entries/flow', { handler: 'house_rules' });
+  const flow = await api('POST', '/api/config/config_entries/flow', { handler: 'roomwise' });
   await api('POST', `/api/config/config_entries/flow/${flow.body.flow_id}`, {});
   await until(async () => (await ws.call({ type: 'house_rules/info' }).catch(() => null))?.loaded, 30000, 500);
 }

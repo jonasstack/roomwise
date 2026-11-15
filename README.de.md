@@ -104,36 +104,31 @@ das Licht deiner echten Tage nachspielt.
 
 ## Installation
 
-roomwise besteht im Moment aus zwei Integrationen. Die Begleit-Integration *Grundriss-Karte* bringt die Karte auf
-jedes Dashboard und erledigt, was ohne Tablet funktionieren muss (Haustür-Warnung, Gassi-Erinnerungen,
-Saugroboter live). Hausregeln ist optional und wird getrennt installiert, bis beide zu einer Integration
-zusammengelegt sind.
-
-### Karte und Begleit-Integration (HACS)
+roomwise ist eine Integration: Sie bringt die Karte auf jedes Dashboard, erledigt, was ohne Tablet funktionieren
+muss (Haustür-Warnung, Gassi-Erinnerungen, Saugroboter live), und legt **Hausregeln** (Regeln, Hausmodus, Licht-
+und Heizpläne, Alarmanlage) in die Seitenleiste.
 
 1. HACS → ⋮ (oben rechts) → **Benutzerdefinierte Repositories** → URL `https://github.com/jonasstack/roomwise`, Typ
    **Integration** → **Hinzufügen**.
 2. *roomwise* in HACS öffnen → **Herunterladen**.
 3. Home Assistant neu starten.
-4. Einstellungen → Geräte & Dienste → **Integration hinzufügen** → *roomwise*. Es gibt
-   nichts auszufüllen.
-5. Browser neu laden (auf dem Tablet die Kiosk-App neu laden). Die Karte steht jetzt auf jedem Dashboard bereit,
-   eine Ressource musst du nicht eintragen.
+4. Einstellungen → Geräte & Dienste → **Integration hinzufügen** → *roomwise*. Es gibt nichts auszufüllen.
+5. Browser neu laden (auf dem Tablet die Kiosk-App neu laden). Die Karte steht jetzt auf jedem Dashboard bereit
+   (keine Ressource einzutragen), und in der Seitenleiste erscheint **Hausregeln**. Beim ersten Öffnen startet der
+   Einrichtungsassistent; jeden Schritt kannst du überspringen.
 
-Von Hand: `floorplan_card.zip` aus dem [neuesten Release](https://github.com/jonasstack/roomwise/releases) laden und so
-entpacken, dass `manifest.json` direkt in `<config>/custom_components/floorplan_card/` liegt.
-
-### Hausregeln (optional)
-
-1. `house_rules.zip` aus dem [neuesten Release](https://github.com/jonasstack/roomwise/releases) laden und nach
-   `<config>/custom_components/house_rules/` entpacken.
-2. Home Assistant neu starten, dann Einstellungen → Geräte & Dienste → **Integration hinzufügen** → *Hausregeln*.
-3. In der Seitenleiste erscheint **Hausregeln**. Beim ersten Öffnen startet der Einrichtungsassistent; jeden
-   Schritt kannst du überspringen.
+Von Hand: `roomwise.zip` aus dem [neuesten Release](https://github.com/jonasstack/roomwise/releases) laden und so
+entpacken, dass `manifest.json` direkt in `<config>/custom_components/roomwise/` liegt.
 
 Nach der Installation läuft nur der automatische Hausmodus. Alles andere (Alarmanlage, Lichtpläne, Heizung,
-Urlaub, KI) bleibt aus, bis du es in Hausregeln unter Einstellungen → Funktionen einschaltest. Die Karte erkennt
-Hausregeln von selbst und zeigt Hausmodus und Alarm in ihrer Kopfzeile.
+Urlaub, KI) bleibt aus, bis du es im Einrichtungsassistenten oder in Hausregeln unter Einstellungen → Funktionen
+einschaltest.
+
+**Umstieg von 0.1.0-beta.2 oder älter** (zwei Integrationen, *Grundriss-Karte* `floorplan_card` und *Hausregeln*
+`house_rules`): roomwise installieren, die Ordner `custom_components/floorplan_card` und
+`custom_components/house_rules` löschen (nicht die Integrationen unter Geräte & Dienste – dabei würden ihre
+Einstellungen gelöscht), neu starten. roomwise übernimmt Einstellungen, Regeln und Entitäten mit denselben
+Entitäts-IDs. Die Aktionen heißen jetzt `roomwise.run`, `roomwise.pause` und `roomwise.reset_alarm_pin`.
 
 ## Erste Schritte
 
@@ -187,7 +182,7 @@ zeigt, kann die Karte nutzen. Manches braucht mehr als die üblichen Entitäten:
 | Licht, Schalter, Ventilatoren, Rollläden, Medienplayer, Heizung | jeder Integration | Farbe und Farbtemperatur nur, wo das Licht sie meldet |
 | Türen und Fenster | jedem `binary_sensor` mit offen/zu | |
 | Raumbelegung (Hausregeln) | Bewegungs-, Präsenz- und Belegungsmeldern, Präsenz-Zonen | Räume nur mit Türkontakt nutzen allein die Tür-Logik |
-| Saugroboter-Bedienfeld und Raumreinigung | jeder `vacuum`-Entität | Raumauswahl braucht `vacuum.clean_area` oder (mit Begleit-Integration) einen Roboter, dessen Integration Räume reinigt: Dreame Vacuum, Xiaomi Miio, Valetudo (MQTT) |
+| Saugroboter-Bedienfeld und Raumreinigung | jeder `vacuum`-Entität | Raumauswahl braucht `vacuum.clean_area` oder (mit der Integration roomwise) einen Roboter, dessen Integration Räume reinigt: Dreame Vacuum, Xiaomi Miio, Valetudo (MQTT) |
 | Saugroboter fährt live im Plan | **Roborock** (Integration aus Home Assistant), **Dreame Vacuum**, **Xiaomi Cloud Map Extractor** oder jede Kartenkamera mit `calibration_points` (wie für die Xiaomi Vacuum Map Card), **Valetudo** (seine Kamera „Map data“) | Die Kartenquelle wird selbst gefunden. Außer Roborock nur gegen simulierte Roboter im echten Datenformat getestet. Kartenkameras melden nur alle paar Sekunden, der Roboter fährt dann weiter hinterher. Andere Marken bekommen das Bedienfeld ohne Live-Ansicht |
 | Autos | gebaut mit Mercedes me, geht mit allgemeinen Entitäten für Akku, Reichweite, Laden und Ort | Ladegrenze und Vorklimatisierung je nach Integration des Autos |
 | Heizung (Hausregeln) | `climate`-Entitäten, wahlweise Raumthermometer und Fensterkontakte | Hinweise zur Ventilstellung nur, wo das Thermostat sie meldet |
@@ -221,7 +216,7 @@ Tablets. Werte aus der Anzeige zusammen mit deinem Tablet-Modell helfen sehr.
 
 ## Datenschutz
 
-Alles bleibt in deinem Home Assistant. Karte und Begleit-Integration sprechen mit keinem Dienst im Internet; sogar
+Alles bleibt in deinem Home Assistant. Karte und Kartenteil von roomwise sprechen mit keinem Dienst im Internet; sogar
 die 3D-Modelle kommen von deiner eigenen Instanz. Hausregeln spricht nur nach außen, wenn ein Administrator es
 einrichtet: mit dem gewählten KI-Anbieter, mit CallMeBot für Telegram und Signal, mit deinem eigenen SMTP-Server.
 
@@ -250,7 +245,7 @@ Der Raum braucht Lichter: einen Bereich zuordnen oder in den Raum-Einstellungen 
 Für die Person des Tablets unter Effekte & Leistung *Sparsam* oder *Aus* wählen, oder 2D nutzen.
 
 **Der Saugroboter fährt nicht im Plan.**
-Die Live-Ansicht braucht die Begleit-Integration und einen Roboter, dessen Integration die Position liefert
+Die Live-Ansicht braucht die Integration roomwise und einen Roboter, dessen Integration die Position liefert
 (Roborock, Dreame Vacuum, Xiaomi Cloud Map Extractor, Valetudo). Im Editor den Saugroboter auswählen: Er zeigt, woher
 die Position kommt (oder dass keine gefunden wurde), und lässt eine andere Karten-Entität wählen. Dann seine Karte am
 Plan ausrichten.

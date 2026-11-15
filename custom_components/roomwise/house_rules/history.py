@@ -14,7 +14,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN, EVENT_LOGBOOK, STORAGE_KEY_HISTORY, STORAGE_VERSION
+from .const import EVENT_LOGBOOK, INTEGRATION, STORAGE_KEY_HISTORY, STORAGE_VERSION
 from .i18n import quote, tr
 
 # i18n: complete
@@ -109,7 +109,7 @@ class History:
 
     def own_entity(self, key: str) -> str | None:
         platform, uid = OWN_ENTITIES.get(key, ("", ""))
-        return er.async_get(self.hass).async_get_entity_id(platform, DOMAIN, uid) if platform else None
+        return er.async_get(self.hass).async_get_entity_id(platform, INTEGRATION, uid) if platform else None
 
     def _logbook(self, kind: str, what: str, why: str, entity_id: str | None, context: Context | None) -> None:
         data = {"kind": kind, "what": what[:200], "why": why[:300]}

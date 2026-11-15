@@ -7,7 +7,7 @@ import importlib.util
 import pathlib
 import random
 
-spec = importlib.util.spec_from_file_location("heat_model", pathlib.Path(__file__).resolve().parents[2] / "custom_components/house_rules/heat_model.py")
+spec = importlib.util.spec_from_file_location("heat_model", pathlib.Path(__file__).resolve().parents[3] / "custom_components/roomwise/house_rules/heat_model.py")
 M = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(M)
 

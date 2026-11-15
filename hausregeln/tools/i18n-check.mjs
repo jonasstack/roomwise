@@ -6,7 +6,7 @@
 // Panel (src/): dictionaries in src/i18n/*.ts ({ de, en } per area)
 //   - German and English have the same keys, the same {placeholders}, no English text that is just the German one
 //   - every t('key') / tn('key', n) exists, every key is used (literally or through a t(`prefix${…}`) prefix)
-// Integration (custom_components/house_rules/): texts/*.json ({ "de": {…}, "en": {…} } per area)
+// Integration (custom_components/roomwise/house_rules/, translations next to the manifest in ../): texts/*.json ({ "de": {…}, "en": {…} } per area)
 //   - the same checks for tr(…, "key") / trn(…, "key", n)
 // Vocabulary: every German kind, verb and parameter of src/vocabulary.ts has English words in src/vocabulary-en.ts
 // Home Assistant translations: strings.json (English, the source) = translations/en.json, translations/de.json has the same keys
@@ -18,7 +18,9 @@ import * as esbuild from 'esbuild';
 
 const ROOT = new URL('../', import.meta.url).pathname;
 const SRC = join(ROOT, 'src');
-const PY = join(ROOT, 'custom_components', 'house_rules');
+const PY = join(ROOT, '..', 'custom_components', 'roomwise', 'house_rules');
+// the Home Assistant translations belong to the integration (roomwise), next to its manifest
+const HA = join(PY, '..');
 const strict = process.argv.includes('--strict');
 const list = process.argv.includes('--list');
 const errors = [];
@@ -223,9 +225,9 @@ for (const k of Object.keys(pyDe)) if (!pyCovered(k)) err('server', `unused key 
 // ---------------------------------------------------------------------------------------------- Home Assistant translations
 const shape = (o, p = '') => Object.entries(o).flatMap(([k, v]) => (v && typeof v === 'object' ? shape(v, `${p}${k}.`) : [`${p}${k}`])).sort();
 const flat = (o, p = '') => Object.fromEntries(Object.entries(o).flatMap(([k, v]) => (v && typeof v === 'object' ? Object.entries(flat(v, `${p}${k}.`)) : [[`${p}${k}`, v]])));
-const strings = JSON.parse(readFileSync(join(PY, 'strings.json'), 'utf8'));
-const haEn = JSON.parse(readFileSync(join(PY, 'translations', 'en.json'), 'utf8'));
-const haDe = JSON.parse(readFileSync(join(PY, 'translations', 'de.json'), 'utf8'));
+const strings = JSON.parse(readFileSync(join(HA, 'strings.json'), 'utf8'));
+const haEn = JSON.parse(readFileSync(join(HA, 'translations', 'en.json'), 'utf8'));
+const haDe = JSON.parse(readFileSync(join(HA, 'translations', 'de.json'), 'utf8'));
 if (JSON.stringify(strings) !== JSON.stringify(haEn)) err('ha', 'translations/en.json must equal strings.json (English is the source)');
 if (shape(haDe).join() !== shape(haEn).join()) err('ha', 'translations/de.json and en.json have different keys');
 for (const [k, v] of Object.entries(flat(haEn))) if (/[äöüÄÖÜß„]/.test(v) || GERMAN_WORDS.test(v)) err('ha', `translations/en.json ${k} looks German: ${v}`);

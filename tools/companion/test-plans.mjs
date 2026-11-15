@@ -10,7 +10,7 @@ const ws = await wsConnect(tok);
 // the companion is set up once (one click, nothing to fill in)
 let info = await ws.call({ type: 'floorplan_card/info' }).catch(() => undefined);
 if (!info?.loaded) {
-  const flow = await api('POST', '/api/config/config_entries/flow', { handler: 'floorplan_card' });
+  const flow = await api('POST', '/api/config/config_entries/flow', { handler: 'roomwise' });
   if (flow.body?.type === 'form') await api('POST', `/api/config/config_entries/flow/${flow.body.flow_id}`, {});
   info = await until(() => ws.call({ type: 'floorplan_card/info' }).then((i) => (i.loaded ? i : undefined)).catch(() => undefined), 15000);
 }
@@ -78,7 +78,7 @@ for (const msg of [
 uws.close();
 
 // diagnostics only count plans and images
-const entry = (await api('GET', '/api/config/config_entries/entry')).body.find((e) => e.domain === 'floorplan_card');
+const entry = (await api('GET', '/api/config/config_entries/entry')).body.find((e) => e.domain === 'roomwise');
 const diag = await api('GET', `/api/diagnostics/config_entry/${entry.entry_id}`);
 const d = JSON.stringify(diag.body);
 ok(diag.status === 200 && !d.includes('Testhaus') && !d.includes('Wohnen') && !d.includes('base64'), 'diagnostics: no plan names, rooms or pictures');

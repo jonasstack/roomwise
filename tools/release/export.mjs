@@ -51,8 +51,8 @@ const EXCLUDE = [
 ];
 /** built files that git doesn't know about but the export carries (fresh from the build) */
 const BUILT = [
-  'custom_components/floorplan_card/frontend',
-  'hausregeln/custom_components/house_rules/frontend/house-rules-panel.js',
+  'custom_components/roomwise/frontend',
+  'custom_components/roomwise/house_rules/frontend/house-rules-panel.js',
 ];
 
 const run = (cmd, argv, cwd = ROOT) => {
@@ -91,9 +91,9 @@ if (!flag('--skip-checks')) {
   run('npx', ['tsc', '-p', '.']);
   run('npx', ['tsc', '-p', '.'], join(ROOT, 'hausregeln'));
   run('node', ['tools/tests/i18n.mjs', '--strict']);
-  run('python3', ['-m', 'compileall', '-q', 'custom_components', 'hausregeln/custom_components']);
+  run('python3', ['-m', 'compileall', '-q', 'custom_components']);
   run('python3', ['hausregeln/tools/testha/test_webauthn.py']);
-  if (has('ruff')) run('ruff', ['check', 'custom_components', 'hausregeln/custom_components']);
+  if (has('ruff')) run('ruff', ['check', 'custom_components']);
   else console.log('(ruff not installed – Python lint runs in CI)');
 }
 

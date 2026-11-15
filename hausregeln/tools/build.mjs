@@ -48,15 +48,15 @@ writeFileSync('dist/preview.html', preview);
 console.log(`preview: ${(preview.length / 1024).toFixed(0)} KB`);
 
 // The vocabulary (kinds, verbs, German labels) for the integration and for other frontends
-// (floorplan card, language model prompt): custom_components/house_rules/vocabulary.json
+// (floorplan card, language model prompt): ../custom_components/roomwise/house_rules/vocabulary.json
 const vocab = await esbuild.build({ entryPoints: ['src/vocabulary.ts'], bundle: true, format: 'esm', platform: 'node', write: false });
 const mod = await import('data:text/javascript;base64,' + Buffer.from(vocab.outputFiles[0].text).toString('base64'));
 writeFileSync(
-  'custom_components/house_rules/vocabulary.json',
+  '../custom_components/roomwise/house_rules/vocabulary.json',
   // German words in kinds/modes/phrases.de (the base), English words under "en" and in phrases.en (same ids, only the texts)
   JSON.stringify({ kinds: mod.KINDS, modes: mod.MODES, phrases: mod.PHRASES, en: { kinds: mod.EN_KINDS, modes: mod.EN_MODES } }, null, 1),
 );
 // the integration serves the panel
 const { copyFileSync } = await import('node:fs');
-mkdirSync('custom_components/house_rules/frontend', { recursive: true }); // the built bundle is not in git
-copyFileSync('dist/house-rules-panel.js', 'custom_components/house_rules/frontend/house-rules-panel.js');
+mkdirSync('../custom_components/roomwise/house_rules/frontend', { recursive: true }); // the built bundle is not in git
+copyFileSync('dist/house-rules-panel.js', '../custom_components/roomwise/house_rules/frontend/house-rules-panel.js');

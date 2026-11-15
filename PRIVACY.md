@@ -26,7 +26,7 @@ reinstall picks up where you left off. Delete those files while Home Assistant i
 
 ## What leaves your network
 
-- **Card and companion integration:** nothing. Even the 3D models are served by your own Home Assistant.
+- **Card and the card part of roomwise:** nothing. Even the 3D models are served by your own Home Assistant.
   Notifications and announcements use your own `notify` and `tts` services, and only when you set them up.
 - **Hausregeln:** only what an administrator configures:
   - the **AI provider** you choose for sentence rules (a local Ollama, or Gemini, OpenAI, Anthropic, Mistral or

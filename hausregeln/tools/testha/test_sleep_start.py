@@ -10,10 +10,10 @@ import time
 from datetime import date, datetime, timezone
 from types import SimpleNamespace
 
-sys.path.insert(0, os.environ.get("HA_CONFIG_DIR", "/config"))  # CI: a folder whose custom_components/ holds house_rules
+sys.path.insert(0, os.environ.get("HA_CONFIG_DIR", "/config"))  # CI: a folder whose custom_components/ holds roomwise
 
-from custom_components.house_rules import conditions as C  # noqa: E402
-from custom_components.house_rules import habits as H  # noqa: E402
+from custom_components.roomwise.house_rules import conditions as C  # noqa: E402
+from custom_components.roomwise.house_rules import habits as H  # noqa: E402
 
 fails = 0
 
