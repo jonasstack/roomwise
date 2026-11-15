@@ -6,6 +6,12 @@ All notable changes to roomwise are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0-beta.1] - 2026-11-15
+
+The same as 0.1.0-beta.11 under a new number: GitHub and HACS sort versions as text, so "beta.11" came after
+"beta.9" and HACS kept offering 0.1.0-beta.9. From now on the beta counter stays below 10 and the minor version moves
+on instead.
+
 ## [0.1.0-beta.11] - 2026-11-15
 
 ### Added
@@ -499,7 +505,8 @@ The first public alpha. roomwise has been in daily use in one home before this r
 - Pause for motion sensors while a robot vacuum cleans.
 - Setup assistant and per-feature switches; after installation only the automatic house mode runs.
 
-[Unreleased]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.11...HEAD
+[Unreleased]: https://github.com/jonasstack/roomwise/compare/v0.2.0-beta.1...HEAD
+[0.2.0-beta.1]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.11...v0.2.0-beta.1
 [0.1.0-beta.11]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.10...v0.1.0-beta.11
 [0.1.0-beta.10]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.9...v0.1.0-beta.10
 [0.1.0-beta.9]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.8...v0.1.0-beta.9

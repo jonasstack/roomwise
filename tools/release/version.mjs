@@ -1,7 +1,7 @@
 // Shows or sets the version of every part of roomwise at once (card, companion integration, Hausregeln).
 //   node tools/release/version.mjs              print all versions, exit 1 if they differ
 //   node tools/release/version.mjs 0.1.0-beta.3
-//   node tools/release/version.mjs --bump       next pre-release: 0.1.0-beta.2 -> 0.1.0-beta.3
+//   node tools/release/version.mjs --bump       next pre-release: 0.2.0-beta.2 -> 0.2.0-beta.3, after .9: 0.3.0-beta.1
 // When both integrations become the single `roomwise` integration, drop the entries that no longer exist below.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -53,7 +53,14 @@ function setAll(v) {
 function next(v) {
   const m = v.match(/^(\d+\.\d+\.\d+)-(alpha|beta|rc)\.(\d+)$/);
   if (!m) throw new Error(`--bump only counts up pre-releases (${v}); pass the new version instead`);
-  return `${m[1]}-${m[2]}.${Number(m[3]) + 1}`;
+  const n = Number(m[3]) + 1;
+  // GitHub and HACS order release tags as text ("beta.10" before "beta.9"): the counter stays one digit, after .9 the
+  // minor version moves on (0.2.0-beta.9 -> 0.3.0-beta.1)
+  if (n > 9) {
+    const [maj, min] = m[1].split('.').map(Number);
+    return `${maj}.${min + 1}.0-${m[2]}.1`;
+  }
+  return `${m[1]}-${m[2]}.${n}`;
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
