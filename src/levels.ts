@@ -43,6 +43,14 @@ export function stairsTarget(cfg: Pick<FloorplanCardConfig, 'floors'>, floorId: 
   return own ?? floorAbove(cfg, floorId, hass) ?? floorBelow(cfg, floorId, hass);
 }
 
+/** The stairs of the floor below that lead up to this floor (its stairwell here), with the way back down */
+export function stairsFromBelow(cfg: Pick<FloorplanCardConfig, 'floors'>, floorId: string | undefined, hass?: HomeAssistant): { pieces: FurnitureConfig[]; to: string; name: string } | undefined {
+  const below = floorBelow(cfg, floorId, hass);
+  if (!below || !floorId) return undefined;
+  const pieces = (below.furniture ?? []).filter((f) => f.kind === 'stairs' && stairsTarget(cfg, below.id, f, hass)?.id === floorId);
+  return pieces.length ? { pieces, to: below.id, name: below.name } : undefined;
+}
+
 const SHORT: [RegExp, string | ((m: RegExpMatchArray) => string)][] = [
   [/(\d+)\s*\.?\s*(ober|og\b)/i, (m) => `${m[1]}.OG`],
   [/(\d+)\s*\.?\s*(unter|ug\b)/i, (m) => `${m[1]}.UG`],

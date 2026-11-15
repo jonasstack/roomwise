@@ -124,6 +124,86 @@ ok(await page.evaluate(`${sr('fp-vacuum-start .vp')}?.dataset.state === 'unsuppo
 errs.push(...m.errors);
 await m.browser.close();
 
+// 5. a house: Home Assistant knows two floors, the robot keeps three maps (one not loaded) — one floor per map with
+// geometry, put on Home Assistant's floor whose areas its rooms match, the robot on the floor of the map it uses
+const upper = { floor_res: 100, wall_res: 50, rooms: [], walls: [], charger: null };
+const cellsUp = (id, name, x0, y0, x1, y1) => {
+  const pts = [];
+  for (let x = x0 + 50; x < x1; x += 100) for (let y = y0 + 50; y < y1; y += 100) pts.push([x, y]);
+  upper.rooms.push({ id, name, pts });
+};
+cellsUp('11', 'Schlafzimmer', 0, 0, 4000, 3500);
+cellsUp('12', 'Bad', 4050, 0, 6500, 3500);
+for (let x = -25; x <= 6525; x += 50) upper.walls.push([x, -25], [x, 3525]);
+for (let y = -25; y <= 3525; y += 50) upper.walls.push([-25, y], [6525, y], [4025, y]);
+const haFloors = { eg: { floor_id: 'eg', name: 'Erdgeschoss', level: 0 }, og: { floor_id: 'og', name: 'Obergeschoss', level: 1 } };
+const haAreas = { living: { area_id: 'living', name: 'Wohnzimmer', floor_id: 'eg' }, bed: { area_id: 'bed', name: 'Schlafzimmer', floor_id: 'og' }, bath: { area_id: 'bath', name: 'Bad', floor_id: 'og' } };
+const maps = { select: 'select.robbi_karte', maps: [ { id: '0', name: 'Map 1', current: true, map }, { id: '1', name: 'Oben', current: false, map: upper }, { id: '2', name: 'Keller', current: false, map: null } ] };
+m = await openMock({ config, states, areas: haAreas, floors: haFloors, size: '1280x900', ws: { 'floorplan_card/vacuums/info': info, 'floorplan_card/vacuums/maps': maps } });
+page = m.page;
+await wait(900);
+ok(await page.evaluate(`${sr('.onboard-home [data-home="house"]')}?.getAttribute('aria-pressed') === 'true'`), 'welcome: "Haus" suggested (Home Assistant has two floors)');
+await page.evaluate(`${sr('.onboard-vacuum')}.click()`);
+await page.waitForFunction(`!!${sr('fp-vacuum-start .vp-preview')}`, null, { timeout: 8000 }).catch(() => {});
+const house = await page.evaluate(`(() => { const v = ${sr('fp-vacuum-start')}; return { house: v.querySelector('[data-home="house"]')?.getAttribute('aria-pressed'), n: v.querySelector('[data-floors-n]')?.textContent, tabs: [...v.querySelectorAll('.vp-tab')].map((b) => b.textContent.trim()), miss: [...v.querySelectorAll('.vp-miss')].map((x) => x.dataset.map), summary: v.querySelector('.vp-summary')?.textContent }; })()`);
+ok(house.house === 'true' && house.n === '2', `preview: house with 2 floors (${house.n})`, house);
+ok(house.tabs.length === 2 && /Obergeschoss/.test(house.tabs[0]) && /Erdgeschoss/.test(house.tabs[1]), `one tab per floor, top first, named after Home Assistant (${house.tabs})`, house);
+ok(house.miss.length === 1 && house.miss[0] === '2', 'the map without geometry is named with a hint', house);
+if (out) await page.screenshot({ path: `${out}/vacuum-plan-house.png` });
+await page.evaluate(`${sr('fp-vacuum-start .vp-switch')}.click()`);
+await wait(150);
+ok(!(await m.calls()).length, 'switching the robot\'s map: the first tap only asks');
+await page.evaluate(`${sr('fp-vacuum-start .vp-switch')}.click()`);
+await wait(200);
+const sw = await m.calls();
+ok(sw.some((c) => c.domain === 'select' && c.service === 'select_option' && c.target?.entity_id === 'select.robbi_karte' && c.data?.option === 'Keller'), 'second tap: the robot switches to that map (docked)', sw);
+// a third floor: the plus adds an empty one on top
+await page.evaluate(`${sr('fp-vacuum-start [data-floors-plus]')}.click()`);
+await wait(300);
+ok((await page.evaluate(`${sr('fp-vacuum-start')}.querySelectorAll('.vp-tab').length`)) === 3, 'plus: a third (empty) floor');
+await page.evaluate(`${sr('fp-vacuum-start [data-floors-minus]')}.click()`);
+await wait(300);
+await page.evaluate(`${sr('fp-vacuum-start .vp-apply')}.click()`);
+await wait(1800);
+const fl = JSON.parse(await ed('JSON.stringify(ed._draft.floors)'));
+const eg = fl.find((f) => f.floor === 'eg');
+const og = fl.find((f) => f.floor === 'og');
+ok(fl.length === 2 && eg && og, `draft: two floors, linked to Home Assistant's (${fl.map((f) => f.name)})`, fl.map((f) => ({ n: f.name, fl: f.floor, l: f.level })));
+ok(eg?.name === 'Erdgeschoss' && eg.level === 0 && og?.name === 'Obergeschoss' && og.level === 1, 'names and levels from Home Assistant');
+ok(eg?.rooms.some((r) => r.name === 'Wohnzimmer') && og?.rooms.map((r) => r.name).sort().join() === 'Bad,Schlafzimmer', 'each map on its floor (rooms matched to the floor\'s areas)', { eg: eg?.rooms.map((r) => r.name), og: og?.rooms.map((r) => r.name) });
+ok(eg?.furniture.some((p) => p.kind === 'robot_vacuum') && !og?.furniture.some((p) => p.kind === 'robot_vacuum'), 'the robot stands on the floor of the map it uses now');
+const ids = fl.flatMap((f) => [...f.rooms, ...(f.openings ?? []), ...(f.furniture ?? [])].map((x) => x.id));
+ok(new Set(ids).size === ids.length, 'ids unique across floors');
+errs.push(...m.errors);
+await m.browser.close();
+
+// 6. first steps: "draw it yourself" for a house starts with its floors; no hints → a flat
+m = await openMock({ config, states: {}, floors: haFloors, areas: haAreas, size: '1280x900' });
+page = m.page;
+await wait(800);
+await page.evaluate(`${sr('.onboard-start')}.click()`);
+await wait(1500);
+const drawn = JSON.parse(await ed('JSON.stringify(ed._draft.floors.map((f) => ({ name: f.name, floor: f.floor, level: f.level })))'));
+ok(drawn.length === 2 && drawn.some((f) => f.floor === 'eg') && drawn.some((f) => f.floor === 'og'), `draw it yourself, house: two empty floors from Home Assistant (${drawn.map((f) => f.name)})`, drawn);
+errs.push(...m.errors);
+await m.browser.close();
+m = await openMock({ config, states: {}, size: '390x844' });
+page = m.page;
+await wait(800);
+ok(await page.evaluate(`${sr('.onboard-home [data-home="flat"]')}?.getAttribute('aria-pressed') === 'true'`), 'nothing points to a house: "Wohnung"');
+await page.evaluate(`${sr('.onboard-home [data-home="house"]')}.click()`);
+await wait(200);
+await page.evaluate(`${sr('.onboard-home [data-floors-plus]')}.click()`);
+await wait(200);
+ok((await page.evaluate(`${sr('.onboard-home [data-floors-n]')}?.textContent`)) === '3', 'house: the number of floors can be set');
+if (out) await page.screenshot({ path: `${out}/onboard-house-phone.png` });
+await page.evaluate(`${sr('.onboard-start')}.click()`);
+await wait(1500);
+const three = JSON.parse(await ed('JSON.stringify(ed._draft.floors.map((f) => ({ name: f.name, level: f.level })))'));
+ok(three.length === 3 && three.map((f) => f.name).join() === 'Erdgeschoss,Obergeschoss,Dachgeschoss', `three floors named by storey (${three.map((f) => f.name)})`, three);
+errs.push(...m.errors);
+await m.browser.close();
+
 // 4. no vacuum: the path is not offered
 m = await openMock({ config, states: {}, size: '1280x900' });
 await wait(700);

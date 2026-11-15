@@ -20,6 +20,10 @@ function getRenderer(): WebGLRenderer | undefined {
   }, 15000);
   if (renderer) return renderer;
   try {
+    // no WebGL 2 here (switched off, blocklisted GPU): no picture, and no error from three.js in the console
+    const probe = document.createElement('canvas').getContext('webgl2');
+    if (!probe) return undefined;
+    probe.getExtension('WEBGL_lose_context')?.loseContext();
     const canvas = document.createElement('canvas');
     renderer = new WebGLRenderer({ canvas, alpha: true, antialias: true, preserveDrawingBuffer: true });
     renderer.outputColorSpace = SRGBColorSpace;

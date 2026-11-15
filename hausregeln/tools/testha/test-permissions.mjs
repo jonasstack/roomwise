@@ -169,9 +169,12 @@ const MATRIX = {
   'floorplan_card/vacuums/learned': ['any', { entity: 'vacuum.none' }],
   'floorplan_card/vacuums/path': ['any', { entity: 'vacuum.none' }],
   'floorplan_card/vacuums/map': ['any', { entity: 'vacuum.none' }],
+  'floorplan_card/vacuums/maps': ['any', { entity: 'vacuum.none' }],
   'floorplan_card/vacuums/reset': ['admin', { entity: 'vacuum.none' }],
   'floorplan_card/wifi/get': ['any', {}],
   'floorplan_card/wifi/set': ['admin', { networks: [] }],
+  'floorplan_card/appliance/acks': ['any', {}],
+  'floorplan_card/appliance/ack': ['any', { piece_id: 'perm_washer' }],
 };
 
 // ---------------------------------------------------------------- every command in the sources is in the matrix and registered

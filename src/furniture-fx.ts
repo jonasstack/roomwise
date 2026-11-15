@@ -1,8 +1,9 @@
 import { svg, type TemplateResult } from 'lit';
 import type { FloorConfig, FurnitureConfig, HassEntity, RoomConfig } from './types';
-import { resolveFurniture } from './furniture';
+import { furnitureContents, resolveFurniture } from './furniture';
 import { domainOf, isActive, lightRgb, rgbCss } from './ha';
 import { pointInPolygon, round } from './geometry';
+import { APPLIANCE_KINDS, applianceStatus, applianceWatch } from './appliance';
 
 /**
  * Live effect of a piece's linked entity: lamps glow in their light color, heaters glow warm,
@@ -28,6 +29,8 @@ const NOTICE = '#ffb340';
 /** Alarm, smoke, leak, offline */
 const ALARM = '#ff453a';
 const CHARGE = '#3ee07a';
+/** washer & co. done, not seen yet */
+const DONE = '#34c759';
 
 /** A ring that tells something (alarm, open lock, charging …) — not the plain "switched on" one, which the piece's
  * own status light shows calmly */
@@ -74,7 +77,41 @@ function statusFx(role: string, d: string, s: HassEntity): FurnitureFx | undefin
 
 const OFF = new Set(['off', 'unavailable', 'unknown', 'idle', 'standby', 'closed']);
 
+/** Motion / presence: binary sensors that say someone is there */
+const MOTION = new Set(['motion', 'occupancy', 'presence', 'moving']);
+
+/**
+ * Stairs: lit while one of their lights (the main entity or one inside) is on, or one of their motion sensors sees
+ * someone — always soft (they stay in the background of the plan): a low level, warm white.
+ */
+export function stairsLit(f: FurnitureConfig, getState: (id: string) => HassEntity | undefined): number {
+  const ids = [f.entity, ...furnitureContents(f).map((c) => c.entity)].filter((e): e is string => !!e);
+  let level = 0;
+  for (const id of new Set(ids)) {
+    const s = getState(id);
+    if (!s) continue;
+    const d = domainOf(id);
+    if (d === 'light' && s.state === 'on') level = Math.max(level, 0.35 + 0.65 * ((s.attributes.brightness ?? 255) / 255));
+    else if ((d === 'switch' || d === 'input_boolean') && s.state === 'on') level = Math.max(level, 1);
+    else if (d === 'binary_sensor' && s.state === 'on' && MOTION.has(String(s.attributes.device_class ?? 'motion'))) level = Math.max(level, 0.6);
+  }
+  return level;
+}
+
 export function furnitureFx(f: FurnitureConfig, getState: (id: string) => HassEntity | undefined, rooms?: RoomConfig[]): FurnitureFx | undefined {
+  if (resolveFurniture(f).k?.kind === 'stairs') {
+    // stairs glow softly on their own (lit treads); a gentle pool, never the full lamp look
+    const lit = stairsLit(f, getState);
+    return lit ? { kind: 'light', color: LAMP, level: 0.25 * lit } : undefined;
+  }
+  // washer, dryer, dishwasher: the display lights while it runs; "fertig" shows as a soft green ring until seen
+  const ak = resolveFurniture(f).k?.kind;
+  if (ak && APPLIANCE_KINDS.has(ak) && (f.entity || f.entities) && applianceWatch?.hass) {
+    const a = applianceStatus(applianceWatch.hass, f, ak, getState);
+    if (a.phase === 'done') return { kind: 'power', color: DONE, level: 1 };
+    if (a.phase === 'running' || a.phase === 'paused') return { kind: 'power', color: POWER, level: a.phase === 'running' ? 1 : 0.5 };
+    return undefined;
+  }
   if (!f.entity) {
     // an unlinked radiator / heater heats with its room's thermostat
     if (!rooms || resolveFurniture(f).role !== 'heat' || !ROOM_HEAT.has(resolveFurniture(f).k?.kind ?? '')) return undefined;

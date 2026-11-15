@@ -64,7 +64,7 @@ import { FLOOR_TYPE } from '../floors';
 import type { SunInfo } from '../ambient';
 import { wallBody, wallPieces, windowInward } from '../walls';
 import { DOOR_OPEN_DEG, coverLive, garageDepth, openingGeometry, openingState, windowOpenSign, windowSashes } from '../openings';
-import { drawFurniture, fridgeList, resolveFurniture } from '../furniture';
+import { drawFurniture, fridgeList, resolveFurniture, stairPlan } from '../furniture';
 import { furnitureParts, setDetail, type Part } from '../furniture3d';
 import { furnitureFx, isStatusRing, type FurnitureFx } from '../furniture-fx';
 import { DOOR_TOP, WINDOW_SILL, WINDOW_TOP, floatHeight, isFloating, onFootprint, paint } from '../plan3d';
@@ -115,6 +115,8 @@ export interface GlBuild {
   all?: FurnitureConfig[];
   /** stairs that lead down from this floor: drawn as the stairwell seen from above (flat, with their drawing) */
   stairsDown?: Set<string>;
+  /** stairs to another floor (id → leads up): the dog now and then goes up (or down) them */
+  stairsTo?: Map<string, boolean>;
   /** Pets: walk / presence state, the way to the front door, the walkable grid of the home */
   pet?: (f: FurnitureConfig) => { state?: PetState; way?: { path: Point[]; face: Point }; door?: { inside: Point; face: Point }; nav?: (allowClosed: boolean) => NavGrid | undefined };
 }
@@ -146,7 +148,7 @@ interface DogLife {
   heading: number;
   /** speed (cm/s) */
   v: number;
-  task: 'sleep' | 'rest' | 'wake' | 'idle' | 'walk' | 'eat' | 'toDoor' | 'door';
+  task: 'sleep' | 'rest' | 'wake' | 'idle' | 'walk' | 'eat' | 'toDoor' | 'door' | 'toStairs' | 'climb' | 'away';
   until: number;
   last: number;
   seed: number;
@@ -159,6 +161,38 @@ interface DogLife {
   lying?: boolean;
   /** a pose change is still blending (full frame rate until then) */
   settle?: number;
+  /** height above the floor (cm): on the stairs */
+  z?: number;
+  /** the stairs it takes (index into its trips), how far along, and whether it is on the way back */
+  trip?: number;
+  climbI?: number;
+  climbBack?: boolean;
+}
+
+/** The dog's way over stairs (plan cm): from a free spot in front of them along the walking line, with the height
+ *  at every point — up to the top (stairs up), or down into the stairwell (stairs leading down) */
+function stairWay(s: FurnitureConfig, up: boolean, free: (p: [number, number]) => [number, number] | undefined): { foot: Vector2; pts: Vector2[]; zs: number[] } | undefined {
+  const r = resolveFurniture(s);
+  const sp = stairPlan(s.w, s.h, r.variant, r.count);
+  if (sp.line.length < 2) return undefined;
+  const a = ((s.rotation ?? 0) * Math.PI) / 180;
+  const ca = Math.cos(a);
+  const sa = Math.sin(a);
+  const world = (p: [number, number]) => new Vector2(s.x + p[0] * ca - p[1] * sa, s.y + p[0] * sa + p[1] * ca);
+  // up: from the bottom step; down (seen from the upper floor): in at the top end, down to the bottom
+  const line = (up ? sp.line : [...sp.line].reverse()).map((p) => world(p as [number, number]));
+  const out = line[0].clone().sub(line[1]).normalize();
+  const want = line[0].clone().add(out.multiplyScalar(Math.max(30, s.w * 0.25)));
+  const f = free([want.x, want.y]);
+  if (!f) return undefined;
+  const foot = new Vector2(...f);
+  const pts = [foot, ...line];
+  let total = 0;
+  const cum = [0];
+  for (let i = 1; i < pts.length; i++) cum.push((total += pts[i].distanceTo(pts[i - 1])));
+  const H = r.height;
+  const zs = cum.map((c, i) => (i === 0 ? 0 : ((up ? 1 : -1) * H * c) / (total || 1)));
+  return { foot, pts, zs };
 }
 
 interface FurnScene {
@@ -276,7 +310,9 @@ export class GlScene {
     try {
       const c = document.createElement('canvas');
       // three.js needs WebGL 2; devices with WebGL 1 only get the CSS 3D view
-      return !!c.getContext('webgl2');
+      const gl = c.getContext('webgl2');
+      gl?.getExtension('WEBGL_lose_context')?.loseContext();
+      return !!gl;
     } catch {
       return false;
     }
@@ -1234,7 +1270,8 @@ export class GlScene {
     g.position.set(f.x, f.y, 0);
     g.rotation.z = (f.rotation ?? 0) * DEG;
     // every piece except flat rugs takes taps (unlinked pieces then do nothing instead of passing the tap to the room)
-    const tappable = r.k?.kind !== 'rug';
+    // stairs without a device stay in the background too (their chip leads to the other floor)
+    const tappable = r.k?.kind !== 'rug' && !(r.k?.kind === 'stairs' && !f.entity && !f.contents?.length);
     g.userData = { id: f.id, linked: !!f.entity, fx, keep: o.editing || !!f.entity || r.role === 'heat', tappable };
     const capped = !onTop && !floating && !r.ceiling && !isLight;
     // merge runs of turned slices (lathe / sphere) into one smooth body
@@ -1730,7 +1767,7 @@ export class GlScene {
     const g = new Group();
     g.position.set(f.x, f.y, 0);
     g.rotation.z = (f.rotation ?? 0) * DEG;
-    const animated = ['lawn_mower', 'sprinkler', 'irrigation_zone', 'solar_panels', 'home_battery', 'wallbox', 'heat_pump', 'firepit', 'car', 'gate', 'garage_door'].includes(kind);
+    const animated = ['lawn_mower', 'sprinkler', 'irrigation_zone', 'solar_panels', 'home_battery', 'wallbox', 'heat_pump', 'firepit', 'car', 'gate', 'garage_door', 'washer', 'dryer', 'dishwasher'].includes(kind);
     g.userData = { id: f.id, linked: !!f.entity, fx, keep: o.editing || !!f.entity || animated, tappable: true };
     const matFn = (key: string, make: () => Material) => {
       let mm = this.materials.get(key);
@@ -1796,6 +1833,35 @@ export class GlScene {
         g.userData.anim = (now: number) => {
           flame.scale.set(1 + Math.sin(now / 70) * 0.06, 1 + Math.sin(now / 83) * 0.06, 1 + Math.sin(now / 90) * 0.16 + Math.sin(now / 37) * 0.08);
           (sp.material as SpriteMaterial).opacity = 0.42 + Math.sin(now / 110) * 0.08;
+          return 50;
+        };
+        break;
+      }
+      case 'washer':
+      case 'dryer':
+      case 'dishwasher': {
+        // running: the display lights and the drum turns slowly; done: a green display and a quiet ring until seen
+        if (!fx) break;
+        for (const m of this.ownMaterials(body, 'display')) {
+          const mat = m.material as MeshLambertMaterial;
+          mat.color.set(fx.color);
+          mat.emissive?.set(fx.color).multiplyScalar(fx.level >= 1 ? 0.75 : 0.4);
+        }
+        if (isStatusRing(fx)) {
+          const reach = Math.max(f.w, f.h);
+          const ring = new Mesh(UNIT_PLANE, this.shimmerMaterial(fx));
+          ring.scale.set(reach + 26, reach + 26, 1);
+          ring.position.set(0, 0, r.elevation + 0.4);
+          ring.raycast = () => {};
+          ring.renderOrder = 4;
+          g.add(ring);
+        }
+        const drum = named('drum');
+        if (!drum || isStatusRing(fx) || fx.level < 1) break;
+        let last = this.animNow();
+        g.userData.anim = (now: number) => {
+          drum.rotation.z += ((now - last) / 1000) * 1.4;
+          last = now;
           return 50;
         };
         break;
@@ -2498,6 +2564,11 @@ export class GlScene {
         return p ? { at: new Vector2(...p), face: Math.atan2(x.y - p[1], x.x - p[0]) } : undefined;
       })
       .filter((x): x is { at: Vector2; face: number } => !!x);
+    // stairs to another floor: now and then it goes up (or down) them, stays away a while, and comes back
+    const trips = (o.all ?? [])
+      .filter((s) => resolveFurniture(s).k?.kind === 'stairs' && o.stairsTo?.has(s.id))
+      .map((s) => stairWay(s, o.stairsTo!.get(s.id)!, (p) => (nav0 ? nearestFree(nav0, p, 90) : p)))
+      .filter((x): x is { foot: Vector2; pts: Vector2[]; zs: number[] } => !!x);
     const due = st?.mode === 'due';
     // speeds (cm/s) and how fast the legs move for them: the clips cover 0.405 (walk) and 1.3 (gallop) body
     // lengths per second at normal speed — the legs never slide
@@ -2598,6 +2669,12 @@ export class GlScene {
       a.play(sleep ? 'Sleep' : 'Lie', { fade: 1.3 });
       L.settle = now + 1500;
     };
+    // the dog wants out while it is on (or behind) the stairs: back at their foot first
+    if (due && (L.task === 'climb' || L.task === 'away' || L.task === 'toStairs')) {
+      const tr = trips[L.trip ?? 0];
+      if (tr) L.pos.copy(tr.foot);
+      L.z = 0;
+    }
     // the dog wants out: to the front door
     if (due && info.door) {
       if (L.task !== 'toDoor' && L.task !== 'door') {
@@ -2671,6 +2748,13 @@ export class GlScene {
               const spot = randomSpot(nav, Math.floor(rnd() * 1e6), [L.pos.x, L.pos.y], L0 * 2.2);
               L.after = rnd() < 0.55 ? 'sniff' : 'look';
               ok = !!spot && go(new Vector2(...spot));
+            } else if (x < 0.8 && trips.length) {
+              // up (or down) the stairs for a while
+              L.trip = Math.floor(rnd() * trips.length);
+              if (go(trips[L.trip].foot)) {
+                L.task = 'toStairs';
+                break;
+              }
             } else {
               L.after = 'lie';
               ok = go(restAt);
@@ -2697,6 +2781,78 @@ export class GlScene {
               L.task = 'idle';
               L.until = now + 3000 + rnd() * 4000;
               a.play(rnd() < 0.5 ? 'Idle' : 'Idle_2', { fade: 0.5 });
+            }
+          }
+          break;
+        case 'toStairs':
+          gait(a);
+          if (move(dt, WALK)) {
+            L.task = 'climb';
+            L.climbI = 0;
+            L.climbBack = false;
+          }
+          break;
+        case 'climb': {
+          // step by step along the walking line, the body rising (or sinking) with the treads
+          const tr = trips[L.trip ?? 0];
+          if (!tr) {
+            L.z = 0;
+            L.task = 'idle';
+            L.until = now + 2000;
+            break;
+          }
+          const pts = L.climbBack ? [...tr.pts].reverse() : tr.pts;
+          const zs = L.climbBack ? [...tr.zs].reverse() : tr.zs;
+          let i = L.climbI ?? 0;
+          let step = WALK * 0.5 * dt;
+          L.v = WALK * 0.5;
+          a.play('Walk', { fade: 0.3, speed: 0.75 });
+          while (step > 0 && i < pts.length - 1) {
+            const to = pts[i + 1];
+            const d = L.pos.distanceTo(to);
+            turnTo(Math.atan2(to.y - L.pos.y, to.x - L.pos.x), 5, dt);
+            if (d <= step) {
+              L.pos.copy(to);
+              step -= d;
+              i++;
+            } else {
+              L.pos.add(to.clone().sub(L.pos).multiplyScalar(step / d));
+              step = 0;
+            }
+          }
+          L.climbI = i;
+          if (i < pts.length - 1) {
+            const seg = pts[i].distanceTo(pts[i + 1]) || 1;
+            const k = Math.min(1, pts[i].distanceTo(L.pos) / seg);
+            L.z = zs[i] + (zs[i + 1] - zs[i]) * k;
+          } else if (!L.climbBack) {
+            // arrived on the other floor: out of sight for a while
+            L.z = zs[zs.length - 1];
+            L.v = 0;
+            L.task = 'away';
+            L.until = now + 40000 + rnd() * 80000;
+          } else {
+            L.z = 0;
+            L.v = 0;
+            L.task = 'idle';
+            L.until = now + 2500 + rnd() * 3000;
+            a.play('Idle', { fade: 0.5 });
+          }
+          next = 33;
+          break;
+        }
+        case 'away':
+          next = attended ? 500 : false;
+          if (now > L.until) {
+            const tr = trips[L.trip ?? 0];
+            if (tr) {
+              L.pos.copy(tr.pts[tr.pts.length - 1]);
+              L.task = 'climb';
+              L.climbI = 0;
+              L.climbBack = true;
+            } else {
+              L.task = 'idle';
+              L.z = 0;
             }
           }
           break;
@@ -2746,9 +2902,9 @@ export class GlScene {
       }
       a.update(dt);
       setShadow(L.task === 'sleep' || L.task === 'rest' || (L.task === 'door' && !!L.lying));
-      g.position.set(L.pos.x, L.pos.y, 0);
+      g.position.set(L.pos.x, L.pos.y, L.task === 'climb' || L.task === 'away' ? (L.z ?? 0) : 0);
       g.rotation.z = L.heading;
-      g.visible = !o.focus || L.task === 'toDoor' || L.task === 'door' || pointInPolygon([L.pos.x, L.pos.y], o.focus.points);
+      g.visible = L.task !== 'away' && (!o.focus || L.task === 'toDoor' || L.task === 'door' || pointInPolygon([L.pos.x, L.pos.y], o.focus.points));
       if (leash.visible) {
         const head = a.bone('Head');
         if (head) {

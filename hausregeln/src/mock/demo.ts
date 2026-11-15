@@ -612,7 +612,7 @@ const placesDemo: PlacesView = {
   ],
   learned: [
     { id: 'lp_demo1', name: 'Sportverein', label: 'Sportverein', lat: 52.55, lon: 13.3, radius: 90, visits: 14, typical: { days: 'workdays', arrive: '18:00', stay_min: 85 } },
-    { id: 'lp_demo2', name: '', label: 'Gelernter Ort', lat: 52.5, lon: 13.45, radius: 70, visits: 4, street: null, typical: { days: 'weekend', arrive: '10:00', stay_min: 50 } },
+    { id: 'lp_demo2', name: '', label: 'Supermarkt Beispielweg', auto: 'Supermarkt Beispielweg', lat: 52.5, lon: 13.45, radius: 70, visits: 4, street: null, typical: { days: 'weekend', arrive: '10:00', stay_min: 50 } },
   ],
   settings: { learn: true, nominatim: false },
   stats: { trips: 212, warming: false },

@@ -45,6 +45,7 @@ LOADER_URL = "/floorplan_card_loader.js"
 FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
 # walk check-offs of one day (any user may send them): at most this many pets in all, slots per pet
 MAX_WALK_KEYS = 200
+MAX_APPLIANCE_ACKS = 200
 MAX_WALK_SLOTS = 48
 
 
@@ -69,6 +70,8 @@ class FloorplanData:
         self.learned: dict[str, Any] = {}
         # the current run's trail per vacuum entity (kept across restarts: a tablet loading mid-run shows it all)
         self.paths: dict[str, Any] = {}
+        # washer / dryer / dishwasher "fertig" seen: piece id → when (epoch seconds), the same on every screen
+        self.appliance_acks: dict[str, float] = {}
         self.vacuum_listeners: set[Callable[[str], None]] = set()
         # shared floor plans and trace images (own storage files)
         self.plans = PlanStore(hass)
@@ -86,6 +89,7 @@ class FloorplanData:
         self.reminded = data.get("reminded", {})
         self.learned = data.get("learned", {})
         self.paths = data.get("paths", {})
+        self.appliance_acks = {k: float(v) for k, v in (data.get("appliance_acks") or {}).items() if isinstance(v, (int, float))}
         # "songs" of the former song recognition (removed) is dropped with the next save
         for card_id, card in self.cards.items():
             if card.get("entry_alert"):
@@ -101,7 +105,20 @@ class FloorplanData:
         self.store.async_delay_save(self.stored, 5)
 
     def stored(self) -> dict[str, Any]:
-        return {"cards": self.cards, "walks": self.walks, "reminded": self.reminded, "learned": self.learned, "paths": self.paths}
+        return {"cards": self.cards, "walks": self.walks, "reminded": self.reminded, "learned": self.learned, "paths": self.paths, "appliance_acks": self.appliance_acks}
+
+    # ---------- washer, dryer, dishwasher: "Gesehen" ----------
+
+    def appliance_ack(self, piece_id: str) -> dict[str, float]:
+        """Somebody saw that it is done (any user may): kept a week, at most 200 appliances."""
+        now = dt_util.utcnow().timestamp()
+        acks = {k: v for k, v in self.appliance_acks.items() if now - v < 7 * 86400}
+        acks[piece_id] = now
+        if len(acks) > MAX_APPLIANCE_ACKS:
+            acks = dict(sorted(acks.items(), key=lambda kv: kv[1])[-MAX_APPLIANCE_ACKS:])
+        self.appliance_acks = acks
+        self._save()
+        return dict(acks)
 
     def _arm(self, card_id: str, cfg: dict[str, Any]) -> None:
         old = self.alerts.pop(card_id, None)

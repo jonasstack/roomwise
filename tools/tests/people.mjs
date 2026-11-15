@@ -17,11 +17,40 @@ const persons = {
 };
 const cfg = demoHome();
 
-// off by default
+// on by default (persons in HA), off only with people: false
 let m = await openMock({ config: { ...cfg, view_mode: '2d' }, states: { ...demoStates(), ...persons }, entities: demoEntities, size: '1024x768', scheme });
 await wait(1500);
-ok((await m.card('!card.shadowRoot.querySelector(".hr-chip.people")')) === true, 'ohne Einstellung: kein „Wer ist wo“');
+ok((await m.card('card.shadowRoot.querySelectorAll(".hr-chip.people .pp-av").length')) === 3, 'ohne Einstellung: „Wer ist wo“ ist an');
 await m.browser.close();
+m = await openMock({ config: { ...cfg, view_mode: '2d', people: false }, states: { ...demoStates(), ...persons }, entities: demoEntities, size: '1024x768', scheme });
+await wait(1500);
+ok((await m.card('!card.shadowRoot.querySelector(".hr-chip.people")')) === true, 'people: false → kein „Wer ist wo“');
+await m.browser.close();
+
+// many people: side by side, the rings (4 px around each picture) never overlap, "+N" beyond four; nothing pushed
+// into the weather or the house mode
+const many = { ...persons, 'person.lou': { state: 'home', attributes: { friendly_name: 'Lou Beispiel' } }, 'person.mo': { state: 'home', attributes: { friendly_name: 'Mo Beispiel' } } };
+for (const size of ['1024x768', '390x844']) {
+  m = await openMock({ config: { ...cfg, view_mode: '2d' }, states: { ...demoStates(), ...many }, entities: demoEntities, size, scheme });
+  await wait(1500);
+  const geo = await m.card(`(() => {
+    const r = (e) => { const b = e.getBoundingClientRect(); return { l: b.left, r: b.right, t: b.top, b: b.bottom }; };
+    const av = [...card.shadowRoot.querySelectorAll('.hr-chip.people .pp-av')].map(r);
+    const chip = card.shadowRoot.querySelector('.hr-chip.people');
+    const others = [...card.shadowRoot.querySelectorAll('.chrome.top .left > *')].filter((e) => !e.contains(chip)).map(r);
+    return { av, chip: r(chip), others, more: card.shadowRoot.querySelector('.hr-chip.people .pp-n')?.textContent ?? null };
+  })()`);
+  const RING = 4;
+  const overlap = geo.av.some((a, i) => geo.av.some((b, j) => j > i && a.l - RING < b.r + RING && b.l - RING < a.r + RING && a.t < b.b && b.t < a.b));
+  ok(geo.av.length === 5 && !overlap, `${size}: 4 Bilder + „+N“ nebeneinander, Ringe überschneiden sich nicht (${geo.av.map((a) => Math.round(a.l)).join(', ')})`);
+  ok(geo.more === '+1', `${size}: „+1“ für die fünfte Person (${geo.more})`);
+  const inChip = geo.av.every((a) => a.l - RING >= geo.chip.l - 0.5 && a.r + RING <= geo.chip.r + 0.5);
+  ok(inChip, `${size}: Ringe liegen ganz im Chip`);
+  const clash = geo.others.some((o) => o.l < geo.chip.r && geo.chip.l < o.r && o.t < geo.chip.b && geo.chip.t < o.b);
+  ok(!clash, `${size}: nichts überdeckt Wetter oder Hausmodus`);
+  await m.page.screenshot({ path: `${out}/people-many-${size}-${scheme}.png` });
+  await m.browser.close();
+}
 
 m = await openMock({ config: { ...cfg, view_mode: '2d', people: true }, states: { ...demoStates(), ...persons }, entities: demoEntities, size: '1024x768', scheme });
 await wait(1500);

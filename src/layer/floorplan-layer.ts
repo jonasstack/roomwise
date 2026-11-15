@@ -19,6 +19,7 @@ import '../popups/lawn-mower-popup';
 import '../popups/valve-popup';
 import '../popups/lock-popup';
 import '../popups/furniture-popup';
+import '../popups/appliance-popup';
 import '../components/slide-confirm';
 import type { OpenRequest } from '../access';
 import { houseRules, loadHouseRulesUi, type HrRule } from '../house-rules';
@@ -31,7 +32,7 @@ const LAZY: Record<string, () => Promise<unknown>> = {
   'floorplan-card-editor-ui': () => import('../editor/editor-ui'),
 };
 const popupTag = (target: PopupTarget) =>
-  target.room ? 'fp-room-popup' : target.piece ? 'fp-furniture-popup' : target.wifi ? 'fp-wifi-popup' : target.car ? 'fp-car-popup' : target.media ? 'fp-media-player-popup' : `fp-${domainOf(target.entity!).replace('_', '-')}-popup`;
+  target.room ? 'fp-room-popup' : target.piece ? 'fp-furniture-popup' : target.wifi ? 'fp-wifi-popup' : target.appliance ? 'fp-appliance-popup' : target.car ? 'fp-car-popup' : target.media ? 'fp-media-player-popup' : `fp-${domainOf(target.entity!).replace('_', '-')}-popup`;
 
 interface PopupEntry extends PopupTarget {
   key: number;
@@ -204,7 +205,7 @@ export class FloorplanLayer extends LitElement {
       fireEvent(this.card ?? this, 'hass-more-info', { entityId: target.entity });
       return;
     }
-    if (!target.entity && !target.room && !target.car && !target.media && !target.piece && !target.wifi) return;
+    if (!target.entity && !target.room && !target.car && !target.media && !target.piece && !target.wifi && !target.appliance) return;
     const tag = popupTag(target);
     if (!customElements.get(tag) && LAZY[tag]) {
       if (this.loading === tag) return; // a second tap while it loads
@@ -438,6 +439,7 @@ export class FloorplanLayer extends LitElement {
     if (entry.room) return html`<fp-room-popup .ctx=${ctx} .room=${entry.room}></fp-room-popup>`;
     if (entry.piece) return html`<fp-furniture-popup .ctx=${ctx} .piece=${entry.piece}></fp-furniture-popup>`;
     if (entry.wifi) return html`<fp-wifi-popup .ctx=${ctx} .piece=${entry.wifi} .entityId=${''}></fp-wifi-popup>`;
+    if (entry.appliance) return html`<fp-appliance-popup .ctx=${ctx} .piece=${entry.appliance} .entityId=${entry.appliance.entity ?? ''}></fp-appliance-popup>`;
     if (entry.car) return html`<fp-car-popup .ctx=${ctx} .car=${entry.car} .entityId=${entry.car.entity ?? ''}></fp-car-popup>`;
     const tag = unsafeStatic(popupTag(entry));
     if (entry.media)

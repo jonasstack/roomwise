@@ -6,6 +6,63 @@ All notable changes to roomwise are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0-beta.7] - 2026-11-15
+
+### Added
+
+- Card first steps: **flat or house?** with the number of floors – suggested from Home Assistant (several floors,
+  areas like a garden, garage or stairs, a robot vacuum with several maps), always changeable; "draw it yourself"
+  starts a house with its floors.
+- From the robot vacuum's map, **a house**: one floor per map (Roborock keeps one per floor) or per vacuum ("all
+  robot vacuums"), each put on the Home Assistant floor its rooms' areas belong to and named after it; the preview
+  has a tab per floor; a map the robot keeps but Home Assistant has not loaded is named with a hint, and the robot
+  switches to it only after a second tap and only while docked. Companion: `floorplan_card/vacuums/maps`.
+- Editor: floors are always in the toolbar – the floor tabs, "+ Etage" and "Etagen einstellen", which opens the
+  floor settings (rename, order, level, height, link to a Home Assistant floor, delete); "take the floors from
+  Home Assistant" adds and links the missing ones.
+- **Stairs**: the first library category "Bauteile" (and the search "Treppe"); the editor tool "Treppe setzen"
+  (straight, L-shaped or spiral, one tap into the hallway); after laying out a house "Wo ist die Treppe?" (never
+  guessed); a stair light and more devices (LED steps, motion sensors) – a tap switches the light, a hold lists them,
+  the treads glow softly while a light is on or someone moves; on the floor above a faint stairwell at the same spot
+  (2D and the 3D floor) with a chip back down; the dog now and then goes up the stairs in 3D and comes back.
+- Card: washer, dryer and dishwasher show how long they still need (“noch 42 Min.”, counted down between two updates,
+  a thin progress line) and a soft green “fertig” with a ring once done – until the door opens, someone taps
+  “Gesehen” (shared through the companion) or 2 hours pass. Values come from the linked device (Home Connect, Miele,
+  SmartThings, LG …: state, end time, time left, progress, program, door, power, on/off, further values), each
+  linkable by hand in the editor and detection can be left out; without a maker integration a smart plug with
+  power metering does (thresholds adjustable). A tap opens the appliance's popup with every value, never switches it.
+- Card 3D: washer and dryer as front loaders (chrome porthole, dark glass, a drum that turns while running, control
+  panel with display and knob), the dishwasher with door, control strip and handle; the display lights while running.
+
+### Changed
+
+- Stairs stay in the background: drawn under every other piece in a quieter colour; without a device they are no
+  tap target any more (the tap goes to the room) – the chip above them leads to the other floor.
+- Card editor: pulling rooms into shape lines up with what is already drawn – other rooms' corners and walls, the
+  line of another corner (same x or y), the extension of a slanted wall – with dashed helper lines; the grid only
+  when nothing is near, and not at all on a floor made from a robot vacuum's map (`grid_snap: false`), so nothing
+  jumps onto the grid and slanted walls stay slanted. Dragging the middle point of a wall moves the whole wall (a tap
+  there still adds a corner). A wall or corner two rooms share moves for both, doors and windows on it too; Alt or
+  the new chain button in the toolbar moves only the room's own.
+- House rules "Wo ist wer": places are called what they are instead of "Gelernter Ort" – "<point of interest>
+  <district or town>" (e.g. a sports hall or a supermarket), else "<street no>, <town>", else the town, from the
+  phone's geocoded location sensor (Home Assistant app, iOS and Android). Learned places take the name over on a
+  visit, a better kind replaces a weaker one, a name given by hand always wins; the same names show in the status
+  lines, the destination ("probably towards …"), the timeline and the card's people bar.
+- The optional OpenStreetMap lookup (off by default) is now only for phones without a place name, sends the
+  position rounded to about 10 m and also returns points of interest; documented in PRIVACY.md and THIRD_PARTY.md.
+- Card: "Wer ist wo" (the people in the card's head) is on by default as soon as Home Assistant has persons – cards
+  without the setting now show it; `people: false` switches it off. The pictures stand side by side with room for
+  their ring (they used to overlap), more than four show as "+N". The switch moved up to "Darstellung".
+- Editor: room labels are chosen with three small picture tiles (label outside, label inside, engraved in the wall)
+  right under "Darstellung"; the editor tour asks "So erscheinen Temperaturen" with the same tiles. "In der Wand"
+  is now called "In die Wand graviert".
+
+### Fixed
+
+- Card: the WebGL probes give their context back at once – browsers keep only a few live contexts per page and
+  Firefox drops the oldest, which could be the 3D scene's own (then the CSS 3D view with flat labels showed).
+
 ## [0.1.0-beta.6] - 2026-11-15
 
 ### Added
@@ -285,7 +342,8 @@ The first public alpha. roomwise has been in daily use in one home before this r
 - Pause for motion sensors while a robot vacuum cleans.
 - Setup assistant and per-feature switches; after installation only the automatic house mode runs.
 
-[Unreleased]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.6...HEAD
+[Unreleased]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.7...HEAD
+[0.1.0-beta.7]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.6...v0.1.0-beta.7
 [0.1.0-beta.6]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.5...v0.1.0-beta.6
 [0.1.0-beta.5]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.4...v0.1.0-beta.5
 [0.1.0-beta.4]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.3...v0.1.0-beta.4

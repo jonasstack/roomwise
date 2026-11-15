@@ -2,6 +2,8 @@ import type { FloorConfig, FloorplanCardConfig, FurnitureConfig, HomeAssistant, 
 import { sameRoom, toPlan, type VacuumMap } from './vacuum-live';
 import { suggestForArea } from './ha';
 import { t } from './i18n';
+import type { VacuumMapEntry } from './entry-server';
+import { floorNameFor, haFloorsSorted, skeletonFloors, type HomeKind } from './home-floors';
 
 /**
  * A floor plan from a robot vacuum's own map (first steps "from the vacuum's map").
@@ -377,7 +379,8 @@ function snapAll(rooms: Line[][], tol: number) {
  * Plan of one floor from the vacuum's map. `adapter`: where the map comes from (decides which way up it is);
  * `hass`: links rooms to Home Assistant areas of the same name (with their lights and sensors).
  */
-export function planFromVacuumMap(map: VacuumMap, opts: { entity: string; adapter?: string | null; hass?: HomeAssistant; floorId?: string; floorName?: string }): VacuumPlanResult | undefined {
+export function planFromVacuumMap(map: VacuumMap, opts: { entity: string; adapter?: string | null; hass?: HomeAssistant; floorId?: string; floorName?: string; idPrefix?: string; robot?: boolean }): VacuumPlanResult | undefined {
+  const px = opts.idPrefix ?? '';
   const rooms = map.rooms.filter((r) => r.pts.length >= 4);
   if (!rooms.length) return undefined;
   // Roborock and map cameras count y up (like a drawing), Valetudo down (like an image); the plan counts down
@@ -487,7 +490,7 @@ export function planFromVacuumMap(map: VacuumMap, opts: { entity: string; adapte
     const src = rooms[l];
     const name = src.name?.trim() || t('vacplan.room_n', { n: ++unnamed });
     const area = src.name ? areas.find((a) => !usedAreas.has(a.area_id) && sameRoom(a.name, src.name!)) : undefined;
-    const id = `room_vac_${String(src.id).replace(/[^a-zA-Z0-9_]/g, '') || l}`;
+    const id = `room_vac_${px}${String(src.id).replace(/[^a-zA-Z0-9_]/g, '') || l}`;
     idOf.set(l, id);
     const room: RoomConfig = { id, name, points: pts };
     if (area && opts.hass) {
@@ -500,21 +503,22 @@ export function planFromVacuumMap(map: VacuumMap, opts: { entity: string; adapte
   }
   if (!roomCfgs.length) return undefined;
 
-  const openings = doors(g.w, g.h, raw, g.wall, ox, oy, cell, roomCfgs, idOf);
+  const openings = doors(g.w, g.h, raw, g.wall, ox, oy, cell, roomCfgs, idOf).map((o) => ({ ...o, id: `${o.id}${px ? '_' + px : ''}` }));
 
   const furniture: FurnitureConfig[] = [];
   const charger = map.charger ? toPlan(tf, map.charger[0], map.charger[1]) : undefined;
   const at: Point = charger ?? centre(roomCfgs[0].points);
-  if (charger) furniture.push({ id: 'vac_dock', kind: 'robot_dock', x: Math.round(at[0]), y: Math.round(at[1]), w: 45, h: 45 });
+  if (charger) furniture.push({ id: `vac_dock${px ? '_' + px : ''}`, kind: 'robot_dock', x: Math.round(at[0]), y: Math.round(at[1]), w: 45, h: 45 });
   // the vacuum just in front of its dock, towards the middle of the home
   const all = roomCfgs.flatMap((r) => r.points);
   const mid = centre(all);
   const len = Math.hypot(mid[0] - at[0], mid[1] - at[1]) || 1;
   const off = charger ? 40 : 0;
-  furniture.push({ id: 'vac_robot', kind: 'robot_vacuum', x: Math.round(at[0] + ((mid[0] - at[0]) / len) * off), y: Math.round(at[1] + ((mid[1] - at[1]) / len) * off), w: 35, h: 35, entity: opts.entity, vacuum: { transform: tf } });
+  if (opts.robot !== false)
+    furniture.push({ id: `vac_robot${px ? '_' + px : ''}`, kind: 'robot_vacuum', x: Math.round(at[0] + ((mid[0] - at[0]) / len) * off), y: Math.round(at[1] + ((mid[1] - at[1]) / len) * off), w: 35, h: 35, entity: opts.entity, vacuum: { transform: tf } });
 
   return {
-    floor: { id: opts.floorId ?? 'floor_vacuum', name: opts.floorName ?? t('card.default_floor'), rooms: roomCfgs, devices: [], openings, furniture },
+    floor: { id: opts.floorId ?? 'floor_vacuum', name: opts.floorName ?? t('card.default_floor'), rooms: roomCfgs, devices: [], openings, furniture, grid_snap: false },
     transform: tf,
     skipped,
   };
@@ -807,6 +811,129 @@ function sharedLine(pa: Point[], pb: Point[], o: string, at: number, mid: number
 }
 
 /** The whole card config for a brand-new card from the vacuum's map */
-export function vacuumPlanConfig(res: VacuumPlanResult): FloorplanCardConfig {
-  return { type: 'custom:floorplan-card', floors: [res.floor] };
+export function vacuumPlanConfig(res: VacuumPlanResult | VacuumHomeResult): FloorplanCardConfig {
+  return { type: 'custom:floorplan-card', floors: 'floors' in res ? res.floors : [res.floor] };
+}
+
+// ---------- a house: several maps (one per floor), several vacuums, Home Assistant's floors ----------
+
+/** One vacuum's maps for the house plan */
+export interface VacuumSource {
+  entity: string;
+  adapter?: string | null;
+  maps: VacuumMapEntry[];
+}
+
+export interface VacuumHomeResult {
+  floors: FloorConfig[];
+  skipped: number;
+  /** maps the robot keeps but the integration has not loaded (no floor made for them) */
+  missing: { entity: string; id: string; name: string }[];
+}
+
+/** Short storey names and their level, to match a map's name ("OG", "Keller") with Home Assistant's floors */
+const STOREYS: [RegExp, number][] = [
+  [/^(eg|erdgeschoss|parterre|ground|groundfloor|gf)$/, 0],
+  [/^(og|1og|obergeschoss|ersterstock|upstairs|firstfloor|upper|upperfloor)$/, 1],
+  [/^(2og|dg|dachgeschoss|dachboden|zweiterstock|attic|secondfloor)$/, 2],
+  [/^(ug|kg|keller|untergeschoss|basement|cellar|downstairs)$/, -1],
+];
+const plain = (s: string) =>
+  s
+    .toLowerCase()
+    .replace(/ä/g, 'a')
+    .replace(/ö/g, 'o')
+    .replace(/ü/g, 'u')
+    .replace(/ß/g, 'ss')
+    .replace(/[^a-z0-9]/g, '');
+function storeyOf(name?: string | null): number | undefined {
+  const n = plain(name ?? '');
+  return STOREYS.find(([re]) => re.test(n))?.[1];
+}
+/** "Map 1", "Karte 2", a bare number: a name the robot made up, not one to show */
+const madeUp = (name?: string | null) => !name || /^(map|karte|floor|etage)?\s*\d+$/i.test(name.trim());
+
+/**
+ * The plan of a home from every map of every vacuum: one floor per map with geometry. Each floor is put on Home
+ * Assistant's floor whose areas its rooms match (most rooms win), else the floor whose name or storey matches the
+ * map's name; names come from Home Assistant, else from the map. The vacuum stands on the floor of the map it
+ * uses right now. `kind`/`n`: a house with that many floors — floors the maps do not cover stay empty (named after
+ * Home Assistant's floors, else by storey). Maps the robot keeps without geometry are listed in `missing`.
+ */
+export function planFromVacuumMaps(sources: VacuumSource[], opts: { hass?: HomeAssistant; kind: HomeKind; n: number }): VacuumHomeResult | undefined {
+  const hass = opts.hass;
+  const ha = haFloorsSorted(hass);
+  const made: { f: FloorConfig; mapName?: string | null }[] = [];
+  const missing: VacuumHomeResult['missing'] = [];
+  let skipped = 0;
+  let k = 0;
+  for (const src of sources) {
+    const withGeo = src.maps.filter((m) => m.map && m.map.rooms.some((r) => r.pts.length));
+    // the vacuum stands on the map it uses now (or the only one)
+    const here = withGeo.find((m) => m.current) ?? withGeo[0];
+    for (const m of src.maps) {
+      if (!m.map || !m.map.rooms.some((r) => r.pts.length)) {
+        missing.push({ entity: src.entity, id: m.id, name: m.name || m.id });
+        continue;
+      }
+      k++;
+      const multi = sources.length > 1 || withGeo.length > 1;
+      const res = planFromVacuumMap(m.map, { entity: src.entity, adapter: src.adapter, hass, floorId: `floor_vac_${k}`, floorName: m.name ?? undefined, idPrefix: multi ? `${k}_` : '', robot: m === here });
+      if (!res) continue;
+      skipped += res.skipped;
+      made.push({ f: res.floor, mapName: m.name });
+    }
+  }
+  if (!made.length) return undefined;
+  // which Home Assistant floor: the one most of its rooms' areas are on, else by the map's name
+  const taken = new Set<string>();
+  const areaFloor = (id?: string) => (id ? hass?.areas?.[id]?.floor_id ?? undefined : undefined);
+  const assign = made.map(({ f, mapName }) => {
+    const votes = new Map<string, number>();
+    for (const r of f.rooms) {
+      const fl = areaFloor(r.area);
+      if (fl) votes.set(fl, (votes.get(fl) ?? 0) + 1);
+    }
+    const best = [...votes.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+    return { f, mapName, best };
+  });
+  // most votes first, so a floor goes to the map that fits it best
+  for (const a of assign.filter((x) => x.best).sort((x, y) => (y.f.rooms.length - x.f.rooms.length))) {
+    if (a.best && !taken.has(a.best)) {
+      taken.add(a.best);
+      link(a.f, a.best);
+    }
+  }
+  for (const a of assign) {
+    if (a.f.floor) continue;
+    const st = storeyOf(a.mapName);
+    const byName = ha.find((h) => !taken.has(h.floor_id) && (plain(h.name) === plain(a.mapName ?? '') || (st !== undefined && (storeyOf(h.name) === st || h.level === st))));
+    if (byName) {
+      taken.add(byName.floor_id);
+      link(a.f, byName.floor_id);
+    } else if (st !== undefined) a.f.level = st;
+  }
+  function link(f: FloorConfig, id: string) {
+    const h = hass?.floors?.[id];
+    if (!h) return;
+    f.floor = id;
+    // linked: Home Assistant's name (the map's own name is only used for floors Home Assistant does not know)
+    f.name = h.name;
+    if (typeof h.level === 'number') f.level = h.level;
+  }
+  // levels for the rest: the current map's floor at the bottom of what is left, then upwards
+  const levels = new Set(made.map((m) => m.f.level).filter((l): l is number => typeof l === 'number'));
+  for (const { f } of made) {
+    if (typeof f.level !== 'number') {
+      let l = 0;
+      while (levels.has(l)) l++;
+      f.level = l;
+      levels.add(l);
+    }
+    if (madeUp(f.name) || f.name === t('card.default_floor')) f.name = floorNameFor(f.level, made.length > 1 || opts.kind === 'house' ? 'house' : 'flat');
+  }
+  const n = opts.kind === 'house' ? Math.max(opts.n, made.length) : made.length;
+  const floors = skeletonFloors(hass, made.length > 1 ? 'house' : opts.kind, n, made.map((m) => m.f));
+  floors.sort((a, b) => (a.level ?? 0) - (b.level ?? 0));
+  return { floors, skipped, missing };
 }

@@ -16,9 +16,11 @@ import { dogPicture } from '../gl/dog-studio';
 import { until } from 'lit/directives/until.js';
 import { defaultAction, furnitureAction, type Gesture } from '../actions';
 import { CAR_GROUPS, CAR_ROLE, CAR_ROLE_KEYS, LEGACY_MAIN, carInfo, type CarGroup } from '../car-info';
+import { APPLIANCE_ICON, APPLIANCE_KINDS, APPLIANCE_ROLES, applianceOpts, applianceRoles, type ApplianceRole } from '../appliance';
 import type { I18nKey } from '../i18n';
 import type { ManualEntityConfig, MediaCommand, MediaControlsConfig } from '../types';
 import { MEDIA_SLOTS, commandSet, type MediaSlot } from '../media-controls';
+import { labelStyleOf, setLabelStyle, type LabelStyle } from '../components/label-style';
 
 type Ed = FloorplanEditorUI;
 import { companionInfo, serverKey, vacuumReset } from '../entry-server';
@@ -102,8 +104,8 @@ function hrRow(ed: Ed, entity: string | undefined) {
 }
 
 /** Collapsible group for settings that are rarely needed */
-function fold(title: string, body: unknown, opts: { icon?: string; sub?: string } = {}) {
-  return html`<details class="fold">
+function fold(title: string, body: unknown, opts: { icon?: string; sub?: string; key?: string; open?: boolean } = {}) {
+  return html`<details class="fold" data-fold=${opts.key ?? nothing} ?open=${!!opts.open}>
     <summary>
       ${opts.icon ? html`<ha-icon .icon=${opts.icon} style="color:var(--fp-accent)"></ha-icon>` : nothing}
       <span class="grow">${title}</span>
@@ -936,6 +938,7 @@ const MAIN_LINK: Record<string, Parameters<typeof t>[0]> = {
   inverter: 'editor.solar_power',
   wallbox: 'editor.wallbox_state',
   lawn_mower: 'editor.mower_entity',
+  stairs: 'editor.stairs_light',
   sprinkler: 'editor.sprinkler_entity',
   dog: 'editor.pet_presence',
   cat: 'editor.pet_presence',
@@ -1128,6 +1131,110 @@ const COLLARS = ['#d8483a', '#e8892c', '#e8c547', '#4f9d5d', '#3f8ed8', '#5a8fd8
 
 /** Dog / cat: name, presence, walk times, look */
 /** Robot vacuum driving live through the plan: mode, and laying its map onto the plan */
+/** Washer, dryer, dishwasher: one row per value (detected or linked by hand, detection can be left out), further
+ * values, the smart-plug thresholds and how long "fertig" stays (appliance.ts) */
+function applianceSection(ed: Ed, f: FurnitureConfig, set: (fn: (x: FurnitureConfig) => void) => void) {
+  const kind = resolveFurniture(f).k?.kind;
+  const info = applianceRoles(ed.hass, f);
+  const o = applianceOpts(f, kind);
+  const name = (id: string) => entityName(ed.hass, id, ed.hass.states[id]);
+  const unlink = (x: FurnitureConfig, id: string) => {
+    if (x.entities) for (const [k, v] of Object.entries(x.entities)) if (v === id) delete x.entities[k];
+    if (x.entities && !Object.keys(x.entities).length) x.entities = undefined;
+    x.extra = x.extra?.filter((e) => e.entity !== id);
+    if (x.extra && !x.extra.length) x.extra = undefined;
+  };
+  const setRole = (role: ApplianceRole, id: string | undefined) =>
+    set((x) => {
+      if (id) unlink(x, id);
+      const e = { ...(x.entities ?? {}) };
+      if (id) e[role] = id;
+      else delete e[role];
+      x.entities = Object.keys(e).length ? e : undefined;
+      if (id && x.exclude) x.exclude = x.exclude.filter((y) => y !== id).length ? x.exclude.filter((y) => y !== id) : undefined;
+    });
+  const exclude = (id: string) =>
+    set((x) => {
+      unlink(x, id);
+      x.exclude = [...new Set([...(x.exclude ?? []), id])];
+    });
+  const pick = (title: string, selected: string | undefined, onPick: (id: string | undefined) => void) => ed.openPicker({ title, filter: {}, selected: selected ? [selected] : [], onPick: (ids) => onPick(ids[0]) });
+  const roleRow = (role: ApplianceRole) => {
+    const id = info.roles[role];
+    const auto = info.auto.has(role);
+    const label = t(`appliance.role.${role}` as I18nKey);
+    return html`<div class="row" data-appl-role=${role} data-entity=${id ?? ''}>
+      <span class="ic"><ha-icon .icon=${APPLIANCE_ICON[role]}></ha-icon></span>
+      <button class="grow pick" @click=${() => pick(label, id, (v) => setRole(role, v))}>
+        <div class="subtitle">${label}${auto ? html` · <span class="auto">${t('editor.detected')}</span>` : nothing}</div>
+        <div class="title ${id ? '' : 'placeholder'}">${id ? name(id) : t('editor.appl_none')}</div>
+      </button>
+      ${id && id !== f.entity
+        ? html`<button class="icon-btn plain pressable" data-appl-exclude aria-label=${t('editor.exclude')} title=${t('editor.exclude')} @click=${() => (auto ? exclude(id) : setRole(role, undefined))}>
+            <ha-icon icon=${auto ? 'mdi:eye-off-outline' : 'mdi:close-circle'} style="color:var(--fp-label-3)"></ha-icon>
+          </button>`
+        : nothing}
+    </div>`;
+  };
+  const plug = !!info.roles.power && !info.roles.state && !info.roles.running;
+  return html`
+    <div class="section-title">${t('editor.appl_title')}</div>
+    <div class="group" data-appl>${APPLIANCE_ROLES.map(roleRow)}</div>
+    <div class="label-row">${t('editor.appl_more')}</div>
+    <div class="group" data-appl-info>
+      ${info.info.map(
+        (x) => html`<div class="row" data-appl-extra=${x.entity}>
+          <div class="grow">
+            <div class="subtitle">${t('appliance.role.info')}${x.auto ? html` · <span class="auto">${t('editor.detected')}</span>` : nothing}</div>
+            <div class="title">${x.name ?? name(x.entity)}</div>
+          </div>
+          <button class="icon-btn plain pressable" aria-label=${t('editor.exclude')} title=${t('editor.exclude')} @click=${() => exclude(x.entity)}>
+            <ha-icon icon=${x.auto ? 'mdi:eye-off-outline' : 'mdi:close-circle'} style="color:var(--fp-label-3)"></ha-icon>
+          </button>
+        </div>`,
+      )}
+      <button class="row pick" data-appl-add @click=${() =>
+        pick(t('editor.appl_add'), undefined, (v) =>
+          v &&
+          set((x) => {
+            unlink(x, v);
+            x.exclude = x.exclude?.filter((y) => y !== v);
+            if (x.exclude && !x.exclude.length) x.exclude = undefined;
+            x.extra = [...(x.extra ?? []), { entity: v, role: 'info' }];
+          }),
+        )}>
+        <ha-icon icon="mdi:plus-circle" style="color:var(--fp-accent)"></ha-icon>
+        <div class="grow title" style="color:var(--fp-accent)">${t('editor.appl_add')}</div>
+      </button>
+    </div>
+    <div class="group">
+      ${plug
+        ? html`<div class="row"><div class="grow subtitle">${t('editor.appl_plug')}</div></div>
+            ${stepper(t('editor.appl_run_w'), o.runW, 5, (v) => set((x) => (x.appliance = { ...(x.appliance ?? {}), run_w: Math.max(2, Math.min(2000, v)) })), ' W')}
+            ${stepper(t('editor.appl_idle_w'), o.idleW, 1, (v) => set((x) => (x.appliance = { ...(x.appliance ?? {}), idle_w: Math.max(0, Math.min(500, v)) })), ' W')}
+            ${stepper(t('editor.appl_off_min'), o.offMin, 1, (v) => set((x) => (x.appliance = { ...(x.appliance ?? {}), off_min: Math.max(1, Math.min(120, v)) })), ' min')}`
+        : nothing}
+      ${stepper(o.holdH ? t('editor.appl_hold') : `${t('editor.appl_hold')} · ${t('editor.appl_hold_until')}`, o.holdH, 1, (v) => set((x) => (x.appliance = { ...(x.appliance ?? {}), hold: Math.max(0, Math.min(24, v)) })), ' h')}
+      ${switchRow(t('editor.show_value'), f.show_value ?? true, () => set((x) => (x.show_value = (x.show_value ?? true) ? false : undefined)))}
+    </div>
+    ${f.exclude?.length
+      ? fold(
+          t('editor.excluded'),
+          html`<div class="group">
+            ${f.exclude.map(
+              (id) => html`<div class="row" data-appl-excluded=${id}>
+                <div class="grow"><div class="title">${name(id)}</div></div>
+                <button class="btn tinted small pressable" @click=${() => set((x) => (x.exclude = x.exclude?.filter((y) => y !== id).length ? x.exclude.filter((y) => y !== id) : undefined))}>${t('editor.include_again')}</button>
+              </div>`,
+            )}
+          </div>`,
+          { icon: 'mdi:eye-off-outline', sub: String(f.exclude.length) },
+        )
+      : nothing}
+    <div class="hint-s">${t('editor.appl_hint')}</div>
+  `;
+}
+
 function vacuumSection(ed: Ed, f: FurnitureConfig, set: (fn: (x: FurnitureConfig) => void) => void) {
   const c = companionInfo();
   const v = f.vacuum ?? {};
@@ -1587,9 +1694,8 @@ function furnitureInspector(ed: Ed, f: FurnitureConfig): TemplateResult {
       </div>
     </div>
     ${k?.kind === 'dog' ? dogDesignCard(ed, f, set) : nothing}
-    ${k?.kind === 'stairs'
-      ? stairsSection(ed, f, set)
-      : html`<div class="section-title">${t('editor.link_entity')}</div>
+    ${k?.kind === 'stairs' ? stairsSection(ed, f, set) : nothing}
+    ${html`<div class="section-title">${t(k?.kind === 'stairs' ? 'editor.stairs_devices' : 'editor.link_entity')}</div>
     <div class="group">
       ${entityRow(ed, t(MAIN_LINK[k?.kind ?? ''] ?? 'editor.entity'), f.entity, LINK_FILTER[r.role ?? ''] ?? {}, (v) =>
         set((x) => {
@@ -1598,12 +1704,13 @@ function furnitureInspector(ed: Ed, f: FurnitureConfig): TemplateResult {
         }),
       )}
     </div>
-    ${r.role === 'car' || r.role === 'energy' || r.role === 'mower' ? nothing : html`<div class="hint-s">${t(r.role === 'pet' ? 'editor.pet_link_hint' : r.role ? 'editor.link_hint' : 'editor.link_hint_any')}</div>`}`}
+    ${r.role === 'car' || r.role === 'energy' || r.role === 'mower' ? nothing : html`<div class="hint-s">${t(k?.kind === 'stairs' ? 'editor.stairs_light_hint' : r.role === 'pet' ? 'editor.pet_link_hint' : r.role ? 'editor.link_hint' : 'editor.link_hint_any')}</div>`}`}
     ${r.role === 'car' || r.role === 'energy' || r.role === 'mower' ? linkSection(ed, f, set) : nothing}
     ${hrRow(ed, f.entity)}
-    ${k?.kind === 'stairs' || r.role === 'pet' || r.role === 'car' || r.role === 'energy' || r.role === 'mower' ? nothing : contentsSection(ed, f, set)}
+    ${APPLIANCE_KINDS.has(k?.kind ?? '') || r.role === 'pet' || r.role === 'car' || r.role === 'energy' || r.role === 'mower' ? nothing : contentsSection(ed, f, set, k?.kind === 'stairs')}
     ${r.role === 'pet' ? petSection(ed, f, set) : nothing}
     ${k?.kind === 'robot_vacuum' ? vacuumSection(ed, f, set) : nothing}
+    ${k?.kind && APPLIANCE_KINDS.has(k.kind) && (f.entity || f.entities || f.extra) ? applianceSection(ed, f, set) : nothing}
     ${isWifiPiece(f) || hasWifiContent(f) ? wifiSection(ed) : nothing}
     ${k?.kind === 'dog' ? nothing : fold(t('editor.fold_look'), html`    ${k?.variants && k.variants.length > 8
       ? html`<div class="group">
@@ -1684,7 +1791,8 @@ function furnitureInspector(ed: Ed, f: FurnitureConfig): TemplateResult {
 }
 
 /** "Geräte im Möbel": several devices inside one piece (cabinet, shelf …), each with an optional own name and icon */
-function contentsSection(ed: Ed, f: FurnitureConfig, set: (fn: (x: FurnitureConfig) => void) => void): TemplateResult {
+/** stairs: "Weitere Geräte an der Treppe" (LED steps, motion sensors …), no Wi-Fi codes */
+function contentsSection(ed: Ed, f: FurnitureConfig, set: (fn: (x: FurnitureConfig) => void) => void, stairs = false): TemplateResult {
   const list = f.contents ?? [];
   const write = (x: FurnitureConfig, next: FurnitureContentConfig[]) => {
     if (next.length) x.contents = next;
@@ -1722,7 +1830,7 @@ function contentsSection(ed: Ed, f: FurnitureConfig, set: (fn: (x: FurnitureConf
   // the Wi-Fi QR codes need no entity (a router Home Assistant does not know); a router / access point has them anyway
   const wifiAt = list.findIndex((c) => c && isWifiContent(c));
   const addWifi = () => set((x) => write(x, [...(x.contents ?? []), { kind: 'wifi' }]));
-  return html`<div class="section-title">${t('editor.contents')}</div>
+  return html`<div class="section-title">${t(stairs ? 'editor.stairs_more' : 'editor.contents')}</div>
     <div class="group" data-contents>
       ${list.map((c, i) => {
         if (!c.entity)
@@ -1750,13 +1858,13 @@ function contentsSection(ed: Ed, f: FurnitureConfig, set: (fn: (x: FurnitureConf
       <button class="row add" data-add-content @click=${() => edit(-1)}>
         <ha-icon icon="mdi:plus-circle" style="color:var(--fp-accent)"></ha-icon><span class="title accent">${t('editor.contents_add')}</span>
       </button>
-      ${wifiAt < 0 && !isWifiPiece(f)
+      ${wifiAt < 0 && !isWifiPiece(f) && !stairs
         ? html`<button class="row add" data-add-wifi @click=${addWifi}>
             <ha-icon icon="mdi:qrcode-plus" style="color:var(--fp-accent)"></ha-icon><span class="title accent">${t('editor.contents_add_wifi')}</span>
           </button>`
         : nothing}
     </div>
-    <div class="hint-s">${t('editor.contents_hint')}</div>`;
+    <div class="hint-s">${t(stairs ? 'editor.stairs_more_hint' : 'editor.contents_hint')}</div>`;
 }
 
 function furnitureCountLabel(k: FurnitureKind) {
@@ -2172,7 +2280,7 @@ function usersSection(ed: Ed) {
   );
 }
 
-/** Stairs: which floor a tap on the card leads to (automatic: up, on the top floor down) */
+/** Stairs: which floor their chip on the card leads to (automatic: up, on the top floor down) */
 function stairsSection(ed: Ed, f: FurnitureConfig, set: (fn: (x: FurnitureConfig) => void) => void) {
   const d = ed._draft;
   if (d.floors.length < 2) return nothing;
@@ -2213,6 +2321,8 @@ function floorsSection(ed: Ed) {
       if (typeof ha.level === 'number') f.level = ha.level;
     });
   const multi = d.floors.length > 1;
+  // Home Assistant's floors no floor of the plan is linked to yet
+  const haMissing = haFloors.filter((h) => !d.floors.some((f) => f.floor === h.floor_id));
   return fold(
     t('editor.fold_floors'),
     html`<div class="group floor-list">
@@ -2238,6 +2348,10 @@ function floorsSection(ed: Ed) {
         )}
       </div>
       <button class="btn block pressable gap" data-add-floor @click=${ed.addFloor}><ha-icon icon="mdi:layers-plus"></ha-icon>${t('editor.add_floor')}</button>
+      ${haMissing.length
+        ? html`<button class="btn block pressable gap" data-ha-floors @click=${() => takeHaFloors(ed)}><ha-icon icon="mdi:home-floor-1"></ha-icon>${t('editor.floors_from_ha', { n: haMissing.length })}</button>`
+        : nothing}
+      ${ed.placeStairs ? html`<button class="btn block pressable gap" data-place-stairs @click=${() => ed.placeStairs?.(floor.id)}><ha-icon icon="mdi:stairs"></ha-icon>${t('editor.place_stairs')}</button>` : nothing}
       ${multi ? html`<div class="hint-s">${t('editor.floors_hint')}</div>` : nothing}
 
       <div class="section-title">${t('editor.floor_this')}: ${floor.name}</div>
@@ -2272,8 +2386,34 @@ function floorsSection(ed: Ed) {
             <div class="hint-s">${t('editor.default_floor_hint')}</div>
             <button class="btn danger block pressable gap" data-delete-floor @click=${() => ed.deleteFloor(floor.id)}><ha-icon icon="mdi:layers-remove"></ha-icon>${t('editor.delete_floor')}</button>`
         : nothing}`,
-    { icon: 'mdi:layers-outline', sub: multi ? t('editor.n_floors', { n: d.floors.length }) : floor.name },
+    { icon: 'mdi:layers-outline', sub: multi ? t('editor.n_floors', { n: d.floors.length }) : floor.name, key: 'floors', open: ed.floorsOpen },
   );
+}
+
+/** "Take the floors from Home Assistant": each HA floor no plan floor is linked to — a floor with its name and level
+ * (an unlinked floor of the same name, or with a generated name on that level, takes the link instead of a new one) */
+function takeHaFloors(ed: Ed) {
+  const hass = ed.hass;
+  ed.mutate((d) => {
+    d.floors.forEach((f) => (f.level ??= floorLevel(d, f, hass)));
+    for (const h of Object.values(hass.floors ?? {}).sort((a, b) => (a.level ?? 0) - (b.level ?? 0))) {
+      if (d.floors.some((f) => f.floor === h.floor_id)) continue;
+      const lv = typeof h.level === 'number' ? h.level : undefined;
+      const same =
+        d.floors.find((f) => !f.floor && f.name.trim().toLowerCase() === h.name.trim().toLowerCase()) ??
+        d.floors.find((f) => !f.floor && generatedName(f) && (lv === undefined || f.level === lv));
+      if (same) {
+        same.floor = h.floor_id;
+        same.name = h.name;
+        if (lv !== undefined) same.level = lv;
+        continue;
+      }
+      const used = new Set(d.floors.map((f) => f.level));
+      let level = lv ?? 0;
+      while (lv === undefined && used.has(level)) level++;
+      d.floors.push({ id: `floor_${h.floor_id}`, name: h.name, floor: h.floor_id, level, rooms: [], devices: [], openings: [], furniture: [] });
+    }
+  });
 }
 
 function settingsPanel(ed: Ed): TemplateResult {
@@ -2282,7 +2422,7 @@ function settingsPanel(ed: Ed): TemplateResult {
   const weathers = Object.keys(ed.hass.states).filter((id) => id.startsWith('weather.'));
   const north = d.north ?? 0;
   const fx = fxOf(d);
-  const values = d.label_style === 'wall' ? 'wall' : d.labels === 'inside' ? 'inside' : 'outside';
+  const values = labelStyleOf(d);
   return html`
     <div class="section-title">${t('editor.view')}</div>
     <fp-segmented
@@ -2294,6 +2434,13 @@ function settingsPanel(ed: Ed): TemplateResult {
       @value-change=${(e: CustomEvent) => setCfg((x) => (x.view_mode = e.detail.value === '2d' ? '2d' : undefined))}
     ></fp-segmented>
     <div class="hint-s">${t(d.view_mode === '2d' ? 'editor.view_2d_hint' : 'editor.view_3d_hint')}</div>
+
+    <div class="section-title">${t('editor.values_title')}</div>
+    <fp-label-style .value=${values} @value-change=${(e: CustomEvent) => setCfg((x) => setLabelStyle(x, e.detail.value as LabelStyle))}></fp-label-style>
+    ${values === 'wall' ? html`<div class="hint-s">${t('editor.values_wall_hint')}</div>` : nothing}
+    <div class="group" style="margin-top:var(--fp-space-3)">
+      ${switchRow(t('people.set'), d.people !== false, () => setCfg((x) => (x.people = x.people === false ? undefined : false)), t('people.set_sub'))}
+    </div>
 
     <div class="section-title">${t('editor.fx_title')}</div>
     <fp-segmented
@@ -2313,22 +2460,6 @@ function settingsPanel(ed: Ed): TemplateResult {
     ></fp-segmented>
     <div class="hint-s">${t(fx === 'off' ? 'editor.fx_off_hint' : fx === 'eco' ? 'editor.fx_eco_hint' : 'editor.fx_full_hint')}</div>
 
-    <div class="section-title">${t('editor.values_title')}</div>
-    <fp-segmented
-      .options=${[
-        { value: 'outside', label: t('editor.values_outside') },
-        { value: 'inside', label: t('editor.values_inside') },
-        { value: 'wall', label: t('editor.values_wall') },
-      ]}
-      .value=${values}
-      @value-change=${(e: CustomEvent) =>
-        setCfg((x) => {
-          const v = e.detail.value;
-          x.label_style = v === 'wall' ? 'wall' : undefined;
-          x.labels = v === 'inside' ? 'inside' : undefined;
-        })}
-    ></fp-segmented>
-    ${values === 'wall' ? html`<div class="hint-s">${t('editor.values_wall_hint')}</div>` : nothing}
     <div class="group" style="margin-top:var(--fp-space-2)">
       ${values === 'wall'
         ? nothing
@@ -2422,7 +2553,6 @@ function settingsPanel(ed: Ed): TemplateResult {
             </label>`
           : nothing}
         ${stepper(t('editor.grid_size'), ed.grid, 5, (v) => setCfg((x) => (x.grid = Math.max(5, Math.min(100, v)))), ' cm')}
-        ${switchRow(t('people.set'), d.people === true, () => setCfg((x) => (x.people = x.people ? undefined : true)))}
       </div>
       <div class="hint-s">${t('editor.advanced_hint')}</div>`,
       { icon: 'mdi:tune-variant' },

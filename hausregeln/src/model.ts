@@ -424,6 +424,8 @@ export interface LearnedPlace {
   radius: number;
   visits: number;
   street?: string | null;
+  /** the name of the spot (point of interest, else the address) from the phone or OpenStreetMap; `name` wins */
+  auto?: string | null;
   typical: { days: 'workdays' | 'weekend' | 'mixed'; arrive: string | null; stay_min: number };
   last?: string | null;
 }

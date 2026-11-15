@@ -504,6 +504,63 @@ function energyModel(kind: string, v: string, w: number, d: number, H: number, c
   return undefined;
 }
 
+// ---------- washer, dryer, dishwasher ----------
+
+const CHROME = '#c4c9ce';
+const SCREEN_OFF = '#1d262d';
+
+/**
+ * Front loaders and the dishwasher (front at +y): plinth, softly rounded body, control panel with display and knob;
+ * the washer / dryer with a porthole (chrome ring, dark glass with depth, a drum with paddles that turns while it
+ * runs — kid "drum"), the dishwasher with a smooth door, control strip and handle. The display ("display") is lit by
+ * the scene while it runs or is done.
+ */
+function applianceModel(kind: string, w: number, d: number, H: number, c: string): ModelNode | undefined {
+  if (kind !== 'washer' && kind !== 'dryer' && kind !== 'dishwasher') return undefined;
+  const x0 = -w / 2;
+  const x1 = w / 2;
+  const y0 = -d / 2;
+  const y1 = d / 2;
+  const plinth = kind === 'dishwasher' ? 8 : 4;
+  const blobs: Blob[] = [
+    box(x0 + 2, y0 + 2, 0, x1 - 2, y1 - (kind === 'dishwasher' ? 5 : 3), plinth, tone(c, -0.38)),
+    box(x0, y0, plinth, x1, y1 - 0.6, H, c, { r: kind === 'dishwasher' ? 1.2 : 2.5 }),
+  ];
+  if (kind === 'dishwasher') {
+    blobs.push(
+      // the door, the control strip above it, the handle and a small display
+      box(x0 + 0.4, y1 - 0.8, plinth + 0.5, x1 - 0.4, y1 + 0.4, H - 8, tone(c, 0.03), { r: 0.8 }),
+      box(x0 + 0.4, y1 - 0.8, H - 7.6, x1 - 0.4, y1 + 0.4, H - 0.4, tone(c, -0.1), { r: 0.6 }),
+      box(x0 + w * 0.24, y1 + 0.4, H - 12.5, x1 - w * 0.24, y1 + 2.4, H - 10, CHROME, { r: 1, gloss: 60 }),
+      box(x1 - w * 0.32, y1 + 0.4, H - 5.8, x1 - w * 0.1, y1 + 0.8, H - 2.4, SCREEN_OFF, { name: 'display' }),
+    );
+    return { blobs };
+  }
+  const top = H - 14;
+  const R = Math.min(w, top - plinth) * 0.3;
+  const cz = plinth + (top - plinth) * 0.5;
+  blobs.push(
+    // control panel: drawer (washer) or water tank (dryer), display, program knob
+    box(x0 + 1.4, y1 - 0.8, top, x1 - 1.4, y1 + 0.3, H - 1.2, tone(c, -0.06), { r: 1 }),
+    box(x0 + 3, y1 + 0.3, top + 2.5, x0 + w * (kind === 'dryer' ? 0.36 : 0.3), y1 + 1.1, H - 3.5, tone(c, -0.02), { r: 0.8 }),
+    box(x0 + w * 0.4, y1 + 0.3, top + 4, x0 + w * 0.64, y1 + 0.8, H - 4.5, SCREEN_OFF, { name: 'display' }),
+    wheel(x1 - w * 0.17, y1 + 1.3, (top + H) / 2, 7.5, 2, CHROME, { gloss: 70 }),
+    wheel(x1 - w * 0.17, y1 + 2.4, (top + H) / 2, 5.5, 0.4, tone(CHROME, -0.12)),
+    // porthole: chrome ring, dark gasket, a lighter glass on top (the drum turns behind it)
+    wheel(0, y1 + 0.9, cz, R * 2, 1.8, kind === 'dryer' ? tone(c, -0.08) : CHROME, { gloss: 80 }),
+    wheel(0, y1 + 1.5, cz, R * 1.7, 1.4, '#2b2f33'),
+    wheel(0, y1 + 3.5, cz, R * 1.56, 0.4, '#a9bccb', { glass: true }),
+  );
+  const paddles = [0, 1, 2].map((i) => {
+    const a = (i * 2 * Math.PI) / 3;
+    return box(-1.4, 0, -0.9, 1.4, R * 0.34, 0, '#8794a0', { rz: i * 120, x: Math.sin(a) * R * 0.38, y: Math.cos(a) * R * 0.38 });
+  });
+  return {
+    blobs,
+    kids: [{ name: 'drum', at: [0, y1 + 2.2, cz], rot: [90, 0, 0], blobs: [cyl(0, 0, 0, R * 1.5, R * 1.5, 0.6, '#3a4752', { gloss: 40 }), cyl(0, 0, -0.2, R * 0.45, R * 0.45, 0.3, '#56636e'), ...paddles] }],
+  };
+}
+
 // ---------- vehicles ----------
 
 /** A straight tube between two points of the side view (x forward, z up), at lateral offset y */
@@ -710,7 +767,7 @@ export function pieceModel(f: FurnitureConfig, opts: { ghost?: boolean; open?: n
   if (k.kind === 'bicycle' || k.kind === 'ebike') return bike(r.variant, k.kind === 'ebike', f.w, f.h, r.height, r.color, r.accent);
   if (k.kind === 'scooter') return scooter(r.variant, f.w, f.h, r.height, r.color, r.accent);
   if (k.kind === 'motorbike') return motorbike(r.variant, f.w, f.h, r.height, r.color, r.accent);
-  return gardenModel(k.kind, r.variant, f.w, f.h, r.height, r.color, r.accent, seed, r.count, opts.open ?? 0) ?? energyModel(k.kind, r.variant, f.w, f.h, r.height, r.color, r.accent, r.count);
+  return gardenModel(k.kind, r.variant, f.w, f.h, r.height, r.color, r.accent, seed, r.count, opts.open ?? 0) ?? energyModel(k.kind, r.variant, f.w, f.h, r.height, r.color, r.accent, r.count) ?? applianceModel(k.kind, f.w, f.h, r.height, r.color);
 }
 
 /** All primitives of a model in piece coordinates (static stand-in: only turns about the vertical axis are kept) */

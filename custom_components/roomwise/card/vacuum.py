@@ -241,12 +241,8 @@ def sanitize_vacuums(vacs: Any) -> list[dict[str, Any]]:
     return out
 
 
-async def roborock_map(hass: HomeAssistant, entity: str) -> dict[str, Any] | None:
-    """The vacuum's own map in robot coordinates (mm): floor per room (with names), walls, dock.
-
-    Read from the Roborock integration's parsed map (image + calibration). Lets the card lay the map onto the
-    plan from the start — rooms of the same name, walls onto walls — including the plan's scale.
-    """
+def _roborock_home(hass: HomeAssistant, entity: str) -> tuple[Any, Any] | None:
+    """(home trait, maps trait) of the Roborock coordinator that runs this vacuum"""
     from homeassistant.helpers import entity_registry as er
 
     reg = er.async_get(hass).async_get(entity)
@@ -258,19 +254,30 @@ async def roborock_map(hass: HomeAssistant, entity: str) -> dict[str, Any] | Non
         coords = list(runtime.values()) if hasattr(runtime, "values") else list(runtime or [])
     except TypeError:
         coords = []
-    content = None
     for co in coords:
         duid = str(getattr(co, "duid", "") or "")
         if len(coords) > 1 and duid and duid not in (reg.unique_id or ""):
             continue
-        home = getattr(getattr(co, "properties_api", None), "home", None)
-        maps = getattr(home, "home_map_content", None) if home is not None else None
-        for mc in (maps or {}).values():
-            if mc is None or getattr(mc, "map_data", None) is None or not getattr(mc, "image_content", None):
-                continue
-            if content is None or getattr(mc.map_data, "vacuum_position", None) is not None:
-                content = mc
-    if content is None:
+        api = getattr(co, "properties_api", None)
+        home = getattr(api, "home", None)
+        if home is not None:
+            return home, getattr(api, "maps", None)
+    return None
+
+
+def _current_flag(home: Any, maps: Any) -> Any:
+    flag = getattr(maps, "current_map", None) if maps is not None else None
+    if flag is not None:
+        return flag
+    # older library: the content that knows where the robot is
+    for k, mc in (getattr(home, "home_map_content", None) or {}).items():
+        if mc is not None and getattr(getattr(mc, "map_data", None), "vacuum_position", None) is not None:
+            return k
+    return None
+
+
+async def _content_points(hass: HomeAssistant, content: Any, names: dict[str, str]) -> dict[str, Any] | None:
+    if content is None or getattr(content, "map_data", None) is None or not getattr(content, "image_content", None):
         return None
     md = content.map_data
     try:
@@ -279,19 +286,97 @@ async def roborock_map(hass: HomeAssistant, entity: str) -> dict[str, Any] | Non
         return None
     if not cal or len(cal) < 3:
         return None
-    names: dict[str, str] = {}
-    try:
-        res = await hass.services.async_call("roborock", "get_maps", {}, target={"entity_id": entity}, blocking=True, return_response=True)
-        for m in (res or {}).get(entity, {}).get("maps", []):
-            for k, v in (m.get("rooms") or {}).items():
-                names[str(k)] = str(v)
-    except Exception:  # noqa: BLE001
-        pass
     rooms_mm = {str(k): (r.x0, r.y0, r.x1, r.y1) for k, r in (md.rooms or {}).items()}
     charger = [md.charger.x, md.charger.y] if getattr(md, "charger", None) is not None else None
-    image = content.image_content
+    return await hass.async_add_executor_job(map_points, content.image_content, cal, rooms_mm, names, charger)
 
-    return await hass.async_add_executor_job(map_points, image, cal, rooms_mm, names, charger)
+
+def _room_names(info: Any) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for r in getattr(info, "rooms", None) or []:
+        sid = getattr(r, "segment_id", None)
+        name = getattr(r, "raw_name", None) or None
+        if sid is not None and name:
+            out[str(sid)] = str(name)
+    return out
+
+
+async def roborock_map(hass: HomeAssistant, entity: str) -> dict[str, Any] | None:
+    """The vacuum's own map in robot coordinates (mm): floor per room (with names), walls, dock — the map the
+    robot uses right now.
+
+    Read from the Roborock integration's parsed map (image + calibration). Lets the card lay the map onto the
+    plan from the start — rooms of the same name, walls onto walls — including the plan's scale.
+    """
+    found = _roborock_home(hass, entity)
+    if found is None:
+        return None
+    home, maps = found
+    contents = getattr(home, "home_map_content", None) or {}
+    flag = _current_flag(home, maps)
+    content = contents.get(flag) if flag is not None else None
+    if content is None:
+        # no flag known: the one that knows where the robot is, else any with a picture
+        for mc in contents.values():
+            if mc is None or getattr(mc, "map_data", None) is None or not getattr(mc, "image_content", None):
+                continue
+            if content is None or getattr(mc.map_data, "vacuum_position", None) is not None:
+                content = mc
+    if content is None:
+        return None
+    names: dict[str, str] = {}
+    info = (getattr(home, "home_map_info", None) or {}).get(flag) if flag is not None else None
+    names.update(_room_names(info))
+    if not names:
+        try:
+            res = await hass.services.async_call("roborock", "get_maps", {}, target={"entity_id": entity}, blocking=True, return_response=True)
+            for m in (res or {}).get(entity, {}).get("maps", []):
+                if flag is None or str(m.get("flag")) == str(flag):
+                    for k, v in (m.get("rooms") or {}).items():
+                        names[str(k)] = str(v)
+        except Exception:  # noqa: BLE001
+            pass
+    return await _content_points(hass, content, names)
+
+
+async def roborock_maps(hass: HomeAssistant, entity: str) -> list[dict[str, Any]] | None:
+    """Every map the robot keeps (a house: one per floor), each with its name, whether it is the one in use, and
+    its floor and walls when the integration holds them. The Roborock library loads all maps once when it starts
+    (it switches through them); a map it could not load (the robot was busy) comes without geometry."""
+    found = _roborock_home(hass, entity)
+    if found is None:
+        return None
+    home, maps = found
+    infos = getattr(home, "home_map_info", None) or {}
+    contents = getattr(home, "home_map_content", None) or {}
+    current = _current_flag(home, maps)
+    flags = list(dict.fromkeys([*infos.keys(), *contents.keys()]))
+    if not flags:
+        one = await roborock_map(hass, entity)
+        return [{"id": "current", "name": None, "current": True, "map": one}] if one else []
+    out: list[dict[str, Any]] = []
+    for flag in flags:
+        info = infos.get(flag)
+        try:
+            geo = await _content_points(hass, contents.get(flag), _room_names(info))
+        except Exception:  # noqa: BLE001 — one map that does not parse leaves the others
+            geo = None
+        out.append({"id": str(flag), "name": getattr(info, "name", None) or None, "current": flag == current, "map": geo})
+    return out
+
+
+def roborock_map_select(hass: HomeAssistant, entity: str) -> str | None:
+    """The integration's "selected map" select of this vacuum (switches the robot's map)"""
+    from homeassistant.helpers import entity_registry as er
+
+    reg = er.async_get(hass)
+    vac = reg.async_get(entity)
+    if vac is None or not vac.device_id:
+        return None
+    for e in er.async_entries_for_device(reg, vac.device_id):
+        if e.domain == "select" and e.platform == "roborock" and str(e.unique_id).startswith("selected_map"):
+            return e.entity_id
+    return None
 
 
 def map_points(image: bytes, cal: list[dict[str, Any]], rooms_mm: dict[str, tuple], names: dict[str, str], charger: list | None) -> dict[str, Any] | None:

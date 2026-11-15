@@ -13,14 +13,15 @@ import { formatClock, formatNumber, onLanguageLoaded, setLanguage, t } from './i
 import { CardFullscreen, canElementFullscreen } from './fullscreen';
 import { areasConfig, normalizeConfig, stubConfig } from './config';
 import { examplePlan } from './example-plan';
-import type { VacuumPlanResult } from './vacuum-plan';
+import type { VacuumHomeResult } from './vacuum-plan';
+import { guessHome, skeletonFloors, type HomeKind } from './home-floors';
 import { buildingBounds, floorBounds, pointInPolygon } from './geometry';
 import { FpPlan } from './components/fp-plan';
 import { FloorplanLayer } from './layer/floorplan-layer';
 import './components/fp-plan';
 import './components/fp-floor-slider';
 import type { SliderFloor } from './components/fp-floor-slider';
-import { floorBelow, floorOfEntity, floorOfItem, floorShort, orderedFloors, stairsTarget, floorLevel } from './levels';
+import { floorBelow, floorOfEntity, floorOfItem, floorShort, orderedFloors, stairsFromBelow, stairsTarget, floorLevel } from './levels';
 import './layer/floorplan-layer';
 import './config-editor';
 import './components/fp-ambient';
@@ -29,6 +30,7 @@ import { ENTRY_DEFAULTS, EntryAlertController } from './entry-alert';
 import { PetController } from './pets';
 import { scheduleClientReport } from './client-info';
 import { furnitureContents, furnitureLabel, isWifiContent, isWifiPiece, resolveFurniture, wifiContentTarget } from './furniture';
+import { applianceRoles, isAppliance } from './appliance';
 import { hasMediaControls } from './media-controls';
 import { formatState, fireEvent, navigate } from './ha';
 import { mergePlan, sharesPlans, watchPlan, type SharedPlan } from './shared-plans';
@@ -74,9 +76,12 @@ export class FloorplanCard extends LitElement {
     _shared: { state: true },
     _planState: { state: true },
     _vacStart: { state: true },
+    _home: { state: true },
   };
   /** First steps "from the vacuum's map" open (its chooser, loaded on demand); 'card': a new card, 'floor': this floor */
   declare _vacStart?: 'card' | 'floor';
+  /** first steps: flat or house and how many floors (suggested from Home Assistant, changeable) */
+  declare _home?: { kind: HomeKind; n: number; set?: boolean };
   /** Shared floor plan (companion integration) as last pushed; undefined: none, or not loaded yet */
   declare _shared?: SharedPlan;
   /** A shared plan that cannot be shown (yet): loading, deleted, or no companion that keeps shared plans */
@@ -305,6 +310,8 @@ export class FloorplanCard extends LitElement {
     if (this.layer) this.layer.hass = hass;
     // a tap's confirmed state shows right away; other changes of plan entities are coalesced (a busy sensor
     // must not redraw the plan dozens of times a second on a wall tablet)
+    // washers & co. read every entity of their device: known once the entity registry is there
+    if (old?.entities !== hass.entities && this.hasAppliances) this.computeRelevant();
     if (!old || dropped) this.redraw();
     else if (this.relevantChanged(old, hass)) this.redrawSoon();
     if (this._config) this.entryAlert.update(hass, this._config);
@@ -473,7 +480,8 @@ export class FloorplanCard extends LitElement {
    * With Hausregeln its status lines ("Unterwegs · wahrscheinlich nach Hause · ca. 12 Min."), else the zone from HA. */
   private renderPeople() {
     const hass = this._hass;
-    if (!hass || this._config?.people !== true) return nothing;
+    // on unless switched off (people: false); without persons in HA there is nothing to show
+    if (!hass || this._config?.people === false) return nothing;
     const fromHr = this._hr?.places?.persons;
     const people = fromHr?.length
       ? fromHr.map((p) => ({ id: p.entity_id, name: p.name, picture: p.picture ?? undefined, home: p.state === 'zone' && p.place === 'home', moving: p.state === 'moving', line: p.line }))
@@ -499,15 +507,17 @@ export class FloorplanCard extends LitElement {
     const tripIds = new Set(trips.map((p) => p.entity_id));
     const staying = people.filter((p) => !tripIds.has(p.id));
     const travelling = people.filter((p) => tripIds.has(p.id));
+    // side by side, never overlapping (the ring stays whole); more than fit: one "+N"
+    const more = (n: number) => (n > 0 ? html`<span class="pp-av pp-n">+${n}</span>` : nothing);
     const avatar = (p: (typeof people)[number]) =>
       html`<span class="pp-av ${p.home ? 'home' : p.moving ? 'moving' : ''}" style=${p.picture ? `background-image:url("${p.picture}")` : ''}>${p.picture ? '' : p.name.slice(0, 1)}</span>`;
     return html`<div class="hr-mode">
       <button class="hr-chip people pressable" aria-haspopup="menu" aria-expanded=${this._peopleMenu ? 'true' : 'false'} title=${t('people.title')} @click=${() => (this._peopleMenu = !this._peopleMenu)}>
-        ${staying.length ? html`<span class="pp-stack">${staying.slice(0, 4).map(avatar)}</span>` : nothing}
+        ${staying.length ? html`<span class="pp-stack">${staying.slice(0, 4).map(avatar)}${more(staying.length - 4)}</span>` : nothing}
         ${travelling.length
           ? html`${staying.length ? html`<span class="pp-sep"></span>` : nothing}<span class="pp-stack pp-away">${travelling.slice(0, 3).map(
               (p) => html`<span class="pp-trip">${avatar(p)}<ha-icon class="pp-mode" .icon=${MOVE_ICON[trips.find((x) => x.entity_id === p.id)?.mode ?? ''] ?? MOVE_ICON['']}></ha-icon></span>`,
-            )}</span>`
+            )}${more(travelling.length - 3)}</span>`
           : nothing}
       </button>
       ${this._peopleMenu
@@ -709,8 +719,11 @@ export class FloorplanCard extends LitElement {
     if (this.layer) this.layer.dark = dark;
   }
 
+  private hasAppliances = false;
+
   private computeRelevant() {
     const ids = new Set<string>();
+    let appl = false;
     for (const f of this._config?.floors ?? []) {
       for (const r of f.rooms) {
         (r.lights ?? []).forEach((id) => ids.add(id));
@@ -723,8 +736,14 @@ export class FloorplanCard extends LitElement {
       for (const p of f.furniture ?? []) {
         if (p.entity) ids.add(p.entity);
         for (const id of Object.values(p.entities ?? {})) if (id) ids.add(id);
+        // washer, dryer, dishwasher: time left, door, power … of the whole device
+        if (isAppliance(p, resolveFurniture(p).k?.kind)) {
+          appl = true;
+          if (this._hass) applianceRoles(this._hass, p).ids.forEach((id) => ids.add(id));
+        }
       }
     }
+    this.hasAppliances = appl;
     ids.add(this._config?.sun ?? 'sun.sun');
     if (this._config?.weather) ids.add(this._config.weather);
     this.relevant = ids;
@@ -1009,18 +1028,35 @@ export class FloorplanCard extends LitElement {
   }
 
   private gesture(target: HitTarget, gesture: Gesture): void {
+    // the chip at stairs ("↑ Obergeschoss", "↓ Erdgeschoss" at the stairwell): to that floor
+    if (target.to) {
+      if (gesture === 'tap') void this.goFloor(target.to);
+      return;
+    }
+    let toggleFirst = false;
     if (target.kind === 'furniture') {
       const f = this.floor?.furniture?.find((x) => x.id === target.id);
       if (f && resolveFurniture(f).role === 'pet') return this.petGesture(f, gesture);
-      // stairs: up (or down) to the floor they lead to
-      if (f && !f.entity && resolveFurniture(f).k?.kind === 'stairs') {
-        const to = this._config && stairsTarget(this._config, this._floorId, f, this._hass);
-        if (gesture === 'tap' && to) void this.goFloor(to.id);
-        return;
+      if (f && resolveFurniture(f).k?.kind === 'stairs') {
+        // stairs without a device: up (or down) to the floor they lead to
+        if (!f.entity && !furnitureContents(f).length) {
+          const to = this._config && stairsTarget(this._config, this._floorId, f, this._hass);
+          if (gesture === 'tap' && to) void this.goFloor(to.id);
+          return;
+        }
+        // with their light: a tap switches it, a hold shows every device of the stairs
+        if (f.entity && gesture === 'hold' && furnitureContents(f).length) return void this.actionHost.openPopup({ piece: f });
+        toggleFirst = !!f.entity;
       }
       // router / access point: the Wi-Fi QR codes (unless the admin set an own tap action)
       if (f && isWifiPiece(f) && !f.tap_action) {
         if (gesture === 'tap') this.actionHost.openPopup({ wifi: f });
+        else if (gesture === 'hold' && f.entity) runAction(this.actionHost, { action: 'more-info', entity: f.entity }, {});
+        return;
+      }
+      // washer, dryer, dishwasher: time left and "fertig" (a tap never switches its plug off)
+      if (f && !f.tap_action && isAppliance(f, resolveFurniture(f).k?.kind)) {
+        if (gesture === 'tap') this.actionHost.openPopup({ appliance: f });
         else if (gesture === 'hold' && f.entity) runAction(this.actionHost, { action: 'more-info', entity: f.entity }, {});
         return;
       }
@@ -1044,7 +1080,7 @@ export class FloorplanCard extends LitElement {
     if (target.kind === 'furniture') {
       const f = this.floor?.furniture?.find((x) => x.id === target.id);
       const inside = f ? furnitureContents(f) : [];
-      if (f && inside.length) {
+      if (f && inside.length && !toggleFirst) {
         // only the Wi-Fi QR codes inside (a router Home Assistant does not know): straight to them
         if (gesture === 'tap') this.actionHost.openPopup(inside.length === 1 && isWifiContent(inside[0]) ? { wifi: wifiContentTarget(f) } : { piece: f });
         else if (gesture === 'hold' && f.entity) runAction(this.actionHost, { action: 'more-info', entity: f.entity }, {});
@@ -1175,7 +1211,54 @@ export class FloorplanCard extends LitElement {
 
   /** First steps: open the editor with a suggested plan (HA areas, the example) — nothing is saved until "Save" */
   private startWith(kind: 'areas' | 'example') {
-    this.ensureLayer().openEditor(undefined, { config: kind === 'areas' ? areasConfig(this._hass!) : examplePlan(), hint: t(kind === 'areas' ? 'editor.start_areas' : 'editor.start_example') });
+    let config = kind === 'areas' ? areasConfig(this._hass!) : examplePlan();
+    const home = this.home();
+    // a house: as many floors as asked for (Home Assistant's floors first)
+    if (kind === 'areas' && home.kind === 'house') {
+      const have = config.floors.filter((f) => f.rooms.length);
+      config = { ...config, floors: skeletonFloors(this._hass, 'house', Math.max(home.n, have.length), have.length ? have : config.floors) };
+    }
+    // a house: then "Wo ist die Treppe?" (stairs-tool.ts; only asked on a floor that has rooms)
+    this.ensureLayer().openEditor(undefined, { config, hint: t(kind === 'areas' ? 'editor.start_areas' : 'editor.start_example'), askStairs: config.floors.length > 1 });
+  }
+
+  /** "Draw it yourself": a house starts with its floors (empty), a flat with the one floor */
+  private startDraw() {
+    const home = this.home();
+    if (home.kind !== 'house' || home.n < 2) return this.openEditor();
+    const floors = skeletonFloors(this._hass, 'house', home.n);
+    this.ensureLayer().openEditor(floors[0].id, { config: { type: 'custom:floorplan-card', floors }, hint: t('home.start_hint', { n: floors.length }) });
+  }
+
+  /** The first steps' flat-or-house answer (or the suggestion) */
+  private home(): { kind: HomeKind; n: number; set?: boolean } {
+    return this._home ?? guessHome(this._hass);
+  }
+
+  private setHome(kind: HomeKind, n?: number) {
+    this._home = { kind, n: kind === 'house' ? Math.max(2, Math.min(6, n ?? Math.max(2, this.home().n))) : 1, set: true };
+  }
+
+  /** "Flat or house?" above the ways in — suggested from Home Assistant, always changeable */
+  private renderHomeQuestion() {
+    const h = this.home();
+    const g = guessHome(this._hass);
+    return html`<div class="onboard-home">
+      <span class="onboard-q">${t('home.question')}</span>
+      <span class="onboard-seg" role="group" aria-label=${t('home.question')}>
+        <button class="btn pressable ${h.kind === 'flat' ? 'accent' : ''}" data-home="flat" aria-pressed=${h.kind === 'flat'} @click=${() => this.setHome('flat')}>${t('home.flat')}</button>
+        <button class="btn pressable ${h.kind === 'house' ? 'accent' : ''}" data-home="house" aria-pressed=${h.kind === 'house'} @click=${() => this.setHome('house')}>${t('home.house')}</button>
+      </span>
+      ${h.kind === 'house'
+        ? html`<span class="onboard-n">
+            ${t('home.floors')}
+            <button class="icon-btn pressable" data-floors-minus aria-label=${t('home.fewer')} ?disabled=${h.n <= 2} @click=${() => this.setHome('house', h.n - 1)}><ha-icon icon="mdi:minus"></ha-icon></button>
+            <b class="num" data-floors-n>${h.n}</b>
+            <button class="icon-btn pressable" data-floors-plus aria-label=${t('home.more')} ?disabled=${h.n >= 6} @click=${() => this.setHome('house', h.n + 1)}><ha-icon icon="mdi:plus"></ha-icon></button>
+          </span>`
+        : nothing}
+      ${!h.set && g.why ? html`<div class="onboard-tip onboard-why">${t(`home.why_${g.why}`)}</div>` : nothing}
+    </div>`;
   }
 
   /** First steps "from the vacuum's map": load the chooser, then show it in place of the welcome panel */
@@ -1191,20 +1274,23 @@ export class FloorplanCard extends LitElement {
   }
 
   /** "Apply" in the chooser: the editor opens with the plan from the map (unsaved until "Save") */
-  private applyVacuum(res: VacuumPlanResult) {
+  private applyVacuum(res: VacuumHomeResult) {
     const kind = this._vacStart;
     this._vacStart = undefined;
     const hint = t('vacplan.start_hint');
+    const made = res.floors.find((x) => x.rooms.length) ?? res.floors[0];
     if (kind === 'floor' && this._config) {
       const cfg = structuredClone(this._config);
       const f = cfg.floors.find((x) => x.id === this._floorId) ?? cfg.floors[0];
-      f.rooms = res.floor.rooms;
-      f.openings = [...(f.openings ?? []), ...(res.floor.openings ?? [])];
-      f.furniture = [...(f.furniture ?? []), ...(res.floor.furniture ?? [])];
+      f.rooms = made.rooms;
+      f.openings = [...(f.openings ?? []), ...(made.openings ?? [])];
+      f.furniture = [...(f.furniture ?? []), ...(made.furniture ?? [])];
       this.ensureLayer().openEditor(f.id, { config: cfg, hint });
       return;
     }
-    this.ensureLayer().openEditor(undefined, { config: { type: 'custom:floorplan-card', floors: [res.floor] }, hint });
+    // a house: open on the floor with the most rooms
+    const first = [...res.floors].sort((a, b) => b.rooms.length - a.rooms.length)[0];
+    this.ensureLayer().openEditor(first?.id, { config: { type: 'custom:floorplan-card', floors: res.floors }, hint, askStairs: res.floors.length > 1 });
   }
 
   private renderVacuumStart() {
@@ -1212,7 +1298,7 @@ export class FloorplanCard extends LitElement {
       <div class="onboard-panel wide">
         <div class="onboard-icon"><ha-icon icon="mdi:robot-vacuum"></ha-icon></div>
         <div class="onboard-title">${t('vacplan.title')}</div>
-        <fp-vacuum-start .hass=${this._hass} .onApply=${(r: VacuumPlanResult) => this.applyVacuum(r)} .onBack=${() => (this._vacStart = undefined)}></fp-vacuum-start>
+        <fp-vacuum-start .hass=${this._hass} .mode=${this._vacStart ?? 'card'} .home=${this._vacStart === 'card' && this._home?.set ? this._home : undefined} .onApply=${(r: VacuumHomeResult) => this.applyVacuum(r)} .onBack=${() => (this._vacStart = undefined)}></fp-vacuum-start>
       </div>
     </div>`;
   }
@@ -1266,8 +1352,9 @@ export class FloorplanCard extends LitElement {
           <div class="onboard-icon"><ha-icon icon="mdi:floor-plan"></ha-icon></div>
           <div class="onboard-title">${t('card.onboard_title')}</div>
           <div class="onboard-text">${t('card.onboard_text')}</div>
+          ${this.renderHomeQuestion()}
           <div class="group onboard-paths">
-            ${path('onboard-start', 'mdi:vector-square-edit', t('card.first_draw'), t('card.first_draw_sub'), () => this.openEditor())}
+            ${path('onboard-start', 'mdi:vector-square-edit', t('card.first_draw'), t('card.first_draw_sub'), () => this.startDraw())}
             ${path(
               'onboard-areas',
               'mdi:home-import-outline',
@@ -1380,6 +1467,7 @@ export class FloorplanCard extends LitElement {
           .insetTop=${this._tripsInset}
           .frameBounds=${multi ? this.allBuilding(cfg) : undefined}
           .stairs=${multi ? this.stairsMap(cfg, floor) : undefined}
+          .stairsBelow=${multi ? this.stairwell(cfg, floor) : undefined}
           .liveVacuums=${!!companionInfo()}
           .frontDoor=${cfg.entry_alert?.door}
           .hrOccupied=${this.hrOccupied(floor)}
@@ -1582,17 +1670,17 @@ export class FloorplanCard extends LitElement {
   }
   private petsFor?: { cfg: FloorplanCardConfig; f: FloorConfig };
 
-  /** Stairs on the shown floor and where a tap takes you */
+  /** Stairs on the shown floor and where their chip takes you (also stairs with a light: the chip still leads there) */
   private stairsMap(cfg: FloorplanCardConfig, floor: FloorConfig | undefined) {
-    const m = new Map<string, { up: boolean; name: string }>();
+    const m = new Map<string, { up: boolean; name: string; to?: string }>();
     if (!floor) return undefined;
     const here = floorLevel(cfg, floor, this._hass);
     for (const f of floor.furniture ?? []) {
-      if (f.entity || resolveFurniture(f).k?.kind !== 'stairs') continue;
+      if (resolveFurniture(f).k?.kind !== 'stairs') continue;
       const to = stairsTarget(cfg, floor.id, f, this._hass);
-      if (to) m.set(f.id, { up: floorLevel(cfg, to, this._hass) > here, name: to.name });
+      if (to) m.set(f.id, { up: floorLevel(cfg, to, this._hass) > here, name: to.name, to: to.id });
     }
-    const key = [...m].map(([k, v]) => `${k}:${v.up}:${v.name}`).join('|');
+    const key = [...m].map(([k, v]) => `${k}:${v.up}:${v.name}:${v.to}`).join('|');
     if (key !== this.stairsKey) {
       this.stairsKey = key;
       this.stairsVal = m.size ? m : undefined;
@@ -1600,7 +1688,20 @@ export class FloorplanCard extends LitElement {
     return this.stairsVal;
   }
   private stairsKey = '';
-  private stairsVal?: Map<string, { up: boolean; name: string }>;
+  private stairsVal?: Map<string, { up: boolean; name: string; to?: string }>;
+
+  /** The stairs coming up from the floor below (their stairwell on the shown floor), kept while unchanged */
+  private stairwell(cfg: FloorplanCardConfig, floor: FloorConfig | undefined) {
+    const sb = stairsFromBelow(cfg, floor?.id, this._hass);
+    const key = sb ? `${sb.to}:${sb.name}:${sb.pieces.map((f) => `${f.id},${f.x},${f.y},${f.w},${f.h},${f.rotation ?? 0},${f.variant ?? ''},${f.count ?? ''}`).join('|')}` : '';
+    if (key !== this.stairwellKey) {
+      this.stairwellKey = key;
+      this.stairwellVal = sb;
+    }
+    return this.stairwellVal;
+  }
+  private stairwellKey = '';
+  private stairwellVal?: { pieces: FurnitureConfig[]; to: string; name: string };
 
   /** Floor slider data (top floor first) with a quiet dot where something is going on */
   private sliderFloors(cfg: FloorplanCardConfig): SliderFloor[] {
@@ -1875,6 +1976,26 @@ export class FloorplanCard extends LitElement {
         width: 100%;
         text-align: left;
       }
+      .onboard-home {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        width: 100%;
+      }
+      .onboard-q {
+        font-weight: 600;
+      }
+      .onboard-seg,
+      .onboard-n {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .onboard-why {
+        width: 100%;
+      }
       .onboard-path {
         width: 100%;
         border: 0;
@@ -2026,11 +2147,16 @@ export class FloorplanCard extends LitElement {
       .hr-chip.people {
         padding: 0 var(--fp-space-2);
       }
+      /* side by side with room for the 4 px ring around each picture – they never overlap */
       .pp-stack {
         display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 2px;
       }
-      .pp-stack .pp-av + .pp-av {
-        margin-left: -8px;
+      .pp-av.pp-n {
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
       }
       .pp-av {
         width: 28px;
@@ -2058,11 +2184,9 @@ export class FloorplanCard extends LitElement {
         margin: 8px 2px;
         background: var(--fp-separator, rgba(120, 120, 128, 0.3));
       }
+      /* the travel badge sits 4 px outside the picture: a little more room */
       .pp-away {
-        gap: 4px;
-      }
-      .pp-stack.pp-away .pp-trip + .pp-trip {
-        margin-left: 0;
+        gap: 12px;
       }
       .pp-trip {
         position: relative;

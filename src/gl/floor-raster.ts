@@ -21,7 +21,7 @@ const STYLE_PROPS = [
 ];
 
 /** Layers: static (rarely changes) and dynamic (lights, pools, focus) — by top-level group class */
-export const FLOOR_STATIC = ['below', 'rooms', 'floors', 'beams', 'leaders'];
+export const FLOOR_STATIC = ['below', 'rooms', 'floors', 'stairwell', 'beams', 'leaders'];
 // door swings and window sashes are not drawn on the 3D floor: real leaves and sashes show their state
 export const FLOOR_DYNAMIC = ['occ', 'glows', 'ffxs', 'hrmarks', 'spills', 'focus-dim'];
 const KEEP_TAGS = new Set(['defs', 'clipPath', 'mask', 'radialGradient', 'linearGradient', 'pattern']);

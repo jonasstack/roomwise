@@ -146,6 +146,15 @@ class Adapter:
     async def map(self) -> dict[str, Any] | None:
         return None
 
+    async def maps(self) -> list[dict[str, Any]]:
+        """Every map of the robot (a house: one per floor): {id, name, current, map}; most robots have one"""
+        m = await self.map()
+        return [{"id": "current", "name": None, "current": True, "map": m}] if m else []
+
+    def map_select(self) -> str | None:
+        """An entity that switches the robot's map (select), if the integration has one"""
+        return None
+
     async def segments(self) -> list[dict[str, Any]]:
         return []
 
@@ -181,6 +190,16 @@ class RoborockAdapter(Adapter):
         from .vacuum import roborock_map
 
         return await roborock_map(self.hass, self.entity)
+
+    async def maps(self) -> list[dict[str, Any]]:
+        from .vacuum import roborock_maps
+
+        return await roborock_maps(self.hass, self.entity) or []
+
+    def map_select(self) -> str | None:
+        from .vacuum import roborock_map_select
+
+        return roborock_map_select(self.hass, self.entity)
 
 
 def _ids(ids: list[str]) -> list[int | str]:

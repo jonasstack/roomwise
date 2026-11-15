@@ -274,7 +274,10 @@ export class WeatherGL {
 
   static supported(): boolean {
     try {
-      return !!document.createElement('canvas').getContext('webgl');
+      const gl = document.createElement('canvas').getContext('webgl');
+      // the probe's context is given back at once (live contexts per page are few, see fp-plan.ts)
+      gl?.getExtension('WEBGL_lose_context')?.loseContext();
+      return !!gl;
     } catch {
       return false;
     }

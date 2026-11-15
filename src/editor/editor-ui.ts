@@ -28,10 +28,12 @@ import type { FpPlan } from '../components/fp-plan';
 import { boundsOf, closestPointOnSegment, floorBounds, pointInPolygon, pointsToPath, polylabel, round, snapPoint, type SnapResult } from '../geometry';
 import { PLAN_MAX_BYTES, normalizeConfig, planFile, readPlanFile, uid } from '../config';
 import { moveWalls, planWalls, roomFromMap, snapToMap, wallEnds, wallLines } from '../vac-plan';
+import { applyEdgeMove, edgeMove, sharedCorners, snapCorner, snapEdge, type CornerRef, type EdgeMove } from './wall-drag';
 import { houseRules, hrColor, roomArea, ruleSentence, type HrForEntity, type HrRule } from '../house-rules';
 import type { HrMarks } from '../components/fp-plan';
 import { t } from '../i18n';
 import { floorBelow, floorLevel, floorOfEntity, floorShort, orderedFloors, reorderLevels } from '../levels';
+import { askStairsOnStart, onStairsEvent, startStairsTool, stairsHint, stairsTap } from './stairs-tool';
 import { CATEGORIES, FURNITURE_BY_KIND, LIBRARY, categoryLabel, drawFurniture, snapsToWall, type LibraryItem } from '../furniture';
 import { saveCardConfig } from './save';
 import { renderTracePanel, traceOverlay, traceTap, patchTrace, storeTraceImages, dropUnusedImages, type TraceMode } from './trace-panel';
@@ -48,8 +50,9 @@ import './action-editor';
 import '../components/icon-picker';
 import { markTourSeen, tourSeen } from './tour';
 import './tour';
+import { labelStyleOf, setLabelStyle, type LabelStyle } from '../components/label-style';
 
-export type Tool = 'select' | 'draw' | 'door' | 'window' | 'garage';
+export type Tool = 'select' | 'draw' | 'door' | 'window' | 'garage' | 'stairs';
 export type Panel = 'inspect' | 'furniture' | 'settings' | 'rules' | 'trace' | null;
 export type Selection = { kind: 'room' | 'device' | 'opening' | 'furniture'; id: string } | null;
 
@@ -57,7 +60,7 @@ export type Selection = { kind: 'room' | 'device' | 'opening' | 'furniture'; id:
 const OTHER = { id: 'other', de: 'Sonstige', en: 'Other', icon: 'mdi:dots-horizontal-circle-outline' };
 
 interface Drag {
-  type: 'trace' | 'vertex' | 'room' | 'device' | 'opening' | 'opening-a' | 'opening-b' | 'furniture' | 'rotate' | 'resize' | 'rect' | 'point' | 'label' | 'vacmap' | 'vacrot' | 'vacscale' | 'vaccrop' | 'vacedge' | 'planwall';
+  type: 'trace' | 'vertex' | 'edge' | 'room' | 'device' | 'opening' | 'opening-a' | 'opening-b' | 'furniture' | 'rotate' | 'resize' | 'rect' | 'point' | 'label' | 'vacmap' | 'vacrot' | 'vacscale' | 'vaccrop' | 'vacedge' | 'planwall';
   id?: string;
   index?: number;
   start: Point;
@@ -110,6 +113,7 @@ export class FloorplanEditorUI extends LitElement {
     _hover: { state: true },
     _snapGrid: { state: true },
     _snapGeom: { state: true },
+    _linkWalls: { state: true },
     _showGrid: { state: true },
     _past: { state: true },
     _future: { state: true },
@@ -154,6 +158,9 @@ export class FloorplanEditorUI extends LitElement {
   declare _plans?: SharedPlanSummary[];
   /** Open the settings' "several dashboards" section once (first steps: "Use a shared floor plan") */
   shareOpen = false;
+  /** the settings' "Floors" section is open (toolbar "Floors"), and scrolled into view once */
+  floorsOpen = false;
+  private floorsScroll = false;
   private shareScroll = false;
   private initial = '';
   private initialShare = '';
@@ -175,6 +182,8 @@ export class FloorplanEditorUI extends LitElement {
   declare _hover: SnapResult | null;
   declare _snapGrid: boolean;
   declare _snapGeom: boolean;
+  /** a wall / corner two rooms share moves for both (Alt while dragging: only this room) */
+  declare _linkWalls: boolean;
   declare _showGrid: boolean;
   declare _past: string[];
   declare _future: string[];
@@ -775,6 +784,7 @@ export class FloorplanEditorUI extends LitElement {
     this._hover = null;
     this._snapGrid = true;
     this._snapGeom = true;
+    this._linkWalls = true;
     this._showGrid = true;
     this._past = [];
     this._future = [];
@@ -817,6 +827,8 @@ export class FloorplanEditorUI extends LitElement {
         this._panel = 'settings';
         this.shareOpen = this.shareScroll = true;
       }
+      // a house laid out with its floors: "Wo ist die Treppe?" (nothing is guessed) — after the tour, if it shows
+      this.stairsAsk = !!this.start?.askStairs;
       this.refit();
       // first visit: the short tour of the main tools (once per user, again from the toolbar)
       // (not when the person came to pick a shared plan: the tour would only be in the way)
@@ -824,12 +836,34 @@ export class FloorplanEditorUI extends LitElement {
       if (fresh && this.hass)
         void tourSeen(this.hass).then((seen) => {
           if (!seen && this.isConnected) this._tour = true;
+          else this.askStairsNow();
         });
+      else this.askStairsNow();
     }
+  }
+
+  /** "Wo ist die Treppe?" still to ask (a house from the first steps) */
+  private stairsAsk = false;
+  private askStairsNow() {
+    if (!this.stairsAsk || !this.isConnected) return;
+    this.stairsAsk = false;
+    askStairsOnStart(this, orderedFloors(this._draft, this.hass));
   }
 
   override updated(changed: PropertyValues) {
     super.updated(changed);
+    // the tour is over: now the stairs question
+    if (changed.has('_tour') && !this._tour && changed.get('_tour')) this.askStairsNow();
+    if (changed.has('_panel') && this._panel !== 'settings') this.floorsOpen = false;
+    // toolbar "Floors": the section is further down in the settings
+    if (this.floorsScroll && this._panel === 'settings') {
+      const d = this.renderRoot.querySelector('details[data-fold="floors"]') as HTMLDetailsElement | null;
+      if (d) {
+        this.floorsScroll = false;
+        d.open = true;
+        d.scrollIntoView({ block: 'start' });
+      }
+    }
     // first steps "use a shared floor plan": the section is further down in the settings
     if (this.shareScroll && this._panel === 'settings') {
       const d = this.renderRoot.querySelector('details[data-share]');
@@ -931,6 +965,9 @@ export class FloorplanEditorUI extends LitElement {
     window.addEventListener('keydown', this.onKey);
     window.addEventListener('keyup', this.onKeyUp);
     window.addEventListener('blur', this.onKeyUp);
+    // "Treppe setzen" / "Wo ist die Treppe?" from the floors bar or the first steps (stairs-tool.ts)
+    this.addEventListener('fp-place-stairs', this.onStairs);
+    this.addEventListener('fp-ask-stairs', this.onStairs);
     this.ro = new ResizeObserver(() => {
       const r = this.getBoundingClientRect();
       this._narrow = r.width < 900 || r.height > r.width;
@@ -939,6 +976,8 @@ export class FloorplanEditorUI extends LitElement {
     document.documentElement.style.overflow = 'hidden';
   }
 
+  private onStairs = (e: Event) => onStairsEvent(this, e);
+
   override disconnectedCallback() {
     super.disconnectedCallback();
     this.offHr?.();
@@ -946,6 +985,8 @@ export class FloorplanEditorUI extends LitElement {
     window.removeEventListener('keydown', this.onKey);
     window.removeEventListener('keyup', this.onKeyUp);
     window.removeEventListener('blur', this.onKeyUp);
+    this.removeEventListener('fp-place-stairs', this.onStairs);
+    this.removeEventListener('fp-ask-stairs', this.onStairs);
     this.ro?.disconnect();
     document.documentElement.style.overflow = '';
   }
@@ -1099,8 +1140,18 @@ export class FloorplanEditorUI extends LitElement {
       grid: this.grid,
       tolerance: SNAP_PX / this.scale,
       snapGeometry: this._snapGeom,
-      snapGrid: this._snapGrid,
+      snapGrid: this.gridSnap,
     });
+  }
+
+  /** Room corners and walls snap to the grid: switched on, and not on a floor drawn freely (one made from a robot
+   * vacuum's map: its walls are not on a grid, snapping them there would bend them) */
+  get gridSnap(): boolean {
+    return this._snapGrid && this.floor?.grid_snap !== false;
+  }
+
+  private ghostRooms(): Point[][] {
+    return this.below?.rooms.filter((r) => r.points.length >= 3 && !r.outdoor).map((r) => r.points) ?? [];
   }
 
   private snapGrid(v: number, step = this.grid / 2) {
@@ -1135,7 +1186,7 @@ export class FloorplanEditorUI extends LitElement {
       if (h?.startsWith('v:')) this.deleteVertex(Number(h.slice(2)));
     },
     // Ctrl / Cmd / Space held: the drag moves the view instead of whatever is under the pointer
-    onDragStart: (tg: HitTarget, w: Point, e?: PointerEvent) => (e?.ctrlKey || e?.metaKey || this.spaceHeld ? false : this.onDragStart(tg, w)),
+    onDragStart: (tg: HitTarget, w: Point, e?: PointerEvent) => (e?.ctrlKey || e?.metaKey || this.spaceHeld ? false : this.onDragStart(tg, w, !!e?.altKey)),
     onDragMove: (w: Point) => this.onDragMove(w),
     onDragEnd: (_w: Point, cancelled: boolean) => this.onDragEnd(cancelled),
     onHover: (w: Point | null) => {
@@ -1152,6 +1203,7 @@ export class FloorplanEditorUI extends LitElement {
     const h = this.parseHandle(tg);
     if (this._tool === 'draw') return this.addDrawPoint(w, h);
     if (this._tool === 'door' || this._tool === 'window' || this._tool === 'garage') return this.placeOpening(w, this._tool);
+    if (this._tool === 'stairs') return stairsTap(this, w);
     if (h?.startsWith('label:')) return this.select({ kind: 'room', id: h.slice(6) });
     if (h) {
       if (h.startsWith('v:')) this._vertex = Number(h.slice(2));
@@ -1239,7 +1291,7 @@ export class FloorplanEditorUI extends LitElement {
     this._vertex = null;
   };
 
-  private onDragStart(tg: HitTarget, w: Point): boolean {
+  private onDragStart(tg: HitTarget, w: Point, alt = false): boolean {
     const h = this.parseHandle(tg);
     // moving the trace image: it follows the finger wherever it is grabbed
     if (this._panel === 'trace' && this._traceMode?.mode === 'move' && this.floor.trace) {
@@ -1326,12 +1378,18 @@ export class FloorplanEditorUI extends LitElement {
       if (h.startsWith('v:') && sel.kind === 'room') {
         this.snapshot();
         this._vertex = Number(h.slice(2));
-        this.drag = { type: 'vertex', id: sel.id, index: this._vertex, start: w, moved: false };
+        // a corner other rooms share moves for them too (Alt / switched off: only this room's)
+        const shared: CornerRef[] = sharedCorners(this.floor, sel.id, this._vertex, this._linkWalls && !alt);
+        this.drag = { type: 'vertex', id: sel.id, index: this._vertex, start: w, orig: { shared }, moved: false };
         return true;
       }
       if (h.startsWith('m:') && sel.kind === 'room') {
-        this.insertVertex(Number(h.slice(2)));
-        this.drag = { type: 'vertex', id: sel.id, index: this._vertex!, start: w, moved: false };
+        // the middle of a wall: drags the whole wall along its normal (a tap still adds a corner there); a wall
+        // another room shares goes along for it
+        const mv = edgeMove(this.floor, sel.id, Number(h.slice(2)), this._linkWalls && !alt);
+        if (!mv) return false;
+        this.snapshot();
+        this.drag = { type: 'edge', id: sel.id, index: Number(h.slice(2)), start: w, orig: { mv, rooms: structuredClone(this.floor.rooms), openings: structuredClone(this.floor.openings ?? []) }, moved: false };
         return true;
       }
       if ((h === 'oa' || h === 'ob') && sel.kind === 'opening') {
@@ -1536,18 +1594,36 @@ export class FloorplanEditorUI extends LitElement {
         break;
       }
       case 'vertex': {
-        const s = this.snap(w, { room: d.id!, index: d.index! });
+        const shared: CornerRef[] = (d.orig as { shared?: CornerRef[] } | undefined)?.shared ?? [{ room: d.id!, index: d.index! }];
+        const s = snapCorner(this.floor, shared, w, { tolerance: SNAP_PX / this.scale, grid: this.grid, snapGrid: this.gridSnap, snapGeometry: this._snapGeom, ghost: this.ghostRooms() });
         this._hover = s;
         this.mutate((_x, f) => {
-          f.rooms.find((r) => r.id === d.id)!.points[d.index!] = s.point;
+          for (const c of shared) {
+            const r = f.rooms.find((x) => x.id === c.room);
+            if (r?.points[c.index]) r.points[c.index] = s.point;
+          }
+        }, false);
+        break;
+      }
+      case 'edge': {
+        // the wall follows the finger along its normal, lining up with corners that stay (grid only when none is near)
+        const o = d.orig as { mv: EdgeMove; rooms: RoomConfig[]; openings: OpeningConfig[] };
+        const raw = (w[0] - d.start[0]) * o.mv.nrm[0] + (w[1] - d.start[1]) * o.mv.nrm[1];
+        const base: FloorConfig = { ...this.floor, rooms: o.rooms, openings: o.openings };
+        const { delta, snap } = snapEdge(base, o.mv, raw, { tolerance: SNAP_PX / this.scale, grid: this.grid, snapGrid: this.gridSnap, snapGeometry: this._snapGeom, extra: this.ghostRooms().flat() });
+        this._hover = snap;
+        this.mutate((_x, f) => {
+          f.rooms = structuredClone(o.rooms);
+          f.openings = structuredClone(o.openings);
+          applyEdgeMove(f, o.mv, delta);
         }, false);
         break;
       }
       case 'room': {
         const orig = d.orig as Point[];
         const step = this.grid;
-        const sx = this._snapGrid ? Math.round(dx / step) * step : round(dx);
-        const sy = this._snapGrid ? Math.round(dy / step) * step : round(dy);
+        const sx = this.gridSnap ? Math.round(dx / step) * step : round(dx);
+        const sy = this.gridSnap ? Math.round(dy / step) * step : round(dy);
         this.mutate((_x, f) => {
           f.rooms.find((r) => r.id === d.id)!.points = orig.map((p) => [p[0] + sx, p[1] + sy]);
         }, false);
@@ -1845,6 +1921,20 @@ export class FloorplanEditorUI extends LitElement {
     this.refit();
   }
 
+  /** The settings' "Floors" section, opened and in view: rename, order, height, link to Home Assistant, delete */
+  openFloors = () => {
+    this._view3d = false;
+    this._panel = 'settings';
+    this.floorsOpen = this.floorsScroll = true;
+  };
+
+  /** "Place the stairs" on a floor (the floors menu): that floor, the stairs tool on (stairs-tool.ts) */
+  placeStairs?: (floorId: string) => void = (floorId: string) => {
+    if (floorId !== this.floorId && this._draft.floors.some((f) => f.id === floorId)) this.setFloor(floorId);
+    this._view3d = false;
+    startStairsTool(this);
+  };
+
   /** A new floor on top (level above the highest); the floor below shows as a ghost to draw on */
   addFloor = () => {
     const id = uid('floor');
@@ -2102,6 +2192,8 @@ export class FloorplanEditorUI extends LitElement {
         ${this._tour
           ? html`<fp-editor-tour
               .root=${this.renderRoot}
+              .labelStyle=${labelStyleOf(this._draft)}
+              @label-style=${(e: CustomEvent) => this.mutate((x) => setLabelStyle(x, e.detail.value as LabelStyle))}
               @tour-end=${() => {
                 this._tour = false;
                 markTourSeen(this.hass);
@@ -2282,15 +2374,18 @@ export class FloorplanEditorUI extends LitElement {
           <ha-icon icon="mdi:close"></ha-icon><span>${t('common.cancel')}</span>
         </button>
       </div>
-      <div class="tb-center ${floors.length < 2 ? 'single' : ''}">
+      <div class="tb-center ${floors.length < 2 ? 'single' : ''}" role="group" aria-label=${t('editor.floors_bar')}>
         <fp-segmented
           class="floors"
           .options=${orderedFloors(this._draft, this.hass).reverse().map((f) => ({ value: f.id, label: narrow ? floorShort(f) : f.name }))}
           .value=${this.floorId ?? ''}
           @value-change=${(e: CustomEvent) => this.setFloor(e.detail.value)}
         ></fp-segmented>
-        <button class="icon-btn pressable" title=${t('editor.add_floor')} aria-label=${t('editor.add_floor')} @click=${this.addFloor}>
-          <ha-icon icon="mdi:layers-plus"></ha-icon>
+        <button class="btn plain pressable tb-add-floor" title=${t('editor.add_floor')} aria-label=${t('editor.add_floor')} @click=${this.addFloor}>
+          <ha-icon icon="mdi:layers-plus"></ha-icon><span>${t('editor.add_floor_short')}</span>
+        </button>
+        <button class="icon-btn pressable tb-floors" data-floors-menu title=${t('editor.floors_manage')} aria-label=${t('editor.floors_manage')} @click=${this.openFloors}>
+          <ha-icon icon="mdi:layers-edit"></ha-icon>
         </button>
       </div>
       <div class="tb-right">
@@ -2365,7 +2460,7 @@ export class FloorplanEditorUI extends LitElement {
     return html`<nav class="tools">
       ${tool('select', 'mdi:cursor-default-outline', t('editor.select'))} ${tool('draw', 'mdi:vector-square-edit', t('editor.draw'))}
       ${tool('door', 'mdi:door', t('editor.door'))} ${tool('window', 'mdi:window-closed-variant', t('editor.window'))}
-      ${tool('garage', 'mdi:garage', t('editor.garage_door'))}
+      ${tool('garage', 'mdi:garage', t('editor.garage_door'))} ${tool('stairs', 'mdi:stairs', t('editor.stairs_tool'))}
       <span class="sep"></span>
       ${panel('furniture', 'mdi:sofa-outline', t('editor.furniture'))}
       ${panel('settings', 'mdi:tune-variant', t('editor.settings'))} ${panel('trace', 'mdi:image-outline', t('trace.title'))}
@@ -2378,6 +2473,7 @@ export class FloorplanEditorUI extends LitElement {
         this._snapGrid = on;
         this._snapGeom = on;
       })}
+      ${toggle(this._linkWalls, 'mdi:link-variant', t('editor.link_walls'), () => (this._linkWalls = !this._linkWalls))}
     </nav>`;
   }
 
@@ -2413,6 +2509,7 @@ export class FloorplanEditorUI extends LitElement {
           : nothing}
       </div>`;
     if (this._tool === 'door' || this._tool === 'window' || this._tool === 'garage') return html`<div class="hint"><span>${t('editor.opening_hint')}</span></div>`;
+    if (this._tool === 'stairs') return stairsHint(this);
     // an empty plan: say where to start
     if (this._tool === 'select' && !this._panel && !this.floor.rooms.length)
       return html`<div class="hint empty-hint">
@@ -2513,7 +2610,15 @@ export class FloorplanEditorUI extends LitElement {
         }
       }
     }
-    if (this._hover?.point && (this._hover.kind === 'vertex' || this._hover.kind === 'edge')) {
+    if (this._hover?.guides?.length) {
+      // what the dragged corner / wall lines up with: from that corner to here, a little beyond both
+      for (const [a, b] of this._hover.guides) {
+        const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+        const ex = ((b[0] - a[0]) / len) * (24 / this.scale);
+        const ey = ((b[1] - a[1]) / len) * (24 / this.scale);
+        parts.push(svg`<line class="ed-guide align" x1=${a[0] - ex} y1=${a[1] - ey} x2=${b[0] + ex} y2=${b[1] + ey}></line>`);
+      }
+    } else if (this._hover?.point && (this._hover.kind === 'vertex' || this._hover.kind === 'edge')) {
       // Alignment guides through the snapped point.
       const [x, y] = this._hover.point;
       parts.push(svg`<line class="ed-guide" x1=${x} y1=${y - 4000} x2=${x} y2=${y + 4000}></line><line class="ed-guide" x1=${x - 4000} y1=${y} x2=${x + 4000} y2=${y}></line>`);
@@ -2662,7 +2767,7 @@ export class FloorplanEditorUI extends LitElement {
     const selItem = this.findSel(this._sel);
     if (this._sel?.kind === 'room' && selItem && this._tool === 'select') {
       const rp = (selItem as RoomConfig).points;
-      const live = this.drag?.type === 'vertex' ? this.drag.index! : -1;
+      const live = this.drag?.type === 'vertex' || this.drag?.type === 'edge' ? this.drag.index! : -1;
       out.push(
         html`${this.dimensions(
           rp.map((p, i) => [p, rp[(i + 1) % rp.length]] as [Point, Point]),
@@ -2993,6 +3098,10 @@ export class FloorplanEditorUI extends LitElement {
         min-width: 160px;
         max-width: 44vw;
       }
+      .tb-add-floor {
+        white-space: nowrap;
+        gap: 4px;
+      }
       .tb-right {
         display: flex;
         justify-content: flex-end;
@@ -3018,7 +3127,7 @@ export class FloorplanEditorUI extends LitElement {
           max-width: none;
           flex: 1;
         }
-        .tb-center .icon-btn,
+        .tb-center .tb-add-floor,
         .tb-right .opt {
           display: none;
         }
@@ -3186,6 +3295,26 @@ export class FloorplanEditorUI extends LitElement {
       .empty-hint {
         padding-left: var(--fp-space-4);
         border-radius: var(--fp-radius-l);
+      }
+      /* "Treppe setzen": question, kind of stairs, a room to put them in */
+      .stairs-hint {
+        flex-wrap: wrap;
+        justify-content: center;
+        padding-left: var(--fp-space-4);
+        border-radius: var(--fp-radius-l);
+      }
+      .stairs-hint .stair-kinds {
+        display: inline-flex;
+        gap: 4px;
+        padding-right: 0;
+      }
+      .stairs-hint .chip {
+        min-height: 36px;
+        gap: 6px;
+        white-space: nowrap;
+      }
+      .stairs-hint .chip ha-icon {
+        --mdc-icon-size: 18px;
       }
       .empty-hint ha-icon,
       .empty-hint .btn {

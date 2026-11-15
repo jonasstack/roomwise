@@ -78,7 +78,7 @@ ok(await page.evaluate(`${card}.shadowRoot.querySelector('fp-plan').is3d`), 'tou
 await page.locator('floorplan-card .chrome.top .icon-btn[aria-label="Grundriss bearbeiten"]').tap();
 await sleep(700);
 const ED = 'floorplan-card-editor-ui';
-await page.locator(`${ED} .tb-center .icon-btn`).tap(); // add floor
+await page.locator(`${ED} .tb-center .tb-add-floor`).tap(); // add floor
 await sleep(500);
 await page.locator(`${ED} .tool[data-tool="draw"]`).tap();
 await sleep(300);

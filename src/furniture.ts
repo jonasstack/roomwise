@@ -11,7 +11,7 @@ import type { CarOpen } from './car-info';
  */
 
 export type FurnitureCategory =
-  | 'living' | 'lighting' | 'climate' | 'tech' | 'dining' | 'sleeping' | 'work' | 'kitchen' | 'appliance' | 'bath' | 'home' | 'hall' | 'outdoor' | 'pets' | 'garden' | 'energy' | 'vehicle'
+  | 'structure' | 'living' | 'lighting' | 'climate' | 'tech' | 'dining' | 'sleeping' | 'work' | 'kitchen' | 'appliance' | 'bath' | 'home' | 'hall' | 'outdoor' | 'pets' | 'garden' | 'energy' | 'vehicle'
   | 'network' | 'security' | 'leisure';
 
 /**
@@ -294,9 +294,18 @@ export function stairPlan(w: number, h: number, v: string, n: number): StairPlan
 }
 
 /** Stairs from above: treads, the walking line (dot at the bottom, arrow at the top — the architects' way) */
-function drawStairs({ w, h, v, n, c, a }: DrawCtx): SVGTemplateResult {
+function drawStairs({ w, h, v, n, c, a, live }: DrawCtx): SVGTemplateResult {
   const sp = stairPlan(w, h, v, n);
-  const ink = 'rgba(0, 0, 0, 0.42)';
+  // quiet: the stairs stay in the background of the plan
+  const ink = 'rgba(0, 0, 0, 0.3)';
+  // stair light on or motion: the treads' front edges glow softly (warm, never glaring)
+  const lit = live?.on ? svg`<g class="stair-lit" aria-hidden="true" style="fill:none;stroke:rgb(255, 210, 150);stroke-opacity:0.85;stroke-width:2.4;stroke-linecap:round;vector-effect:non-scaling-stroke">${(sp.spiral ? [] : sp.treads).map(([x0, y0, x1, y1], i) => {
+    // the nose of a tread: its edge towards the step below (straight: +y; L's second flight: +x)
+    const second = !!sp.landing && i >= (sp.split ?? 0);
+    return second
+      ? svg`<line x1=${Math.max(x0, x1) - 1.2} y1=${Math.min(y0, y1) + 3} x2=${Math.max(x0, x1) - 1.2} y2=${Math.max(y0, y1) - 3}></line>`
+      : svg`<line x1=${Math.min(x0, x1) + 3} y1=${Math.max(y0, y1) - 1.2} x2=${Math.max(x0, x1) - 3} y2=${Math.max(y0, y1) - 1.2}></line>`;
+  })}${sp.spiral ? svg`<circle r=${sp.spiral.r1 - 3} style="fill:none"></circle>` : nothing}</g>` : nothing;
   const line = sp.line;
   const [ex, ey] = line[line.length - 1];
   const [px, py] = line[line.length - 2];
@@ -319,10 +328,10 @@ function drawStairs({ w, h, v, n, c, a }: DrawCtx): SVGTemplateResult {
       const large = b - a > Math.PI ? 1 : 0;
       return PathD(`M ${p[0][0]} ${p[0][1]} L ${p[1][0]} ${p[1][1]} A ${r1} ${r1} 0 ${large} 1 ${p[2][0]} ${p[2][1]} L ${p[3][0]} ${p[3][1]} Z`, i % 2 ? c : light(c, 0.04));
     });
-    return svg`${C(0, 0, r1, light(a, 0.0))}${wedges}${C(0, 0, r0, tone(c, -0.25))}${walk}`;
+    return svg`${C(0, 0, r1, light(a, 0.0))}${wedges}${C(0, 0, r0, tone(c, -0.25))}${lit}${walk}`;
   }
   const treads = sp.treads.map(([x0, y0, x1, y1], i) => R(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0), 0.5, i % 2 ? c : light(c, 0.04)));
-  return svg`${sp.landing ? R(sp.landing[0], sp.landing[1], sp.landing[2] - sp.landing[0], sp.landing[3] - sp.landing[1], 0.5, light(c, 0.06)) : nothing}${treads}${walk}`;
+  return svg`${sp.landing ? R(sp.landing[0], sp.landing[1], sp.landing[2] - sp.landing[0], sp.landing[3] - sp.landing[1], 0.5, light(c, 0.06)) : nothing}${treads}${lit}${walk}`;
 }
 
 
@@ -867,11 +876,14 @@ export const FURNITURE: FurnitureKind[] = [
   },
   {
     kind: 'washer', cat: 'bath', de: 'Waschmaschine', en: 'Washer', icon: 'mdi:washing-machine', w: 60, h: 60, height: 85, color: '#f4f4f2', keys: 'waschmaschine washing machine', palette: 'appliance', support: true,
-    draw: ({ w, h, c }) => svg`${R(-w / 2, -h / 2, w, h, 5, c)}${Ring(0, 3, Math.min(w, h) * 0.3, dark(c, 0.3), 2)}${R(-w / 2 + 5, -h / 2 + 4, w - 10, 6, 2, dark(c, 0.08), false)}`,
+    // from above: the lid, the control panel along the front edge (+y) with drawer, display and program knob
+    draw: ({ w, h, c }) =>
+      svg`${R(-w / 2, -h / 2, w, h, 5, c)}${R(-w / 2 + 3, h / 2 - 11, w - 6, 8, 2, dark(c, 0.07), false)}${R(-w / 2 + 6, h / 2 - 9.5, w * 0.26, 5, 1.2, dark(c, 0.03), false)}${R(-w * 0.08, h / 2 - 9, w * 0.22, 4, 1, '#26313a', false)}${C(w / 2 - 11, h / 2 - 7, 3, dark(c, 0.28), false)}`,
   },
   {
     kind: 'dryer', cat: 'bath', de: 'Trockner', en: 'Dryer', icon: 'mdi:tumble-dryer', w: 60, h: 60, height: 85, color: '#f4f4f2', palette: 'appliance', support: true,
-    draw: ({ w, h, c }) => svg`${R(-w / 2, -h / 2, w, h, 5, c)}${Ring(0, 3, Math.min(w, h) * 0.3, dark(c, 0.3), 2)}${Ring(0, 3, Math.min(w, h) * 0.2, dark(c, 0.2), 1)}`,
+    draw: ({ w, h, c }) =>
+      svg`${R(-w / 2, -h / 2, w, h, 5, c)}${R(-w / 2 + 3, h / 2 - 11, w - 6, 8, 2, dark(c, 0.07), false)}${R(-w / 2 + 6, h / 2 - 9.5, w * 0.32, 5, 1.2, dark(c, 0.03), false)}${R(-w * 0.02, h / 2 - 9, w * 0.2, 4, 1, '#26313a', false)}${C(w / 2 - 11, h / 2 - 7, 3, dark(c, 0.28), false)}`,
   },
   {
     kind: 'towel_radiator', cat: 'bath', de: 'Handtuchheizkörper', en: 'Towel radiator', icon: 'mdi:radiator', w: 60, h: 8, height: 120, color: '#f4f4f2', palette: 'metal', elevation: 30, role: 'heat',
@@ -987,8 +999,8 @@ export const FURNITURE: FurnitureKind[] = [
     draw: ({ w, h, c }) => svg`${R(-w / 2, -h / 2, w, h, 2, c)}`,
   },
   {
-    kind: 'stairs', cat: 'hall', de: 'Treppe', en: 'Stairs', icon: 'mdi:stairs', w: 100, h: 300, height: 100, color: '#d2a878', accent: '#f4f4f2', palette: 'wood',
-    keys: 'treppe stufen stiege treppenhaus wendeltreppe stairs staircase steps spiral obergeschoss keller',
+    kind: 'stairs', cat: 'structure', de: 'Treppe', en: 'Stairs', icon: 'mdi:stairs', w: 100, h: 300, height: 100, color: '#cdbca3', accent: '#f4f4f2', palette: 'wood',
+    keys: 'treppe stufen stiege treppenhaus wendeltreppe treppenlicht stufenlicht bauteil stairs staircase steps spiral obergeschoss keller dachgeschoss',
     variants: [
       V('straight', 'Gerade', 'Straight'),
       V('l', 'L-förmig (Podest)', 'L-shaped (landing)', { w: 200, h: 300, lib: { de: 'L-Treppe', en: 'L-shaped stairs' } }),
@@ -1803,6 +1815,8 @@ export function furnitureKind(kind: string): FurnitureKind | undefined {
 }
 
 export const CATEGORIES: { id: FurnitureCategory; de: string; en: string; icon: string }[] = [
+  // first: what belongs to the building itself (stairs) — not hidden among the hallway furniture
+  { id: 'structure', de: 'Bauteile', en: 'Building', icon: 'mdi:stairs' },
   { id: 'living', de: 'Wohnen', en: 'Living', icon: 'mdi:sofa-outline' },
   { id: 'dining', de: 'Essen', en: 'Dining', icon: 'mdi:table-chair' },
   { id: 'sleeping', de: 'Schlafen', en: 'Sleeping', icon: 'mdi:bed-outline' },
@@ -1922,7 +1936,8 @@ export function drawFurniture(f: FurnitureConfig, live?: PieceLive): SVGTemplate
 /** Draw order: rugs, then furniture, then things standing on top, then wall-mounted items. */
 export function furnitureLayer(f: FurnitureConfig): number {
   const r = resolveFurniture(f);
-  if (r.k?.kind === 'rug' || r.k?.kind === 'irrigation_zone') return 0;
+  // rugs, watering zones and stairs lie at the very bottom: everything else is drawn over them
+  if (r.k?.kind === 'rug' || r.k?.kind === 'irrigation_zone' || r.k?.kind === 'stairs') return 0;
   if (r.elevation > 0) return 3;
   if (r.k?.onTop) return 2;
   return 1;

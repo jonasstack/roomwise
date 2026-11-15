@@ -13,7 +13,7 @@ import { reducedMotion, spatialNext } from '../a11y';
 import { floorPattern } from '../floors';
 import { coverLive, coverLiveSig, drawOpening, openingMaskLines, openingState } from '../openings';
 import { furnitureBaseHeight, paint, renderFurniture3d, renderSun, renderWalls3d, renderWind } from '../plan3d';
-import { furnitureFx, renderFurnitureFx } from '../furniture-fx';
+import { furnitureFx, renderFurnitureFx, stairsLit } from '../furniture-fx';
 import { isWeakDevice, type SunInfo } from '../ambient';
 import { reloadForChunk } from '../assets';
 import type { GlScene } from '../gl/scene';
@@ -29,6 +29,7 @@ import { hasMediaControls } from '../media-controls';
 /** Does a tap on the piece do something (an entity, or own media buttons of a pure infrared device)? */
 const linked = (f: FurnitureConfig) => !!f.entity || hasMediaControls(f.media) || !!f.contents?.length;
 import { carOpen, carOpenSig } from '../car-info';
+import { APPLIANCE_KINDS, applianceStatus, applianceWatch } from '../appliance';
 
 // Animatable custom properties for the 2D <-> 3D transition (must be registered on the document).
 for (const [name, syntax, initialValue] of [
@@ -103,7 +104,11 @@ let GL_FAILS = 0;
 function webglSupported(): boolean {
   try {
     const c = document.createElement('canvas');
-    return !!(c.getContext('webgl2') || c.getContext('webgl'));
+    const gl = (c.getContext('webgl2') as WebGLRenderingContext | null) ?? c.getContext('webgl');
+    // give the probe's context back at once: browsers keep only a few live contexts per page (Firefox drops the
+    // oldest – which can be the 3D scene's own, leaving the CSS 3D view) and collect unused canvases late
+    gl?.getExtension('WEBGL_lose_context')?.loseContext();
+    return !!gl;
   } catch {
     return false;
   }
@@ -135,6 +140,7 @@ export class FpPlan extends LitElement {
     insetTop: { type: Number },
     frameBounds: { attribute: false },
     stairs: { attribute: false },
+    stairsBelow: { attribute: false },
     getState: { attribute: false },
     handlers: { attribute: false },
     wallWidth: { type: Number },
@@ -206,7 +212,9 @@ export class FpPlan extends LitElement {
    * place and size and the floors stack exactly when switching) */
   declare frameBounds?: Bounds;
   /** Stairs that lead to another floor: piece id → where (chip "↑ Obergeschoss", tap target) */
-  declare stairs?: Map<string, { up: boolean; name: string }>;
+  declare stairs?: Map<string, { up: boolean; name: string; to?: string }>;
+  /** Stairs on the floor below that lead up to this one: drawn here as a faint stairwell (2D and the 3D floor) */
+  declare stairsBelow?: { pieces: FurnitureConfig[]; to: string; name: string };
   declare getState: StateGetter;
   declare handlers?: Partial<GestureHandlers>;
   declare wallWidth: number;
@@ -725,6 +733,7 @@ export class FpPlan extends LitElement {
       rooms: this.floor?.rooms ?? [],
       all: this.floor?.furniture ?? [],
       stairsDown: this.stairs ? new Set([...this.stairs].filter(([, v]) => !v.up).map(([k]) => k)) : undefined,
+      stairsTo: this.stairs ? new Map([...this.stairs].map(([k, v]) => [k, v.up])) : undefined,
       pet: (f: FurnitureConfig) => {
         const state = this.pets?.get(f.id);
         const floor = this.floor;
@@ -746,6 +755,8 @@ export class FpPlan extends LitElement {
     const kind = resolveFurniture(f).k?.kind;
     // a car: what is open (from its device, detection cached)
     if (kind === 'car') return this.hass && (f.entity || f.entities || f.extra) && !this.editing ? { car: carOpen(this.hass, f, this.getState) } : undefined;
+    // stairs: lit treads while their light is on or someone moves on them
+    if (kind === 'stairs') return !this.editing && stairsLit(f, this.getState) > 0 ? { on: true } : undefined;
     if (!f.entity) return undefined;
     if (kind === 'fridge') {
       const count = fridgeList(f, this.getState);
@@ -777,7 +788,7 @@ export class FpPlan extends LitElement {
         if (f.entity || f.entities) sig.set(f.id, `${liveClass(f, this.getState)}${role === 'car' ? ':' + carOpenSig(this.pieceLive(f)?.car) : ''}`);
         continue;
       }
-      if (!f.entity && role !== 'heat') continue;
+      if (!f.entity && role !== 'heat' && !(kind === 'stairs' && f.contents?.length)) continue;
       const fx = furnitureFx(f, this.getState, floor.rooms);
       // a fridge with a shopping list: the number on its door
       const list = kind === 'fridge' ? fridgeList(f, this.getState) : 0;
@@ -1193,6 +1204,8 @@ export class FpPlan extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues) {
+    // washers & co. work out "running" / "fertig" from the device's entities (furniture-fx, chips): they need hass
+    if (this.hass && applianceWatch) applianceWatch.hass = this.hass;
     if (changed.has('_focusId') && !this._focusId) {
       this._badge = undefined;
       clearTimeout(this.badgeTimer);
@@ -1400,6 +1413,8 @@ export class FpPlan extends LitElement {
 
   override disconnectedCallback() {
     super.disconnectedCallback();
+    this.unAppl?.();
+    this.unAppl = undefined;
     clearInterval(this.followTimer);
     clearInterval(this.causeTimer);
     this.panZoom?.destroy();
@@ -1711,8 +1726,10 @@ export class FpPlan extends LitElement {
       if (ds.label && this.labelTap) return { kind: 'label', id: ds.label };
       // "wants out" message: a tap checks the walk off
       if (ds.pet && !this.editing) return { kind: 'furniture', id: ds.pet };
-      // stairs to another floor: the chip above them
-      if (ds.stairs && !this.editing) return { kind: 'furniture', id: ds.stairs };
+      // stairs to another floor: the chip above them (it leads there, whatever the stairs themselves do)
+      if (ds.stairs && !this.editing) return { kind: 'furniture', id: ds.stairs, to: ds.stairsTo || undefined };
+      // washer / dryer / dishwasher "fertig": a tap opens it (with "Gesehen")
+      if (ds.appliance && !this.editing) return { kind: 'furniture', id: ds.appliance };
       if (ds.device) return { kind: 'device', id: ds.device };
       if (inTop && ds.furniture && (this.editing || this.floor?.furniture?.some((f) => f.id === ds.furniture && linked(f)))) return { kind: 'furniture', id: ds.furniture };
     }
@@ -1733,7 +1750,9 @@ export class FpPlan extends LitElement {
       // flat 2D pieces only count when there is no 3D body to tap; unlinked pieces swallow the tap (rugs excepted)
       if (ds.furniture && !(this.gl && this.is3d)) {
         const f = this.floor?.furniture?.find((x) => x.id === ds.furniture);
-        if (f && (this.editing || f.entity || resolveFurniture(f).k?.kind !== 'rug')) return { kind: 'furniture', id: ds.furniture };
+        // stairs without a device stay in the background: the tap goes to the room (their chip leads upstairs)
+        const quiet = resolveFurniture(f ?? { kind: '' } as FurnitureConfig).k?.kind;
+        if (f && (this.editing || f.entity || f.contents?.length || (quiet !== 'rug' && quiet !== 'stairs'))) return { kind: 'furniture', id: ds.furniture };
       }
       if (ds.room) return this.nearDevice(e) ?? { kind: 'room', id: ds.room };
     }
@@ -1927,6 +1946,7 @@ export class FpPlan extends LitElement {
                 (r) => svg`<path class="floor" d=${pointsToPath(r.points)} fill=${`url(#fp-floor-${r.id})`}></path>`,
               )}
             </g>
+            ${this.editing ? nothing : this.renderStairwells()}
             ${this.trace && this.editing ? this.renderTrace(this.trace) : nothing}
             ${sunLayer?.inner ?? nothing}
             ${floor && this.night && this.night > 0.05 && !this.editing ? this.renderNightLight(floor, rooms) : nothing}
@@ -2144,17 +2164,26 @@ export class FpPlan extends LitElement {
     return html`<div class="focus-badge">${this.renderLabel(room)}</div>`;
   }
 
-  /** Car, home battery, solar, mower: a small chip with the live values above the piece */
+  /** washer, dryer, dishwasher: redraw when their history or "Gesehen" marks arrive, and every 30 s while one runs */
+  private applWho = () => this.requestUpdate();
+  private unAppl?: () => void;
+
+  /** Car, home battery, solar, mower, washer: a small chip with the live values above the piece */
   private renderInfoChips() {
     const floor = this.floor;
     if (!floor || this.editing) return nothing;
     const out: TemplateResult[] = [];
+    let applBusy = false;
+    let applDone = false;
+    /** appliance chips already placed (x, y, level): a neighbour's chip goes one row higher instead of covering it */
+    const placed: [number, number, number][] = [];
     const pct = (v?: number) => (v == null ? '–' : `${Math.round(v)} %`);
     const pw = (w?: number) => (w == null ? '' : Math.abs(w) >= 1000 ? `${formatNumber(w / 1000, 1)} kW` : `${Math.round(w)} W`);
     for (const f of floor.furniture ?? []) {
       const r = resolveFurniture(f);
       const kind = r.k?.kind;
-      const def = kind === 'car' || kind === 'home_battery' || kind === 'solar_panels' || kind === 'lawn_mower';
+      const appl = !!kind && APPLIANCE_KINDS.has(kind);
+      const def = kind === 'car' || kind === 'home_battery' || kind === 'solar_panels' || kind === 'lawn_mower' || appl;
       if (!(f.show_value ?? def) || !(f.entity || f.entities)) continue;
       if (this._focusId) {
         const room = floor.rooms.find((x) => x.id === this._focusId);
@@ -2163,6 +2192,8 @@ export class FpPlan extends LitElement {
       let icon = 'mdi:information-outline';
       let text = '';
       let cls = '';
+      let extra = '';
+      let tap = '';
       const get = (id?: string) => (id ? this.getState(id) : undefined);
       if (kind === 'car') {
         const c = carLive(f, this.getState);
@@ -2199,12 +2230,50 @@ export class FpPlan extends LitElement {
         icon = st === 'error' ? 'mdi:alert-outline' : 'mdi:robot-mower-outline';
         text = t(st === 'mowing' ? 'mower.mowing' : st === 'returning' ? 'mower.returning' : st === 'error' ? 'mower.error' : st === 'paused' ? 'mower.paused' : 'mower.docked');
         cls = st === 'error' ? 'warn' : st === 'mowing' ? 'charge' : 'away';
+      } else if (appl && this.hass) {
+        // washer, dryer, dishwasher: only while it runs (minutes left) or is done and nobody has seen it yet
+        this.unAppl ??= applianceWatch.listen(this.applWho);
+        const a = applianceStatus(this.hass, f, kind, this.getState);
+        if (a.phase === 'idle') continue;
+        applBusy = true;
+        icon = kind === 'dryer' ? 'mdi:tumble-dryer' : kind === 'dishwasher' ? 'mdi:dishwasher' : 'mdi:washing-machine';
+        if (a.phase === 'done') {
+          applDone = true;
+          icon = 'mdi:check-circle';
+          text = t('appliance.done');
+          cls = 'appl done';
+          tap = f.id;
+        } else if (a.phase === 'paused') {
+          text = t('appliance.paused');
+          cls = 'appl away';
+        } else {
+          text =
+            a.mins != null
+              ? a.mins <= 90 || a.endAt == null
+                ? t('appliance.left', { n: a.mins })
+                : t('appliance.until', { time: new Date(a.endAt).toLocaleTimeString(getLanguage(), { hour: '2-digit', minute: '2-digit' }) })
+              : a.progress != null
+                ? t('appliance.running_pct', { n: Math.round(a.progress) })
+                : t('appliance.running');
+          cls = 'appl run';
+          if (a.progress != null) extra = `--p:${Math.max(0, Math.min(100, a.progress))}%`;
+        }
       } else continue;
       const away = kind === 'car' && carLive(f, this.getState).away;
-      const z = this.is3d ? Math.round(r.elevation + (away ? r.height * 0.35 : r.height + (kind === 'car' ? 45 : 30))) : 0;
-      out.push(html`<div class="marker-wrap pet-wrap" data-follow=${kind === 'lawn_mower' ? f.id : ''} style=${`left:${f.x}px;top:${f.y}px;--bz:${z}px`}>
-        <div class="pet-chip info ${cls}"><ha-icon .icon=${icon}></ha-icon>${text}</div>
+      let lift = 0;
+      if (appl) {
+        while (lift < 3 && placed.some(([x, y, l]) => l === lift && Math.abs(x - f.x) < 160 && Math.abs(y - f.y) < 90)) lift++;
+        placed.push([f.x, f.y, lift]);
+      }
+      const z = this.is3d ? Math.round(r.elevation + (away ? r.height * 0.35 : r.height + (kind === 'car' ? 45 : 30)) + lift * 34) : 0;
+      const top = lift && !this.is3d ? `calc(${f.y}px - ${lift * 34}px * var(--fp-inv, 1))` : `${f.y}px`;
+      out.push(html`<div class="marker-wrap pet-wrap" data-follow=${kind === 'lawn_mower' ? f.id : ''} style=${`left:${f.x}px;top:${top};--bz:${z}px`}>
+        <div class="pet-chip info ${cls} ${extra ? 'prog' : ''}" style=${extra} data-appliance=${tap} data-appl=${appl ? f.id : ''}><ha-icon .icon=${icon}></ha-icon>${text}</div>
       </div>`);
+    }
+    if (this.unAppl) {
+      applianceWatch.clock(this.applWho, applBusy);
+      if (applDone) applianceWatch.syncAcks(this.hass);
     }
     return out;
   }
@@ -2375,20 +2444,44 @@ export class FpPlan extends LitElement {
     )}</g>`;
   }
 
-  /** Stairs to another floor: a small chip "↑ Obergeschoss" above them — a tap goes there */
+  /** Stairs to another floor: a small chip "↑ Obergeschoss" above them — a tap goes there. The stairwell of the
+   *  stairs coming up from the floor below gets "↓ Erdgeschoss". */
   private renderStairChips() {
     const floor = this.floor;
-    if (!floor || !this.stairs?.size || this.editing) return nothing;
+    if (!floor || this.editing) return nothing;
     const out: TemplateResult[] = [];
+    const chip = (f: FurnitureConfig, up: boolean, name: string, to: string | undefined, z: number) =>
+      html`<div class="marker-wrap pet-wrap" style=${`left:${f.x}px;top:${f.y}px;--bz:${z}px`}>
+        <div class="pet-chip stair" data-stairs=${f.id} data-stairs-to=${to ?? ''}><ha-icon .icon=${up ? 'mdi:stairs-up' : 'mdi:stairs-down'}></ha-icon>${name}</div>
+      </div>`;
     for (const f of floor.furniture ?? []) {
-      const to = this.stairs.get(f.id);
+      const to = this.stairs?.get(f.id);
       if (!to) continue;
-      const z = this.is3d ? Math.round(Math.min(resolveFurniture(f).height, this.effectiveWallHeight) + 30) : 0;
-      out.push(html`<div class="marker-wrap pet-wrap" style=${`left:${f.x}px;top:${f.y}px;--bz:${z}px`}>
-        <div class="pet-chip stair" data-stairs=${f.id}><ha-icon .icon=${to.up ? 'mdi:stairs-up' : 'mdi:stairs-down'}></ha-icon>${to.name}</div>
-      </div>`);
+      out.push(chip(f, to.up, to.name, to.to, this.is3d ? Math.round(Math.min(resolveFurniture(f).height, this.effectiveWallHeight) + 30) : 0));
     }
+    for (const f of this.stairwells()) out.push(chip(f, false, this.stairsBelow!.name, this.stairsBelow!.to, this.is3d ? 30 : 0));
     return out;
+  }
+
+  /** The stairs from the floor below that end on this floor — unless this floor has its own stairs at that spot */
+  private stairwells(): FurnitureConfig[] {
+    const sb = this.stairsBelow;
+    const floor = this.floor;
+    if (!sb?.pieces.length || !floor) return [];
+    const own = (floor.furniture ?? []).filter((x) => resolveFurniture(x).k?.kind === 'stairs');
+    return sb.pieces.filter((f) => !own.some((x) => Math.hypot(x.x - f.x, x.y - f.y) < Math.max(f.w, f.h, x.w, x.h) / 2));
+  }
+
+  /** The stairwell: the stairs from below seen from above, faint, with a dashed edge (lies on the floor, also in 3D) */
+  private renderStairwells() {
+    const list = this.stairwells();
+    if (!list.length) return nothing;
+    return svg`<g class="stairwell" aria-hidden="true">${list.map(
+      (f) => svg`<g transform=${`translate(${f.x} ${f.y}) rotate(${f.rotation ?? 0})`}>
+        <g class="sw-steps">${drawFurniture(f)}</g>
+        <rect class="sw-edge" x=${-f.w / 2} y=${-f.h / 2} width=${f.w} height=${f.h} rx="3"></rect>
+      </g>`,
+    )}</g>`;
   }
 
   /** Pets: "wants to go out" at the front door, "out for a walk" at the pet's place */
@@ -3648,6 +3741,20 @@ export class FpPlan extends LitElement {
       .below-ghost .ghost-piece {
         opacity: 0.4;
       }
+      /* the stairwell of the stairs coming up from the floor below: a faint hint, never in the way */
+      .stairwell {
+        pointer-events: none;
+      }
+      .stairwell .sw-steps {
+        opacity: 0.32;
+      }
+      .stairwell .sw-edge {
+        fill: none;
+        stroke: var(--fp-label);
+        stroke-opacity: 0.22;
+        stroke-width: 2;
+        stroke-dasharray: 9 7;
+      }
       /* stairs to another floor */
       .pet-chip.stair {
         pointer-events: auto;
@@ -3718,6 +3825,33 @@ export class FpPlan extends LitElement {
       }
       .pet-chip.info.sun ha-icon {
         color: #e8a92c;
+      }
+      /* washer, dryer, dishwasher: quiet while running (a thin progress line), a soft green "fertig" until seen */
+      .pet-chip.info.appl.run ha-icon {
+        color: var(--fp-accent);
+      }
+      .pet-chip.info.prog {
+        background:
+          linear-gradient(var(--fp-accent), var(--fp-accent)) left bottom / var(--p, 0%) 2px no-repeat,
+          color-mix(in srgb, var(--fp-surface) 92%, transparent);
+      }
+      .pet-chip.info.appl.done {
+        color: #fff;
+        background: #2fa55a;
+        pointer-events: auto;
+        cursor: pointer;
+        animation: fp-appl-done 2.4s ease-in-out 6 forwards;
+        box-shadow: 0 0 0 4px rgba(47, 165, 90, 0.18), var(--fp-shadow-2);
+      }
+      @keyframes fp-appl-done {
+        50% {
+          box-shadow: 0 0 0 8px rgba(47, 165, 90, 0.26), var(--fp-shadow-2);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .pet-chip.info.appl.done {
+          animation: none;
+        }
       }
       .pet-chip.info.warn {
         color: #fff;
@@ -4013,6 +4147,15 @@ export class FpPlan extends LitElement {
         transform: rotate(45deg);
         width: 16px;
         height: 16px;
+      }
+      /* lined up with something already drawn: a small ring, the helper lines show with what */
+      .h.snap.align::after {
+        width: 12px;
+        height: 12px;
+      }
+      .ed-guide.align {
+        opacity: 0.85;
+        stroke-dasharray: 6 4;
       }
       .h.rot::after,
       .h.vacmove::after,

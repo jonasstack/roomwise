@@ -265,5 +265,106 @@ ok(p0 and p5 and p5["arrive_at"] == p0["arrive_at"] and p5["eta_min"] == p0["eta
 pl = w.predict(s5.tr, s5.t + 3 * 3600, "walk")
 ok(pl and pl["eta_min"] == 1, "Ankunftszeit vorbei, noch unterwegs: 1 Min. (gleich da)", pl)
 
+# ---------------------------------------------------------------- names of places (made-up spots only)
+print("Ortsnamen statt „Gelernter Ort“")
+G = P.geo_name
+ios_poi = {"Name": "Stadthalle", "Areas Of Interest": ["Stadthalle"], "Thoroughfare": "Beispielweg", "Sub Thoroughfare": "3", "Locality": "Musterstadt", "Sub Locality": "Nordviertel", "Postal Code": "12345"}
+ok(G("Beispielweg 3\n12345 Musterstadt", ios_poi) == ("Stadthalle Nordviertel", P.GEO_POI), "iOS Ort von Interesse: „<Name> <Ortsteil>“", G("", ios_poi))
+ios_shop = {"Name": "Supermarkt Sonnenschein", "Areas Of Interest": "N/A", "Thoroughfare": "Beispielweg", "Sub Thoroughfare": "8", "Locality": "Musterstadt"}
+ok(G("", ios_shop) == ("Supermarkt Sonnenschein Musterstadt", P.GEO_POI), "Geschäft ohne Ortsteil: „<Name> <Ort>“", G("", ios_shop))
+ios_addr = {"Name": "Beispielweg 12", "Thoroughfare": "Beispielweg", "Sub Thoroughfare": "12", "Locality": "Musterstadt", "Areas Of Interest": "N/A"}
+ok(G("", ios_addr) == ("Beispielweg 12, Musterstadt", P.GEO_ADDRESS), "nur Adresse (Name = Straße): „<Straße Nr>, <Ort>“", G("", ios_addr))
+android = {"feature_name": "12", "thoroughfare": "Beispielweg", "sub_thoroughfare": "12", "locality": "Musterstadt", "postal_code": "12345"}
+ok(G("Beispielweg 12, 12345 Musterstadt, Deutschland", android) == ("Beispielweg 12, Musterstadt", P.GEO_ADDRESS), "Android (feature_name = Hausnummer): Adresse", G("", android))
+ok(G("", {"Locality": "Musterstadt"}) == ("Musterstadt", P.GEO_TOWN), "nur der Ort")
+ok(G("Beispielweg 12, 12345 Musterstadt", {}) == ("Beispielweg 12", P.GEO_ADDRESS), "ohne Attribute: erste Zeile der Adresse")
+ok(G("unknown", {}) is None, "nichts bekannt: kein Name")
+ok(G("", {"Name": "Musterstadt", "Locality": "Musterstadt"}) == ("Musterstadt", P.GEO_TOWN), "Name = Ort ist kein Ort von Interesse")
+N = P.nominatim_name
+ok(N({"name": "Stadthalle", "address": {"road": "Beispielweg", "house_number": "3", "suburb": "Nordviertel", "town": "Musterstadt"}}) == ("Stadthalle Nordviertel", P.GEO_POI), "OpenStreetMap: Ort von Interesse mit Ortsteil")
+ok(N({"name": "", "address": {"road": "Beispielweg", "house_number": "3", "town": "Musterstadt"}}) == ("Beispielweg 3, Musterstadt", P.GEO_ADDRESS), "OpenStreetMap: Adresse")
+ok(N({"name": "Beispielweg", "address": {"road": "Beispielweg", "city": "Musterstadt"}}) == ("Beispielweg, Musterstadt", P.GEO_ADDRESS), "OpenStreetMap: Straße als Name ist keine Sehenswürdigkeit")
+ok(P.place_label({"name": "Training", "auto": "Stadthalle Nordviertel"}) == "Training", "Name von Hand gewinnt")
+ok(P.place_label({"auto": "Stadthalle Nordviertel", "street": "Beispielweg 3"}) == "Stadthalle Nordviertel", "Ortsname vor Straße")
+ok(P.place_label({}) == "Gelernter Ort", "nichts bekannt: „Gelernter Ort“")
+ok(P._cached("Beispielweg 3") == ("Beispielweg 3", P.GEO_ADDRESS) and P._cached({"n": "X", "k": 3}) == ("X", 3), "alter Zwischenspeicher (nur Straße) bleibt lesbar")
+
+# a person stays at a learned place: the place takes over the name of the spot
+from types import SimpleNamespace  # noqa: E402
+
+
+class FakeState:
+    def __init__(self, state, attrs, t):
+        self.state, self.attributes = state, attrs
+        self.last_updated = SimpleNamespace(timestamp=lambda: t)
+
+
+def places_with(learner, geo_state, tasks):
+    pl = object.__new__(P.Places)
+    pl.learner = learner
+    pl.tracks = {}
+    pl._geo = {"pat": "sensor.phone_geocoded_location" if geo_state else None}
+    pl._street = {}
+    pl.data = {"settings": {"learn": True, "nominatim": False}, "geocache": {}}
+    states = {"sensor.phone_geocoded_location": geo_state} if geo_state else {}
+    pl.hass = SimpleNamespace(states=SimpleNamespace(get=states.get), async_create_background_task=lambda *a, **k: tasks.append(a))
+    return pl
+
+
+L2 = P.Learner({}, ZONES, TZ)
+s6 = Sim(L2, "pat")
+spot = (52.555, 13.31)
+for i in range(4):  # three visits make it a learned place, the fourth is now
+    s6.t = at(10 + i, 17)
+    s6.pos = HOME
+    s6.fix(*HOME)
+    s6.stay(30)
+    s6.drive(spot, 15)
+    s6.stay(60)
+    if i < 3:
+        s6.drive(HOME, 15)
+        s6.stay(30)
+key = s6.tr.node
+place = L2.place(key)
+ok(bool(key and key.startswith("lp_") and place), "gelernter Ort entsteht", key)
+tasks = []
+pl = places_with(L2, FakeState("Beispielweg 3", ios_poi, s6.t), tasks)
+pl.tracks = {"pat": s6.tr}
+pl._name_place("pat")
+ok(place.get("auto") == "Stadthalle Nordviertel" and P.place_label(place) == "Stadthalle Nordviertel", "Besuch: der Ort heißt wie der Ort von Interesse", place.get("auto"))
+pl.hass.states.get("sensor.phone_geocoded_location").attributes = ios_addr
+pl._name_place("pat")
+ok(place.get("auto") == "Stadthalle Nordviertel", "eine bloße Adresse ersetzt keinen besseren Namen", place.get("auto"))
+place["name"] = "Training"
+pl.hass.states.get("sensor.phone_geocoded_location").attributes = ios_shop
+pl._name_place("pat")
+ok(P.place_label(place) == "Training" and place.get("auto") == "Stadthalle Nordviertel", "Name von Hand: nichts wird überschrieben")
+place.pop("name")
+old = places_with(L2, FakeState("Beispielweg 3", ios_shop, s6.tr.node_since - 3600), tasks)
+old.tracks = {"pat": s6.tr}
+old._name_place("pat")
+ok(place.get("auto") == "Stadthalle Nordviertel", "Sensor von vor dem Besuch (anderer Ort) benennt nichts")
+# in a zone the zone's name counts, the spot's name changes nothing
+s6.drive(HOME, 15)
+s6.stay(30)
+before = dict(place)
+pl.hass.states.get("sensor.phone_geocoded_location").attributes = ios_shop
+pl._name_place("pat")
+ok(s6.tr.node == "home" and pl.label("home") == "Zuhause" and place == before, "in einer Zone gilt der Zonenname, kein Ort wird umbenannt", s6.tr.node)
+# OpenStreetMap off: no request
+off = places_with(L2, None, tasks)
+s7 = Sim(L2, "pat")
+s7.tr.stay = {"lat": 52.7, "lon": 13.7, "n": 3, "since": s6.t, "last": s6.t + 600}
+off.tracks = {"pat": s7.tr}
+off._stopped("pat", s7.tr)
+ok(not tasks, "OpenStreetMap aus: keine Anfrage ins Internet")
+off.data["settings"]["nominatim"] = True
+off._stopped("pat", s7.tr)
+ok(len(tasks) == 1, "OpenStreetMap an, Handy ohne Ortsnamen: eine Anfrage")
+withgeo = places_with(L2, FakeState("x", ios_poi, s6.t), tasks)
+withgeo.data["settings"]["nominatim"] = True
+withgeo._stopped("pat", s7.tr)
+ok(len(tasks) == 1, "Handy liefert Ortsnamen: OpenStreetMap wird nicht gefragt")
+
 print(f"\n{len(FAIL)} Fehler" if FAIL else "\nalles ok")
 sys.exit(1 if FAIL else 0)

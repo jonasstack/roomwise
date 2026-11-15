@@ -9,7 +9,7 @@
 // fake: { companion: true } adds an in-page stand-in for the dashboard storage (lovelace/config[/save]) and the companion's
 // shared plans and trace images (window.__fpFake holds its data); m.addCard(config) puts a second card on the page.
 // Build first: node tools/build.mjs
-import { chromium } from 'playwright';
+import { launch } from '../pw.mjs';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -93,7 +93,7 @@ const makeHass = () => ({
   entities: init.entities ?? {},
   devices: init.devices ?? {},
   areas: init.areas ?? {},
-  floors: {},
+  floors: init.floors ?? {},
   user: { id: 'demo', name: 'Demo', is_admin: true },
   language: init.language,
   locale: { language: init.language, number_format: 'language' },
@@ -131,16 +131,17 @@ document.getElementById('wrap').appendChild(el);
 window.__fpCard = el;
 `;
 
-export async function openMock({ config, states = {}, entities, devices, areas, size = '1280x800', scheme = 'light', language = 'de', touch = false, fake = null, reducedMotion = 'no-preference', ws, subscribe } = {}) {
+export async function openMock({ config, states = {}, entities, devices, areas, floors, size = '1280x800', scheme = 'light', language = 'de', touch = false, fake = null, reducedMotion = 'no-preference', ws, subscribe } = {}) {
   if (!existsSync(join(ROOT, 'dist/floorplan-card.js'))) throw new Error('build first: node tools/build.mjs');
   const [width, height] = size.split('x').map(Number);
-  const browser = await chromium.launch({ args: (process.env.PW_ARGS ?? '').split(' ').filter(Boolean) });
-  const ctx = await browser.newContext({ deviceScaleFactor: Number(process.env.PW_DPR ?? 1), viewport: { width, height }, colorScheme: scheme, hasTouch: touch, reducedMotion });
+  // PW_ENGINE: chromium (default), firefox or webkit – the same as tools/pw.mjs
+  const browser = await launch();
+  const ctx = await browser.newContext({ deviceScaleFactor: Number(process.env.PW_DPR ?? 1), viewport: { width, height }, colorScheme: scheme, hasTouch: touch, reducedMotion, isMobile: process.env.PW_ENGINE === 'firefox' ? undefined : false });
   // the companion integration and Hausregeln are absent here (unless `fake` stands in for the companion)
   await ctx.addInitScript((init) => {
     if (!init.fake?.companion) window.__fpNoCompanion = true;
     window.__fpInit = init;
-  }, { config, states, entities, devices, areas, language, dark: scheme === 'dark', fake, ws, subscribe });
+  }, { config, states, entities, devices, areas, floors, language, dark: scheme === 'dark', fake, ws, subscribe });
   await ctx.route(`${ORIGIN}/**`, (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path === '/') return route.fulfill({ body: PAGE, contentType: 'text/html' });
@@ -153,8 +154,11 @@ export async function openMock({ config, states = {}, entities, devices, areas, 
   await ctx.route((url) => !url.href.startsWith(ORIGIN), (route) => route.abort());
   const page = await ctx.newPage();
   const errors = [];
+  // headless Firefox without a GPU library (no libEGL) cannot create WebGL at all: that warning is the test machine,
+  // not the card (the card then shows its CSS 3D view, which the tests still check)
+  const machine = process.env.PW_ENGINE === 'firefox' ? /Failed to create WebGL context|WebGL warning|WEBGL_EXHAUSTED/ : null;
   page.on('console', (m) => {
-    if (m.type() === 'error' || m.type() === 'warning') errors.push(`[${m.type()}] ${m.text()}`);
+    if ((m.type() === 'error' || m.type() === 'warning') && !(machine && machine.test(m.text()))) errors.push(`[${m.type()}] ${m.text()}`);
   });
   page.on('pageerror', (e) => errors.push('[pageerror] ' + e.message));
   await page.goto(`${ORIGIN}/`);

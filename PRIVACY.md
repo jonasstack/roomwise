@@ -35,8 +35,12 @@ reinstall picks up where you left off. Delete those files while Home Assistant i
   - **CallMeBot** for alarm calls and messages via Telegram or Signal: the alarm text and your Telegram user name
     or Signal number.
   - **your own SMTP server** for alarm e-mails.
+  - **OpenStreetMap Nominatim** (off by default, switch "Look up place names online" in Hausregeln → Zuhause →
+    Orte): only for phones that give no place name themselves – when somebody stops at an unknown spot, the
+    position rounded to about 10 m goes to nominatim.openstreetmap.org to get the name of the place (at most once
+    per second, answers are cached locally, a neutral User-Agent without personal data).
 
-None of these is used unless you enter it under Settings in Hausregeln.
+None of these is used unless you enter or switch it on in Hausregeln.
 - **Anonymous diagnostics** (Hausregeln, opt-in, off by default): see below.
 
 ## Anonymous diagnostics (opt-in, off by default)
@@ -108,6 +112,14 @@ Log. Alle angemeldeten Benutzer können die Netze lesen, die nicht „Nur für A
 Tablet öffnen darf, sieht den QR-Code ohnehin). Ein QR-Code, der im Editor aus einem Bild gelesen wird, wird im
 Browser entschlüsselt; das Bild wird weder hochgeladen noch gespeichert. Beim Löschen der Integration wird die
 Datei mit entfernt.
+
+### Ortsnamen von OpenStreetMap (Hausregeln, freiwillig, standardmäßig aus)
+
+„Wo ist wer“ nennt Orte so, wie das Handy (Home-Assistant-App, Adress-Sensor) sie nennt – das bleibt lokal. Nur
+wenn ein Administrator „Ortsnamen im Internet nachschlagen (OpenStreetMap)“ einschaltet, fragt Home Assistant für
+Handys ohne eigenen Ortsnamen bei nominatim.openstreetmap.org nach: Hält jemand an einem unbekannten Ort an, geht
+die auf etwa 10 m gerundete Position dorthin (höchstens einmal pro Sekunde, Antworten werden lokal gemerkt, ein
+neutraler User-Agent ohne persönliche Daten). Ausschalten beendet das sofort.
 
 ### Anonyme Diagnosedaten (freiwillig, standardmäßig aus)
 

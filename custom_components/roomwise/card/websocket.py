@@ -29,6 +29,8 @@
   floorplan_card/images/delete     (admin)
   floorplan_card/wifi/get                   → the home's Wi-Fi networks for the QR codes (non-admins: those for everyone)
   floorplan_card/wifi/set           (admin) ← the Wi-Fi networks (replaces the list)
+  floorplan_card/appliance/acks             → when washers / dryers / dishwashers were last marked "seen" (piece id → s)
+  floorplan_card/appliance/ack              ← "Gesehen" on a done appliance (any user)
 """
 
 from __future__ import annotations
@@ -278,6 +280,26 @@ async def ws_vacuum_map(hass: HomeAssistant, connection: websocket_api.ActiveCon
     connection.send_result(msg["id"], result)
 
 
+@websocket_api.websocket_command({vol.Required("type"): "floorplan_card/vacuums/maps", vol.Required("entity"): ENTITY, vol.Optional("map"): MAP_ENTITY})
+@websocket_api.async_response
+async def ws_vacuum_maps(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Every map of the vacuum (a house: one per floor) — {adapter, select, maps: [{id, name, current, map}]};
+    `map` without geometry: the robot keeps it, but the integration has not loaded it. `select`: the entity that
+    switches the robot's map (only switched by the card after the person confirms, with the robot docked)."""
+    from . import vacuum_adapters
+
+    data = hass.data.get(DOMAIN)
+    result = None
+    try:
+        ad = await vacuum_adapters.get(hass, msg["entity"], msg.get("map") or (data.vacuum_map_entity(msg["entity"]) if data else None))
+        if ad:
+            maps = await ad.maps()
+            result = {"adapter": ad.kind, "select": ad.map_select(), "maps": [{**m, "map": {**m["map"], "adapter": ad.kind} if m.get("map") else None} for m in maps]}
+    except Exception:  # noqa: BLE001 — another version of the vacuum integration: no maps
+        result = None
+    connection.send_result(msg["id"], result)
+
+
 @websocket_api.websocket_command({vol.Required("type"): "floorplan_card/vacuums/info", vol.Required("entity"): ENTITY, vol.Optional("map"): MAP_ENTITY})
 @websocket_api.async_response
 async def ws_vacuum_info(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
@@ -489,10 +511,26 @@ def ws_wifi_set(hass: HomeAssistant, connection: websocket_api.ActiveConnection,
     connection.send_result(msg["id"], {"networks": count})
 
 
+@websocket_api.websocket_command({vol.Required("type"): "floorplan_card/appliance/acks"})
+@callback
+def ws_appliance_acks(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    if (data := _data(hass, connection, msg)) is None:
+        return
+    connection.send_result(msg["id"], dict(data.appliance_acks))
+
+
+@websocket_api.websocket_command({vol.Required("type"): "floorplan_card/appliance/ack", vol.Required("piece_id"): CARD_ID})
+@callback
+def ws_appliance_ack(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    if (data := _data(hass, connection, msg)) is None:
+        return
+    connection.send_result(msg["id"], data.appliance_ack(msg["piece_id"]))
+
+
 @callback
 def async_register_commands(hass: HomeAssistant) -> None:
-    for cmd in (ws_info, ws_entry_set, ws_entry_remove, ws_entry_ack, ws_walks, ws_walk_done, ws_walk_undo, ws_walks_subscribe, ws_alert_subscribe, ws_pets_set, ws_pets_subscribe, ws_vacuums_set, ws_vacuums_subscribe, ws_vacuum_learned, ws_vacuum_reset, ws_vacuum_map, ws_vacuum_path, ws_vacuum_info, ws_vacuum_clean,
+    for cmd in (ws_info, ws_entry_set, ws_entry_remove, ws_entry_ack, ws_walks, ws_walk_done, ws_walk_undo, ws_walks_subscribe, ws_alert_subscribe, ws_pets_set, ws_pets_subscribe, ws_vacuums_set, ws_vacuums_subscribe, ws_vacuum_learned, ws_vacuum_reset, ws_vacuum_map, ws_vacuum_maps, ws_vacuum_path, ws_vacuum_info, ws_vacuum_clean,
         ws_plans_list, ws_plans_get, ws_plans_save, ws_plans_delete, ws_plans_subscribe, ws_images_get, ws_images_save, ws_images_delete,
-        ws_wifi_get, ws_wifi_set,
+        ws_wifi_get, ws_wifi_set, ws_appliance_acks, ws_appliance_ack,
     ):
         websocket_api.async_register_command(hass, cmd)

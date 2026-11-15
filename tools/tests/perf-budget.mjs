@@ -8,7 +8,7 @@ import { frames, heap, idle, openCard, pan, scrollPopup, zoom } from '../perf/ha
 import { noisyIds, planIds } from '../perf/house.mjs';
 
 const BUDGET = {
-  startKb: 750, // entry + its static chunks (today ~620 KB; was 1600 KB as one file)
+  startKb: 780, // entry + its static chunks (0.1.0-beta.7: ~754 KB with stairs, appliances, floors bar, people bar; was 1600 KB as one file)
   startFiles: 14,
   idleRafPerS: 1, // a plan where nothing moves requests no animation frames
   idleTaskMsPerS: 15,

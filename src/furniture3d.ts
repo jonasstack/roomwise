@@ -829,7 +829,15 @@ function stairParts(w: number, d: number, H: number, c: string, v: string, n: nu
   let k = 0;
   sp.treads.forEach(([tx0, ty0, tx1, ty1], i) => {
     if (sp.landing && i === sp.split) out.push(B(sp.landing[0], sp.landing[1], sp.landing[2], sp.landing[3], 0, rise * ++k, tone(c, 0.05)));
-    out.push(B(tx0, ty0, tx1, ty1, 0, rise * ++k, i % 2 ? c : tone(c, 0.04)));
+    const top = rise * ++k;
+    out.push(B(tx0, ty0, tx1, ty1, 0, top, i % 2 ? c : tone(c, 0.04)));
+    // the tread's nose: a slim strip that glows softly while the stair light is on (or someone moves on them)
+    const xa = Math.min(tx0, tx1);
+    const xb = Math.max(tx0, tx1);
+    const ya = Math.min(ty0, ty1);
+    const yb = Math.max(ty0, ty1);
+    const second = !!sp.landing && i >= (sp.split ?? 0);
+    out.push({ ...(second ? B(xb - 1.6, ya + 3, xb + 0.4, yb - 3, top - 2.2, top - 0.6, tone(c, -0.08)) : B(xa + 3, yb - 1.6, xb - 3, yb + 0.4, top - 2.2, top - 0.6, tone(c, -0.08))), emit: true });
   });
   return out;
 }
@@ -984,10 +992,8 @@ export function furnitureParts(f: FurnitureConfig, live?: { open?: number }): Pa
       }
       return [...stools, B(x0, y0 + 2, x1, y1 - 30, 0, 10, tone(c, -0.35)), B(x0, y0, x1, y1 - 26, 10, 88, c), B(x0, y0, x1, y1, 88, 92, a, { topSvg: true })];
     }
+    // washer, dryer, dishwasher: models (models.ts applianceModel)
     case 'range':
-    case 'dishwasher':
-    case 'washer':
-    case 'dryer':
       return [B(x0, y0, x1, y1, 0, H, c, { radius: 2, topSvg: true })];
     case 'tv':
       // wall variant: the mounting height comes from the piece's elevation

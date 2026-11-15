@@ -2,7 +2,7 @@
  * <hr-places-view>: the pop-up "Orte" of the area "Zuhause" (redesign). The places (Home Assistant zones) with who is
  * there and how many rules use them; a zone's rules open in their own pop-up with one-tap starts ("Wenn jemand die
  * Arbeit verlässt …"). Below them the learned places (name, turn into a zone, forget – admins); the gear in the head
- * holds the settings for learning (learn places and ways, street names from OpenStreetMap). Fires "close".
+ * holds the settings for learning (learn places and ways, place names from OpenStreetMap – off by default). Fires "close".
  */
 import { css, html, nothing } from 'lit';
 import { mdiCogOutline, mdiMapMarkerOutline, mdiMapMarkerPlusOutline, mdiPencilOutline, mdiPlus, mdiTrashCanOutline } from '@mdi/js';

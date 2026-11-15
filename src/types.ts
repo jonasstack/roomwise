@@ -176,6 +176,8 @@ export interface PopupTarget {
   item?: string;
   /** Router / access point: the Wi-Fi QR codes (networks from the companion, the router's guest Wi-Fi) */
   wifi?: FurnitureConfig;
+  /** Washer, dryer, dishwasher: time left, "done" with "Gesehen" (appliance.ts) */
+  appliance?: FurnitureConfig;
 }
 
 /**
@@ -329,9 +331,11 @@ export interface FurnitureConfig extends ActionSet {
   show_value?: boolean;
   /** Car: battery level (%) at or below which it shows as empty (default 15) */
   low?: number;
+  /** Washer, dryer, dishwasher (appliance.ts): plug fallback thresholds and how long "done" stays (hours, 0 = until seen) */
+  appliance?: { run_w?: number; idle_w?: number; off_min?: number; hold?: number };
   /** Home battery: power sensor reports discharging as positive */
   invert_power?: boolean;
-  /** Stairs: the floor (id) a tap leads to; default: the floor above, on the top floor the one below */
+  /** Stairs: the floor (id) their chip leads to; default: the floor above, on the top floor the one below */
   stairs_to?: string;
   /** Car: entities of its device the detection must not use */
   exclude?: string[];
@@ -459,6 +463,9 @@ export interface FloorConfig {
   short?: string;
   /** Ceiling height in cm (3D room view, editor with full walls); default 250 */
   height?: number;
+  /** false: room corners and walls do not snap to the grid in the editor (a floor made from a robot vacuum's map –
+   * its walls are not on a grid); they line up with what is already drawn instead. Default: on */
+  grid_snap?: boolean;
   rooms: RoomConfig[];
   devices: DeviceConfig[];
   openings?: OpeningConfig[];
@@ -603,6 +610,8 @@ export type HitKind = 'room' | 'device' | 'opening' | 'furniture' | 'label' | 'b
 export interface HitTarget {
   kind: HitKind;
   id?: string;
+  /** a chip "↑ Obergeschoss" at stairs: the floor (id) it leads to */
+  to?: string;
 }
 
 export interface ViewTransform {
@@ -626,4 +635,6 @@ export interface EditorStart {
   hint?: string;
   /** open the settings at "Use on several dashboards" (pick a shared plan) */
   share?: boolean;
+  /** a house with several floors: ask "Wo ist die Treppe?" (stairs-tool.ts) — never guessed */
+  askStairs?: boolean;
 }

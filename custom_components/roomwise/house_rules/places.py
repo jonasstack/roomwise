@@ -19,9 +19,15 @@ Learning (Learner, pure Python, also runs over the recorder history in an execut
     moves along with the person, then the speed (walking < 7 km/h, bike up to 25, faster = car; very fast on a
     straight line = train). Every answer carries a confidence; nothing of it is stored.
 
+Names of places: instead of "Gelernter Ort" a place is called what it is – "<Name> <Ortsteil>" for a point of
+interest (a sports hall, a supermarket …), else "<Straße Nr>, <Ort>", else the town. The name comes from the
+companion app's `sensor.*_geocoded_location` on the person's phone (iOS: Name / Areas Of Interest / Thoroughfare …,
+Android: feature_name / thoroughfare / locality …), see `geo_name`. A learned place takes it over on a visit
+(`auto`; a better kind of name replaces a weaker one), a name given by the user always wins.
+
 Everything stays local. Reverse geocoding by OpenStreetMap Nominatim is off by default; when switched on (admin) it
-asks at most once per second, only when somebody stops at an unknown spot, caches the answers and sends an own
-User-Agent. Without it the street comes from the companion app's `sensor.*_geocoded_location`, if there is one.
+is used only for phones without the geocoded sensor, asks at most once per second, only when somebody stops at an
+unknown spot, rounds the position to about 10 m, caches the answers and sends an own User-Agent.
 """
 
 from __future__ import annotations
@@ -645,7 +651,7 @@ class Places:
         self._warm_timer: CALLBACK_TYPE | None = None
         self._view: dict[str, dict[str, Any]] = {}
         self._cache: dict[str, tuple[tuple[float, int], dict[str, Any]]] = {}
-        self._street: dict[str, tuple[float, str]] = {}  # person → (stay since, street) from Nominatim
+        self._street: dict[str, tuple[float, str, int]] = {}  # person → (stay since, name, kind) from Nominatim
         self._nominatim_lock = asyncio.Lock()
         self._nominatim_last = 0.0
         self.stats = {"nominatim_requests": 0, "fixes": 0, "skipped": 0}
@@ -906,6 +912,10 @@ class Places:
         new = self._view[pid]
         if tr is not None and new["state"] in ("stay", "place") and not new["place"] and (old is None or old.get("state") != new["state"] or old.get("place")):
             self._stopped(pid, tr)
+        if tr is not None and new["state"] in ("stay", "place"):
+            self._name_place(pid)
+            if self.learner.changed and new.get("place"):
+                self._view[pid] = self._person_view(pid)  # the place got its name just now
         if self.learner.changed:
             self.learner.changed = False
             self.save()
@@ -1011,7 +1021,7 @@ class Places:
             return "Zuhause" if key == "home" else str(z.attributes.get("friendly_name") or key)
         p = self.learner.place(key)
         if p is not None:
-            return p.get("name") or p.get("street") or TEXTS["learned"]
+            return place_label(p)
         return key
 
     def visible(self, key: str | None) -> bool:
@@ -1023,18 +1033,50 @@ class Places:
             return p is not None and (p["visits"] >= LEARNED_VISITS or bool(p.get("name")))
         return True
 
-    def street(self, pid: str) -> str | None:
-        """Street of the spot the person rests at: companion app sensor, else a Nominatim answer (if switched on)."""
+    def spot(self, pid: str) -> tuple[str, int] | None:
+        """(name, kind) of the spot the person is at right now: the companion app's geocoded sensor (only when it
+        was updated during this stay – an older one names the previous spot), else a Nominatim answer (if on)."""
+        tr = self.tracks.get(pid)
+        since = (tr.stay or {}).get("since") if tr else None
+        if since is None and tr is not None:
+            since = tr.node_since
         sensor = self._geo.get(pid)
         if sensor:
             st = self.hass.states.get(sensor)
-            if st is not None and st.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE, "") and st.state.lower() not in ("none", "unknown"):
-                return _short_address(st.state)
-        tr = self.tracks.get(pid)
+            if st is not None and st.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE, "") and (since is None or st.last_updated.timestamp() >= since - 300):
+                found = geo_name(st.state, dict(st.attributes))
+                if found:
+                    return found
         hit = self._street.get(pid)
         if hit and tr and tr.stay and hit[0] == tr.stay["since"]:
-            return hit[1]
+            return hit[1], hit[2]
         return None
+
+    def street(self, pid: str) -> str | None:
+        """Name of the spot the person rests at (point of interest, else the address, else the town) – see spot()."""
+        found = self.spot(pid)
+        return found[0] if found else None
+
+    def _name_place(self, pid: str) -> None:
+        """The person stays at a learned place (or a candidate): give it the name of the spot, unless the user named
+        it; a better kind of name (poi > address > town) replaces a weaker one."""
+        tr = self.tracks.get(pid)
+        if tr is None:
+            return
+        key = tr.node if tr.node and tr.node.startswith("lp_") else None
+        if key is None and tr.stay is not None and tr.zone is None:
+            key = self.learner.match(tr.stay["lat"], tr.stay["lon"], learned_only=False)
+        p = self.learner.place(key) if key and key.startswith("lp_") else None
+        if p is None or p.get("name"):
+            return
+        found = self.spot(pid)
+        if not found:
+            return
+        name, kind = found
+        if p.get("auto") == name or kind < int(p.get("auto_kind") or 0):
+            return
+        p["auto"], p["auto_kind"] = name, kind
+        self.learner.changed = True
 
     def _time(self, t: float | None) -> str:
         if not t:
@@ -1114,7 +1156,8 @@ class Places:
                 {
                     "id": p["id"],
                     "name": p.get("name") or "",
-                    "label": p.get("name") or p.get("street") or TEXTS["learned"],
+                    "label": place_label(p),
+                    "auto": p.get("auto"),
                     "lat": p["lat"],
                     "lon": p["lon"],
                     "radius": round(p["r"]),
@@ -1275,9 +1318,13 @@ class Places:
             tz = dt_util.get_default_time_zone()
             result = await self.hass.async_add_executor_job(_replay, base, zones, names, tz, fixes)
             if relearn:
-                # keep the names (and street) of places that were learned again at the same spot
+                # keep the names (and the names of the spot) of places that were learned again at the same spot
                 for p in old.get("places", []):
                     if not p.get("name"):
+                        if p.get("auto"):
+                            near = min(result["places"], key=lambda q: dist(q["lat"], q["lon"], p["lat"], p["lon"]), default=None)
+                            if near is not None and dist(near["lat"], near["lon"], p["lat"], p["lon"]) <= 150 and not near.get("auto"):
+                                near["auto"], near["auto_kind"] = p["auto"], p.get("auto_kind", GEO_ADDRESS)
                         continue
                     near = min(result["places"], key=lambda q: dist(q["lat"], q["lon"], p["lat"], p["lon"]), default=None)
                     if near is not None and dist(near["lat"], near["lon"], p["lat"], p["lon"]) <= 150 and not near.get("name"):
@@ -1303,10 +1350,11 @@ class Places:
         if not self.settings.get("nominatim") or self._geo.get(pid) or tr.stay is None:
             return
         st = tr.stay
-        key = f"{st['lat']:.3f},{st['lon']:.3f}"
+        key = f"{st['lat']:.4f},{st['lon']:.4f}"  # about 10 m: the exact position never leaves the house
         cache = self.data.setdefault("geocache", {})
         if key in cache:
-            self._street[pid] = (st["since"], cache[key])
+            n, k = _cached(cache[key])
+            self._street[pid] = (st["since"], n, k)
             return
         self.hass.async_create_background_task(self._nominatim(pid, st["since"], st["lat"], st["lon"], key), "house_rules_places_street")
 
@@ -1325,8 +1373,8 @@ class Places:
                     await asyncio.sleep(wait)  # usage policy: at most one request per second
                 self._nominatim_last = time.monotonic()
                 self.stats["nominatim_requests"] += 1
-                params = {"format": "jsonv2", "lat": f"{lat:.5f}", "lon": f"{lon:.5f}", "zoom": "18", "addressdetails": "1", "accept-language": self.hass.config.language or "de"}
-                headers = {"User-Agent": f"Hausregeln/{VERSION} (Home Assistant custom integration house_rules)"}
+                params = {"format": "jsonv2", "lat": f"{lat:.4f}", "lon": f"{lon:.4f}", "zoom": "18", "addressdetails": "1", "accept-language": self.hass.config.language or "de"}
+                headers = {"User-Agent": f"roomwise/{VERSION} (Home Assistant custom integration)"}
                 try:
                     async with async_get_clientsession(self.hass).get(NOMINATIM_URL, params=params, headers=headers, timeout=ClientTimeout(total=10)) as r:
                         if r.status != 200:
@@ -1335,21 +1383,29 @@ class Places:
                 except (ClientError, TimeoutError, ValueError) as err:
                     _LOGGER.debug("Nominatim: %s", err)
                     return
-                addr = body.get("address") or {}
-                road = addr.get("road") or addr.get("pedestrian") or addr.get("footway") or addr.get("path")
-                street = f"{road} {addr['house_number']}" if road and addr.get("house_number") else (road or addr.get("suburb") or addr.get("village") or addr.get("town") or "")
-                if not street:
+                found = nominatim_name(body if isinstance(body, dict) else {})
+                if not found:
                     return
-                cache[key] = street
+                cache[key] = {"n": found[0], "k": found[1]}
                 while len(cache) > 300:
                     cache.pop(next(iter(cache)))
                 self.save()
-            self._street[pid] = (since, cache[key])
-            p = self.learner.place(self.learner.match(lat, lon, learned_only=False))
-            if p is not None and not p.get("street"):
-                p["street"] = cache[key]
+            n, k = _cached(cache[key])
+            self._street[pid] = (since, n, k)
         self._cache.pop(pid, None)
         self._after(pid)
+
+
+def _cached(v: Any) -> tuple[str, int]:
+    """A geocache entry: {"n": name, "k": kind}; older entries are a plain street."""
+    if isinstance(v, dict):
+        return str(v.get("n") or ""), int(v.get("k") or GEO_ADDRESS)
+    return str(v), GEO_ADDRESS
+
+
+def place_label(p: dict[str, Any]) -> str:
+    """A learned place's name: the user's, else the name of the spot (geocoded / OpenStreetMap), else "Gelernter Ort"."""
+    return p.get("name") or p.get("auto") or p.get("street") or TEXTS["learned"]
 
 
 def _replay(base: dict[str, Any], zones: dict[str, tuple[float, float, float, str]], names: dict[str, str], tz: tzinfo, fixes: dict[str, list[tuple[float, float | None, float | None, float | None, str]]]) -> dict[str, Any]:
@@ -1372,6 +1428,67 @@ def _replay(base: dict[str, Any], zones: dict[str, tuple[float, float, float, st
             learner.tick(tr, rows[-1][0])
     learner._prune_places(time.time())  # noqa: SLF001
     return learner.data
+
+
+# ---------------------------------------------------------------------------------------------- names of places
+GEO_POI, GEO_ADDRESS, GEO_TOWN = 3, 2, 1  # how good a name is: a point of interest beats an address beats a town
+_HOUSE_NO = re.compile(r"^\d+[a-zA-Z]?(?:\s*[-/]\s*\d+[a-zA-Z]?)?$")
+
+
+def _attr(attrs: dict[str, Any], *keys: str) -> str:
+    """First non-empty attribute of several spellings (iOS "Sub Locality", Android "sub_locality" …)."""
+    low = {str(k).lower().replace(" ", "_"): v for k, v in attrs.items()}
+    for k in keys:
+        v = low.get(k)
+        if isinstance(v, (list, tuple)):
+            v = next((x for x in v if isinstance(x, str) and x.strip()), None)
+        if isinstance(v, str) and v.strip() and v.strip().lower() not in ("none", "null", "unknown", "n/a"):
+            return v.strip()
+    return ""
+
+
+def compose_name(poi: str, street: str, number: str, district: str, town: str) -> tuple[str, int] | None:
+    """The name of a spot: "<poi> <district or town>" for a point of interest, else "<street no>, <town>", else the
+    town. A poi that is only the address (house number, the street, the town) is no poi."""
+    road = f"{street} {number}".strip() if street else ""
+    where = district or town
+    p = poi.strip()
+    plain = {x.lower() for x in (street, number, road, f"{number} {street}".strip(), district, town) if x}
+    if p and not _HOUSE_NO.match(p) and p.lower() not in plain and not (street and p.lower().startswith(street.lower())):
+        if where and where.lower() not in p.lower():
+            return f"{p} {where}"[:80], GEO_POI
+        return p[:80], GEO_POI
+    if road:
+        return (f"{road}, {town or district}" if (town or district) else road)[:80], GEO_ADDRESS
+    if where:
+        return where[:80], GEO_TOWN
+    return None
+
+
+def geo_name(state: str | None, attrs: dict[str, Any]) -> tuple[str, int] | None:
+    """Name of the spot from the companion app's geocoded location sensor (state = the full address)."""
+    poi = _attr(attrs, "areas_of_interest", "name", "premises", "feature_name")
+    found = compose_name(
+        poi,
+        _attr(attrs, "thoroughfare"),
+        _attr(attrs, "sub_thoroughfare"),
+        _attr(attrs, "sub_locality"),
+        _attr(attrs, "locality", "sub_administrative_area"),
+    )
+    if found:
+        return found
+    if state and state.lower() not in ("unknown", "unavailable", "none", ""):
+        return _short_address(state), GEO_ADDRESS
+    return None
+
+
+def nominatim_name(body: dict[str, Any]) -> tuple[str, int] | None:
+    """Name of the spot from a Nominatim reverse answer (jsonv2 with addressdetails)."""
+    addr = body.get("address") or {}
+    road = addr.get("road") or addr.get("pedestrian") or addr.get("footway") or addr.get("path") or ""
+    town = addr.get("city") or addr.get("town") or addr.get("village") or addr.get("municipality") or ""
+    district = addr.get("suburb") or addr.get("city_district") or addr.get("quarter") or addr.get("hamlet") or ""
+    return compose_name(str(body.get("name") or ""), road, addr.get("house_number") or "", district if district != town else "", town)
 
 
 def _iso(t: float | None) -> str | None:

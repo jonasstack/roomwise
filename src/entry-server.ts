@@ -365,6 +365,24 @@ export function vacuumMap(hass: HomeAssistant, entity: string, map?: string): Pr
     .catch(() => undefined);
 }
 
+/** One of the robot's maps (a house: one per floor); `map` null: the robot keeps it, the integration has not loaded it */
+export interface VacuumMapEntry {
+  id: string;
+  name?: string | null;
+  current: boolean;
+  map: VacuumMap | null;
+}
+
+/** Every map of the vacuum, with the entity that switches the robot's map (if any); older companion: just the
+ * current map (or undefined when there is none) */
+export async function vacuumMaps(hass: HomeAssistant, entity: string): Promise<{ select?: string | null; maps: VacuumMapEntry[] } | undefined> {
+  const all = await hass.callWS<{ select?: string | null; maps: VacuumMapEntry[] } | null>({ type: 'floorplan_card/vacuums/maps', entity }).catch(() => false as const);
+  if (all) return all;
+  if (all === null) return undefined;
+  const one = await vacuumMap(hass, entity);
+  return one ? { maps: [{ id: 'current', name: null, current: true, map: one }] } : undefined;
+}
+
 /** Where position and map come from, segments and cleaning; undefined: older companion */
 export function vacuumInfo(hass: HomeAssistant, entity: string, map?: string): Promise<VacuumInfo | undefined> {
   return hass.callWS<VacuumInfo>({ type: 'floorplan_card/vacuums/info', entity, ...(map ? { map } : {}) }).catch(() => undefined);

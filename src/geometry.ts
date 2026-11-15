@@ -140,7 +140,10 @@ export const round = (n: number, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
 
 export interface SnapResult {
   point: Point;
-  kind: 'vertex' | 'edge' | 'grid' | 'none';
+  /** align: on the line (x, y or a wall's extension) of something already drawn */
+  kind: 'vertex' | 'edge' | 'align' | 'grid' | 'none';
+  /** what it lines up with: drawn as thin helper lines while dragging */
+  guides?: [Point, Point][];
 }
 
 /**
@@ -185,6 +188,104 @@ export function snapPoint(
       }
       return { point: [round(edge[0]), round(edge[1])], kind: 'edge' };
     }
+  }
+  if (opts.snapGrid !== false && opts.grid && opts.grid > 0) {
+    return { point: [Math.round(p[0] / opts.grid) * opts.grid, Math.round(p[1] / opts.grid) * opts.grid], kind: 'grid' };
+  }
+  return { point: [round(p[0]), round(p[1])], kind: 'none' };
+}
+
+/**
+ * Snap a dragged corner to what is already drawn, the way drawing programs do: an existing corner, then a wall, then
+ * the line of another corner (same x or same y, both at once where they cross) or the extension of a wall (also a
+ * slanted one) – with the lines it lines up with as `guides`. The grid only when none of that is near and it is on.
+ * `anchors`: corners to line up with (the other rooms' and the room's own neighbours of the dragged corner).
+ */
+export function snapDrag(
+  p: Point,
+  polygons: Point[][],
+  anchors: Point[],
+  opts: { grid?: number; tolerance: number; snapGeometry?: boolean; snapGrid?: boolean },
+): SnapResult {
+  const tol = opts.tolerance;
+  if (opts.snapGeometry !== false) {
+    let best: Point | null = null;
+    let bestD = tol;
+    for (const poly of polygons)
+      for (const v of poly) {
+        const d = Math.hypot(v[0] - p[0], v[1] - p[1]);
+        if (d <= bestD) {
+          bestD = d;
+          best = v;
+        }
+      }
+    if (best) return { point: [best[0], best[1]], kind: 'vertex' };
+    // the same x / the same y as another corner (the nearest within reach)
+    let ax: Point | null = null;
+    let ay: Point | null = null;
+    for (const a of anchors) {
+      if (Math.abs(a[0] - p[0]) <= tol && (!ax || Math.abs(a[0] - p[0]) < Math.abs(ax[0] - p[0]) || (Math.abs(a[0] - p[0]) === Math.abs(ax[0] - p[0]) && Math.abs(a[1] - p[1]) < Math.abs(ax[1] - p[1])))) ax = a;
+      if (Math.abs(a[1] - p[1]) <= tol && (!ay || Math.abs(a[1] - p[1]) < Math.abs(ay[1] - p[1])|| (Math.abs(a[1] - p[1]) === Math.abs(ay[1] - p[1]) && Math.abs(a[0] - p[0]) < Math.abs(ay[0] - p[0])))) ay = a;
+    }
+    // on a wall: slides along it, lining up with a corner's x or y where that stays on the wall
+    let edge: { point: Point; a: Point; b: Point } | null = null;
+    bestD = tol;
+    for (const poly of polygons)
+      for (let i = 0; i < poly.length; i++) {
+        const r = closestPointOnSegment(p, poly[i], poly[(i + 1) % poly.length]);
+        if (r.dist <= bestD) {
+          bestD = r.dist;
+          edge = { point: r.point, a: poly[i], b: poly[(i + 1) % poly.length] };
+        }
+      }
+    if (edge) {
+      const { a, b } = edge;
+      const dx = b[0] - a[0];
+      const dy = b[1] - a[1];
+      if (ax && Math.abs(dx) > 1e-6) {
+        const t = (ax[0] - a[0]) / dx;
+        if (t >= 0 && t <= 1) return { point: [round(ax[0]), round(a[1] + t * dy)], kind: 'edge', guides: [[ax, [ax[0], a[1] + t * dy]]] };
+      }
+      if (ay && Math.abs(dy) > 1e-6) {
+        const t = (ay[1] - a[1]) / dy;
+        if (t >= 0 && t <= 1) return { point: [round(a[0] + t * dx), round(ay[1])], kind: 'edge', guides: [[ay, [a[0] + t * dx, ay[1]]]] };
+      }
+      return { point: [round(edge.point[0]), round(edge.point[1])], kind: 'edge' };
+    }
+    if (ax && ay) return { point: [ax[0], ay[1]], kind: 'align', guides: [[ax, [ax[0], ay[1]]], [ay, [ax[0], ay[1]]]] };
+    // the extension of a wall (slanted ones too), alone or where it crosses a corner's x / y
+    let line: { point: Point; a: Point; b: Point; d: number } | null = null;
+    for (const poly of polygons)
+      for (let i = 0; i < poly.length; i++) {
+        const a = poly[i];
+        const b = poly[(i + 1) % poly.length];
+        const dx = b[0] - a[0];
+        const dy = b[1] - a[1];
+        const len2 = dx * dx + dy * dy;
+        if (len2 < 1) continue;
+        // axis-parallel walls are covered by the corners' x / y already
+        if (Math.abs(dx) < 1e-6 || Math.abs(dy) < 1e-6) continue;
+        const t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2;
+        const q: Point = [a[0] + t * dx, a[1] + t * dy];
+        const d = Math.hypot(p[0] - q[0], p[1] - q[1]);
+        if (d <= tol && (!line || d < line.d)) line = { point: q, a: t > 1 ? b : a, b: q, d };
+      }
+    if (line) {
+      const near = line.a;
+      const dx = line.b[0] - near[0];
+      const dy = line.b[1] - near[1];
+      if (ax && Math.abs(dx) > 1e-6) {
+        const y = near[1] + ((ax[0] - near[0]) / dx) * dy;
+        if (Math.abs(y - p[1]) <= tol * 2) return { point: [round(ax[0]), round(y)], kind: 'align', guides: [[near, [ax[0], y]], [ax, [ax[0], y]]] };
+      }
+      if (ay && Math.abs(dy) > 1e-6) {
+        const x = near[0] + ((ay[1] - near[1]) / dy) * dx;
+        if (Math.abs(x - p[0]) <= tol * 2) return { point: [round(x), round(ay[1])], kind: 'align', guides: [[near, [x, ay[1]]], [ay, [x, ay[1]]]] };
+      }
+      return { point: [round(line.point[0]), round(line.point[1])], kind: 'align', guides: [[near, line.point]] };
+    }
+    if (ax) return { point: [ax[0], round(p[1])], kind: 'align', guides: [[ax, [ax[0], p[1]]]] };
+    if (ay) return { point: [round(p[0]), ay[1]], kind: 'align', guides: [[ay, [p[0], ay[1]]]] };
   }
   if (opts.snapGrid !== false && opts.grid && opts.grid > 0) {
     return { point: [Math.round(p[0] / opts.grid) * opts.grid, Math.round(p[1] / opts.grid) * opts.grid], kind: 'grid' };

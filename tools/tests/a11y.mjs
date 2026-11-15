@@ -178,7 +178,11 @@ for (let i = 0; i < 20 && !found; i++) {
 ok(found, 'the edit pencil is reachable with Tab');
 await page.keyboard.press('Enter');
 await wait(1500);
-await page.evaluate(() => document.querySelector('floorplan-card-layer')?.shadowRoot?.querySelector('fp-editor-tour')?.dispatchEvent(new CustomEvent('tour-end')));
+// the tour sits inside the editor's own shadow root: end it there (as its "Skip" would)
+await page.evaluate(() => {
+  const ed = document.querySelector('floorplan-card-layer')?.shadowRoot?.querySelector('floorplan-card-editor-ui');
+  (ed?.shadowRoot?.querySelector('fp-editor-tour') ?? document.querySelector('floorplan-card-layer')?.shadowRoot?.querySelector('fp-editor-tour'))?.dispatchEvent(new CustomEvent('tour-end', { bubbles: true, composed: true }));
+});
 await wait(300);
 const ED = `document.querySelector('floorplan-card-layer').shadowRoot.querySelector('floorplan-card-editor-ui')`;
 ok(await page.evaluate((ed) => eval(ed)?.getAttribute('role') === 'dialog' && eval(ed)?.getAttribute('aria-modal') === 'true', ED), 'editor is a modal dialog');
@@ -203,7 +207,13 @@ await wait(200);
 ok((await page.evaluate((ed) => eval(ed)._tool, ED)) === 'draw', 'Space on "Raum zeichnen" picks the tool');
 // draw a room with the keyboard: arrows move the cross on the grid, Enter sets corners, Enter on the first closes it
 const roomsBefore = await page.evaluate((ed) => eval(ed).floor.rooms.length, ED);
-await page.evaluate(() => document.activeElement?.blur?.());
+// blur the element that really has the focus (inside the shadow roots): blurring only the outer host does not
+// move the focus in every browser (Firefox keeps it on the tool button)
+await page.evaluate(() => {
+  let a = document.activeElement;
+  while (a?.shadowRoot?.activeElement) a = a.shadowRoot.activeElement;
+  a?.blur?.();
+});
 const key = async (k, n = 1) => {
   for (let i = 0; i < n; i++) await page.keyboard.press(k);
 };
