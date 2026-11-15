@@ -124,5 +124,6 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
-          # a custom integration has no entry in home-assistant/brands; its icons ship in custom_components/*/brand
-          ignore: brands
+          # a custom integration has no entry in home-assistant/brands; its icons ship in custom_components/*/brand.
+          # description and topics are settings of the GitHub repository (About), not files – not checked here
+          ignore: brands description topics
