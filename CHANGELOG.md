@@ -2,9 +2,13 @@
 
 All notable changes to roomwise are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
-[Semantic Versioning](https://semver.org/) with `-alpha.N` pre-releases until the first stable release.
+[Semantic Versioning](https://semver.org/) with `-alpha.N` / `-beta.N` pre-releases until the first stable release.
 
 ## [Unreleased]
+
+## [0.1.0-beta.1] - 2026-11-15
+
+First public beta.
 
 ### Added
 
@@ -164,7 +168,7 @@ All notable changes to roomwise are listed here. The format follows
 - House rules heating: changes by hand survive a restart of Home Assistant; a person changing a thermostat in the app
   during the start-up phase counts as a change by hand; a value set by hand comes back after an open window.
 
-## [0.1.0-alpha.1] (not yet published)
+## [0.1.0-alpha.1] - 2026-11-15
 
 The first public alpha. roomwise has been in daily use in one home before this release, but not yet in others.
 
@@ -219,5 +223,6 @@ The first public alpha. roomwise has been in daily use in one home before this r
 - Pause for motion sensors while a robot vacuum cleans.
 - Setup assistant and per-feature switches; after installation only the automatic house mode runs.
 
-[Unreleased]: https://github.com/jonasstack/roomwise/compare/v0.1.0-alpha.1...HEAD
+[Unreleased]: https://github.com/jonasstack/roomwise/compare/v0.1.0-beta.1...HEAD
+[0.1.0-beta.1]: https://github.com/jonasstack/roomwise/compare/v0.1.0-alpha.1...v0.1.0-beta.1
 [0.1.0-alpha.1]: https://github.com/jonasstack/roomwise/releases/tag/v0.1.0-alpha.1

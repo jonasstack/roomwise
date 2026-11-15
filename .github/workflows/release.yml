@@ -1,4 +1,4 @@
-# Pushing a tag like v0.1.0-alpha.2 builds everything fresh and publishes a GitHub release with:
+# Pushing a tag like v0.1.0-beta.2 builds everything fresh and publishes a GitHub release with:
 #   floorplan_card.zip  the contents of custom_components/floorplan_card (manifest.json at the zip's root, the card in
 #                       frontend/, the 3D models in frontend/models/) – what HACS installs (hacs.json: zip_release)
 #   house_rules.zip     the Hausregeln integration with its panel, for a manual install into custom_components/house_rules

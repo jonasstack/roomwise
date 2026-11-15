@@ -26,7 +26,7 @@ rules integration *Hausregeln*. Both will become one integration later; your set
 **Card and companion integration**
 
 1. In HACS: ⋮ → **Custom repositories** → `https://github.com/jonasstack/roomwise`, type **Integration**.
-2. Open *Grundriss-Karte (Floorplan card)* → **Download**. During the alpha, switch on *Show beta versions* for the
+2. Open *Grundriss-Karte (Floorplan card)* → **Download**. During the beta, switch on *Show beta versions* for the
    repository, otherwise HACS hides the pre-releases.
 3. Restart Home Assistant.
 4. Settings → Devices & services → **Add integration** → *Grundriss-Karte*. Nothing to fill in.
@@ -214,7 +214,7 @@ HACS shows new versions of the card and companion integration. After **Update**:
   browser reload (on tablets: reload the kiosk app; clear its cache if the old version sticks).
 - Hausregeln: download the new `house_rules.zip`, replace the folder `custom_components/house_rules/` and restart.
 
-The [changelog](../../CHANGELOG.md) lists what changed. During the alpha, settings formats can still change;
+The [changelog](../../CHANGELOG.md) lists what changed. During the beta, settings formats can still change;
 roomwise converts old settings itself, but read the notes before you update.
 
 ## 9. Backup

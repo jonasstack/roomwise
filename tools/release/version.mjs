@@ -1,7 +1,7 @@
 // Shows or sets the version of every part of roomwise at once (card, companion integration, Hausregeln).
 //   node tools/release/version.mjs              print all versions, exit 1 if they differ
-//   node tools/release/version.mjs 0.1.0-alpha.3
-//   node tools/release/version.mjs --bump       next alpha: 0.1.0-alpha.2 -> 0.1.0-alpha.3
+//   node tools/release/version.mjs 0.1.0-beta.3
+//   node tools/release/version.mjs --bump       next pre-release: 0.1.0-beta.2 -> 0.1.0-beta.3
 // When both integrations become the single `roomwise` integration, drop the entries that no longer exist below.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';

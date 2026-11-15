@@ -1,7 +1,7 @@
 # roomwise
 
 [![HACS: custom repository](https://img.shields.io/badge/HACS-custom%20repository-41BDF5.svg)](https://hacs.xyz/docs/faq/custom_repositories/)
-![Status: alpha](https://img.shields.io/badge/status-alpha-orange.svg)
+![Status: beta](https://img.shields.io/badge/status-beta-yellow.svg)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 [Deutsch](README.de.md)
@@ -17,7 +17,7 @@ house mode that knows when everyone has left, an alarm system, and rules you wri
 
 ![The demo home in 3D, early evening](docs/screenshots/weather-evening-sun-light.png)
 
-> **Alpha.** roomwise is used every day in one home and tested against a test instance with simulated
+> **Beta.** roomwise is used every day in one home and tested against a test instance with simulated
 > devices, but it has not been run in many other homes yet. Expect rough edges, and please
 > [report them](https://github.com/jonasstack/roomwise/issues). The interface is German first; the card also speaks
 > English, Hausregeln for now only German.
@@ -108,7 +108,7 @@ vacuum). Hausregeln is optional and installed separately until both are merged i
 
 1. HACS → ⋮ (top right) → **Custom repositories** → URL `https://github.com/jonasstack/roomwise`, type
    **Integration** → **Add**.
-2. Open *Grundriss-Karte (Floorplan card)* in HACS → **Download**. While roomwise is in alpha, HACS only offers
+2. Open *Grundriss-Karte (Floorplan card)* in HACS → **Download**. While roomwise is in beta, HACS only offers
    pre-releases if you switch on *Show beta versions* for this repository.
 3. Restart Home Assistant.
 4. Settings → Devices & services → **Add integration** → *Grundriss-Karte (Floorplan card)*. There is nothing

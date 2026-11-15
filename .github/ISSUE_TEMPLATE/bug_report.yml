@@ -32,7 +32,7 @@ body:
     attributes:
       label: roomwise version
       description: HACS shows it, or Settings → Devices & services → the integration.
-      placeholder: 0.1.0-alpha.1
+      placeholder: 0.1.0-beta.1
     validations:
       required: true
   - type: input

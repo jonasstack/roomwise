@@ -1,7 +1,7 @@
 """Constants for Hausregeln."""
 
 DOMAIN = "house_rules"
-VERSION = "0.1.0-alpha.1"
+VERSION = "0.1.0-beta.1"
 API_VERSION = 1
 
 STORAGE_KEY = "house_rules"

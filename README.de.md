@@ -1,7 +1,7 @@
 # roomwise
 
 [![HACS: benutzerdefiniertes Repository](https://img.shields.io/badge/HACS-custom%20repository-41BDF5.svg)](https://hacs.xyz/docs/faq/custom_repositories/)
-![Status: Alpha](https://img.shields.io/badge/status-alpha-orange.svg)
+![Status: Beta](https://img.shields.io/badge/status-beta-yellow.svg)
 [![Lizenz: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 [English](README.md)
@@ -18,7 +18,7 @@ weg sind, eine Alarmanlage und Regeln, die man als ganz normale Sätze schreibt.
 
 ![Die Demo-Wohnung in 3D am frühen Abend](docs/screenshots/weather-evening-sun-light.png)
 
-> **Alpha.** roomwise läuft jeden Tag in einem Haushalt und wird gegen eine Test-Instanz mit simulierten Geräten
+> **Beta.** roomwise läuft jeden Tag in einem Haushalt und wird gegen eine Test-Instanz mit simulierten Geräten
 > getestet, ist aber noch kaum in anderen Wohnungen gelaufen. Rechne mit Ecken und Kanten und
 > [melde sie bitte](https://github.com/jonasstack/roomwise/issues). Die Oberfläche ist zuerst deutsch; die Karte kann
 > auch Englisch, Hausregeln vorerst nur Deutsch.
@@ -113,7 +113,7 @@ zusammengelegt sind.
 
 1. HACS → ⋮ (oben rechts) → **Benutzerdefinierte Repositories** → URL `https://github.com/jonasstack/roomwise`, Typ
    **Integration** → **Hinzufügen**.
-2. *Grundriss-Karte (Floorplan card)* in HACS öffnen → **Herunterladen**. Solange roomwise in der Alpha ist,
+2. *Grundriss-Karte (Floorplan card)* in HACS öffnen → **Herunterladen**. Solange roomwise in der Beta ist,
    bietet HACS Vorabversionen nur an, wenn du für dieses Repository *Beta-Versionen anzeigen* einschaltest.
 3. Home Assistant neu starten.
 4. Einstellungen → Geräte & Dienste → **Integration hinzufügen** → *Grundriss-Karte (Floorplan card)*. Es gibt

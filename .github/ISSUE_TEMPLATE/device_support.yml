@@ -41,4 +41,4 @@ body:
     id: version
     attributes:
       label: roomwise and Home Assistant version
-      placeholder: roomwise 0.1.0-alpha.1, Home Assistant 2026.10.1
+      placeholder: roomwise 0.1.0-beta.1, Home Assistant 2026.10.1

@@ -1,6 +1,6 @@
 # Contributing to roomwise
 
-Thanks for taking the time. roomwise is a small project in an early alpha, so the most valuable things right now
+Thanks for taking the time. roomwise is a small project in an early beta, so the most valuable things right now
 are bug reports from real homes, reports about devices that don't behave, and feedback on how it runs on your
 wall tablet. Code contributions are welcome too; please open an issue first for anything bigger than a small fix,
 so we can agree on the direction before you spend an evening on it.

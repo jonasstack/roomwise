@@ -26,7 +26,7 @@ optionalen Regel-Integration *Hausregeln*. Später werden beide eine Integration
 **Karte und Begleit-Integration**
 
 1. In HACS: ⋮ → **Benutzerdefinierte Repositories** → `https://github.com/jonasstack/roomwise`, Typ **Integration**.
-2. *Grundriss-Karte (Floorplan card)* öffnen → **Herunterladen**. Während der Alpha für das Repository
+2. *Grundriss-Karte (Floorplan card)* öffnen → **Herunterladen**. Während der Beta für das Repository
    *Beta-Versionen anzeigen* einschalten, sonst blendet HACS die Vorabversionen aus.
 3. Home Assistant neu starten.
 4. Einstellungen → Geräte & Dienste → **Integration hinzufügen** → *Grundriss-Karte*. Nichts auszufüllen.
@@ -219,7 +219,7 @@ HACS zeigt neue Versionen von Karte und Begleit-Integration. Nach **Aktualisiere
   leeren).
 - Hausregeln: das neue `house_rules.zip` laden, den Ordner `custom_components/house_rules/` ersetzen und neu starten.
 
-Was sich geändert hat, steht im [Changelog](../../CHANGELOG.md). In der Alpha können sich Einstellungsformate noch
+Was sich geändert hat, steht im [Changelog](../../CHANGELOG.md). In der Beta können sich Einstellungsformate noch
 ändern; roomwise rechnet alte Einstellungen selbst um, aber lies vor dem Update die Hinweise.
 
 ## 9. Sicherung

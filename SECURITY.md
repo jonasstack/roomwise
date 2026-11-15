@@ -8,11 +8,11 @@
 
 ### Unterstützte Versionen
 
-roomwise ist noch in der Alpha. Sicherheitskorrekturen gibt es nur für die **neueste Alpha-Version** (`0.1.0-alpha.x`). Bitte vor einer Meldung auf die neueste Version aktualisieren.
+roomwise ist noch in der Beta. Sicherheitskorrekturen gibt es nur für die **neueste Beta-Version** (`0.1.0-beta.x`). Bitte vor einer Meldung auf die neueste Version aktualisieren.
 
 | Version | Unterstützt |
 | --- | --- |
-| neueste `0.1.0-alpha.x` | ja |
+| neueste `0.1.0-beta.x` | ja |
 | ältere Versionen | nein |
 
 ### Eine Sicherheitslücke melden
@@ -62,11 +62,11 @@ Alles liegt nur im eigenen Home Assistant:
 
 ### Supported versions
 
-roomwise is still alpha software. Security fixes are made for the **latest alpha release** (`0.1.0-alpha.x`) only. Please update to the latest release before reporting.
+roomwise is still beta software. Security fixes are made for the **latest beta release** (`0.1.0-beta.x`) only. Please update to the latest release before reporting.
 
 | Version | Supported |
 | --- | --- |
-| latest `0.1.0-alpha.x` | yes |
+| latest `0.1.0-beta.x` | yes |
 | older releases | no |
 
 ### Reporting a vulnerability
